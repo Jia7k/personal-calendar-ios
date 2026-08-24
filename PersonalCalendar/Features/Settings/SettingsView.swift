@@ -29,11 +29,15 @@ struct SettingsView: View {
         }
     }
     @ViewBuilder private func permission(_ source: String, state: AccessState, request: @escaping @MainActor () async -> Void) -> some View {
-        switch state {
-        case .granted: PermissionCard(title: "\(source) access is on", explanation: "This source is available.", actionTitle: nil, action: nil)
-        case .restricted: PermissionCard(title: "\(source) access is restricted", explanation: "This access is controlled by your device or account.", actionTitle: nil, action: nil)
-        case .denied: PermissionCard(title: "\(source) access is off", explanation: "Allow access in System Settings.", actionTitle: "Open System Settings", action: openSystemSettings)
-        case .notDetermined: PermissionCard(title: "Allow \(source)", explanation: "You can choose this later.", actionTitle: "Allow", action: { pending = source; Task { await request(); pending = nil } }).disabled(loading || pending != nil)
+        if environment.permissions.isRefreshing {
+            PermissionCard(title: "Checking \(source) access", explanation: "Loading current permission status.", actionTitle: nil, action: nil)
+        } else {
+            switch state {
+            case .granted: PermissionCard(title: "\(source) access is on", explanation: "This source is available.", actionTitle: nil, action: nil)
+            case .restricted: PermissionCard(title: "\(source) access is restricted", explanation: "This access is controlled by your device or account.", actionTitle: nil, action: nil)
+            case .denied: PermissionCard(title: "\(source) access is off", explanation: "Allow access in System Settings.", actionTitle: "Open System Settings", action: openSystemSettings)
+            case .notDetermined: PermissionCard(title: "Allow \(source)", explanation: "You can choose this later.", actionTitle: "Allow", action: { pending = source; Task { await request(); pending = nil } }).disabled(loading || pending != nil)
+            }
         }
     }
 }
