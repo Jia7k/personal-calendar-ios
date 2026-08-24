@@ -501,6 +501,18 @@ final class FeatureViewModelTests: XCTestCase {
         repository.deleteError = nil; subject.retryFailedAction(); XCTAssertEqual(repository.deleteCalls, [routine.id]); XCTAssertFalse(subject.active.contains { $0.id == routine.id }); XCTAssertNil(subject.failedActionOperation)
     }
 
+    func testRoutineArchiveFailureRetriesExactOperation() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.archiveError = TestError.failed; subject.setArchived(id: routine.id, archived: true); XCTAssertTrue(subject.active.contains { $0.id == routine.id }); XCTAssertEqual(subject.failedActionOperation, .archive(routine.id, true)); XCTAssertTrue(repository.archiveCalls.isEmpty)
+        repository.archiveError = nil; subject.retryFailedAction(); XCTAssertEqual(repository.archiveCalls, [.init(id: routine.id, value: true)]); XCTAssertTrue(subject.archived.contains { $0.id == routine.id }); XCTAssertNil(subject.failedActionOperation)
+    }
+
+    func testConfirmedRoutineDeleteStaysAbsentWhenRefreshFails() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload(); repository.listError = TestError.failed
+        XCTAssertTrue(subject.delete(id: routine.id)); XCTAssertFalse(subject.active.contains { $0.id == routine.id }); XCTAssertEqual(repository.deleteCalls, [routine.id]); XCTAssertTrue(subject.errorMessage?.contains("saved") == true)
+        repository.listError = nil; subject.reload(); XCTAssertEqual(repository.deleteCalls.count, 1); XCTAssertFalse(subject.active.contains { $0.id == routine.id })
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
