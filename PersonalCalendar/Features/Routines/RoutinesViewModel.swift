@@ -24,6 +24,15 @@ final class RoutinesViewModel {
         guard case let .delete(id)? = actionRecovery?.operation else { return nil }
         return row(id)
     }
+    func resolveDeleteRetryTarget() -> RoutineRowState? {
+        guard case let .delete(id)? = actionRecovery?.operation else { return nil }
+        guard let target = row(id) else {
+            actionRecovery = nil
+            refreshErrorMessage = "That routine is no longer available. Refresh routines to continue."
+            return nil
+        }
+        return target
+    }
     private(set) var isLoading = false
     private(set) var mutatingIDs: Set<UUID> = []
     private let repository: any RoutineRepository; private let calendar: Calendar; private let now: () -> Date

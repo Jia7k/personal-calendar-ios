@@ -10,7 +10,7 @@ struct RoutinesView: View {
     init(environment: AppEnvironment) { _model = State(initialValue: RoutinesViewModel(repository: environment.routines)) }
     var body: some View { NavigationStack { List {
         if let error = model.refreshErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry Refresh") { model.reload() }.frame(minWidth: 44, minHeight: 44) } }
-        if let error = model.actionErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(actionRetryLabel) { if let target = model.deleteRetryTarget { requestDelete(target) } else { model.retryFailedAction() } }.frame(minWidth: 44, minHeight: 44) } }
+        if let error = model.actionErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(actionRetryLabel) { if let target = model.resolveDeleteRetryTarget() { requestDelete(target) } else if model.failedActionOperation != nil { model.retryFailedAction() } }.frame(minWidth: 44, minHeight: 44) } }
         Section("Active") { if model.active.isEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
     }.navigationTitle("Routines").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Routine", systemImage: "plus") { showingNew = true }.frame(minWidth: 44, minHeight: 44) } }
