@@ -100,6 +100,113 @@ final class FeatureViewModelTests: XCTestCase {
         await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
         XCTAssertTrue(subject.agenda.scheduled.isEmpty)
         XCTAssertEqual(subject.remindersError, "Task changes were saved, but tasks could not be refreshed. Pull to try again.")
+        XCTAssertEqual(subject.latestTaskUndo?.rawID, "task")
+    }
+
+    func testTodaySuspendedCompletionRefreshCannotOverwriteNewerSelectedList() async {
+        let fixture = makeTodayReminderRaceFixture()
+        await fixture.subject.load()
+        fixture.service.suspendNextFetch = true
+        let completion = Task { await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Task A" }!, completed: true) }
+        for _ in 0..<30 where !fixture.service.isFetchSuspended { await Task.yield() }
+
+        fixture.settings.replaceSelectedReminderListIDs(["b"], availableIDs: ["a", "b"])
+        await fixture.subject.load()
+        fixture.service.fetchError = TestError.failed
+        fixture.service.resumeSuspendedFetch()
+        await completion.value
+
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Task B"])
+        XCTAssertNil(fixture.subject.remindersError)
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "a-task", completed: true)])
+    }
+
+    func testTodaySuspendedCompletionRefreshCannotOverwriteNewerDeniedState() async {
+        let fixture = makeTodayReminderRaceFixture()
+        await fixture.subject.load()
+        fixture.service.suspendNextFetch = true
+        let completion = Task { await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Task A" }!, completed: true) }
+        for _ in 0..<30 where !fixture.service.isFetchSuspended { await Task.yield() }
+
+        fixture.service.accessState = .denied
+        await fixture.subject.load()
+        fixture.service.fetchError = TestError.failed
+        fixture.service.resumeSuspendedFetch()
+        await completion.value
+
+        XCTAssertTrue(fixture.subject.showsRemindersPermissionCard)
+        XCTAssertTrue(fixture.subject.agenda.scheduled.isEmpty)
+        XCTAssertNil(fixture.subject.remindersError)
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertEqual(fixture.service.completedCalls.count, 1)
+    }
+
+    func testTodayUndoAfterDeselectionWithoutReloadDoesNotWriteAndClearsUndo() async {
+        let fixture = makeTodayReminderRaceFixture()
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Task A" }!, completed: true)
+        fixture.settings.replaceSelectedReminderListIDs(["b"], availableIDs: ["a", "b"])
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "a-task", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Task B"])
+    }
+
+    func testTodayUndoAfterDenialWithoutReloadDoesNotWriteAndClearsUndo() async {
+        let fixture = makeTodayReminderRaceFixture()
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Task A" }!, completed: true)
+        fixture.service.accessState = .denied
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "a-task", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertTrue(fixture.subject.showsRemindersPermissionCard)
+        XCTAssertTrue(fixture.subject.agenda.scheduled.isEmpty)
+    }
+
+    func testTodaySuspendedPostUndoRefreshCannotOverwriteNewerSelection() async {
+        let fixture = makeTodayReminderRaceFixture()
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Task A" }!, completed: true)
+        fixture.service.suspendFetchAfterUndo = true
+        let undo = Task { await fixture.subject.undoLastTaskCompletion() }
+        for _ in 0..<30 where !fixture.service.isFetchSuspended { await Task.yield() }
+
+        fixture.settings.replaceSelectedReminderListIDs(["b"], availableIDs: ["a", "b"])
+        await fixture.subject.load()
+        fixture.service.fetchError = TestError.failed
+        fixture.service.resumeSuspendedFetch()
+        await undo.value
+
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Task B"])
+        XCTAssertNil(fixture.subject.remindersError)
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertEqual(fixture.service.completedCalls.filter { !$0.completed }, [.init(id: "a-task", completed: false)])
+    }
+
+    func testTodaySuspendedPostUndoRefreshCannotOverwriteNewerDenial() async {
+        let fixture = makeTodayReminderRaceFixture()
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Task A" }!, completed: true)
+        fixture.service.suspendFetchAfterUndo = true
+        let undo = Task { await fixture.subject.undoLastTaskCompletion() }
+        for _ in 0..<30 where !fixture.service.isFetchSuspended { await Task.yield() }
+
+        fixture.service.accessState = .denied
+        await fixture.subject.load()
+        fixture.service.fetchError = TestError.failed
+        fixture.service.resumeSuspendedFetch()
+        await undo.value
+
+        XCTAssertTrue(fixture.subject.showsRemindersPermissionCard)
+        XCTAssertTrue(fixture.subject.agenda.scheduled.isEmpty)
+        XCTAssertNil(fixture.subject.remindersError)
+        XCTAssertNil(fixture.subject.latestTaskUndo)
     }
 
     func testTodayKeepsEventAndRoutineWhenRemindersAreDenied() async {
@@ -234,15 +341,17 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertNil(subject.latestTaskUndo)
     }
 
-    func testUndoRestoresCapturedTaskWhenPostUndoRefreshFails() async {
+    func testAuthoritativeMissingTaskClearsUndoAndPreventsWrite() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
         let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "opaque|raw", title: "Task", due: now, hasTime: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
         await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
         service.reminders = []; await subject.load(); service.allowMissingCompletion = true; service.fetchErrorAfterCompletion = TestError.failed
         await subject.undoLastTaskCompletion()
-        XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Task"])
-        XCTAssertNil(subject.latestTaskUndo); XCTAssertEqual(service.completedCalls.last, .init(id: "opaque|raw", completed: false)); XCTAssertNotNil(subject.remindersError)
+        XCTAssertTrue(subject.agenda.scheduled.isEmpty)
+        XCTAssertNil(subject.latestTaskUndo)
+        XCTAssertEqual(service.completedCalls, [.init(id: "opaque|raw", completed: true)])
+        XCTAssertNil(subject.remindersError)
     }
 
     func testOlderUndoRefreshDoesNotClearNewCompletionUndo() async {
@@ -905,6 +1014,21 @@ final class FeatureViewModelTests: XCTestCase {
 
     func testTaskRetryAfterAccessRevocationClearsRecoveryWithoutWrite() async {
         let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true); service.completionError = nil; service.accessState = .denied; await subject.retryFailedMutation(); XCTAssertTrue(service.completedCalls.isEmpty); XCTAssertNil(subject.failedMutationOperation); XCTAssertNil(subject.mutationErrorMessage)
+    }
+
+    private func makeTodayReminderRaceFixture() -> (subject: TodayViewModel, service: FakeRemindersService, settings: AppSettingsStore) {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let a = ReminderSnapshot(id: "a-task", title: "Task A", notes: nil, dueDate: now, dueHasTime: true, priority: 5, listID: "a", listTitle: "A", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let b = ReminderSnapshot(id: "b-task", title: "Task B", notes: nil, dueDate: now, dueHasTime: true, priority: 5, listID: "b", listTitle: "B", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let descriptors = [
+            ReminderListDescriptor(id: "a", title: "A", colorHex: "#000000", allowsContentModifications: true),
+            ReminderListDescriptor(id: "b", title: "B", colorHex: "#000000", allowsContentModifications: true)
+        ]
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        settings.replaceSelectedReminderListIDs(["a", "b"], availableIDs: ["a", "b"])
+        let service = FakeRemindersService(access: .granted, reminders: [a, b], descriptors: descriptors)
+        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: settings, calendarProvider: { self.calendar }, now: { now })
+        return (subject, service, settings)
     }
 
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {

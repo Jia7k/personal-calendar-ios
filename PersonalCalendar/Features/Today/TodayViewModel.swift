@@ -12,6 +12,17 @@ struct TaskUndoState: Equatable {
 @MainActor
 @Observable
 final class TodayViewModel {
+    private struct ReminderContext: Equatable {
+        let access: AccessState
+        let descriptorIDs: Set<String>
+        let selectedIDs: Set<String>
+        let selectionIsExplicit: Bool
+
+        var shouldFetch: Bool { access == .granted && !(selectionIsExplicit && selectedIDs.isEmpty) }
+    }
+
+    private enum ReminderRefreshOutcome: Equatable { case success, failure, stale, unavailable }
+
     private(set) var agenda = DayAgenda(allDay: [], scheduled: [], priority: [])
     private(set) var isLoading = false
     private(set) var hasLoaded = false
@@ -35,6 +46,7 @@ final class TodayViewModel {
     private let calendarProvider: () -> Calendar
     private let now: () -> Date
     private var loadGeneration = 0
+    private var reminderRefreshGeneration = 0
 
     init(
         calendar: any CalendarServicing,
@@ -69,18 +81,15 @@ final class TodayViewModel {
         isLoading = true
         defer { if generation == loadGeneration { isLoading = false } }
         var nextEvents = cachedEvents
-        var nextReminders = cachedReminders
         var nextRoutines = cachedRoutines
         var nextDays = cachedRoutineDays
         var nextCalendarError: String?
-        var nextRemindersError: String?
         var nextRoutinesError: String?
         let systemCalendar = calendarProvider()
         let day = LocalDay(date: now(), calendar: systemCalendar)
         let start = day.startDate(in: systemCalendar)
         let end = systemCalendar.date(byAdding: .day, value: 1, to: start)!
         let nextCalendarCard = calendar.accessState != .granted
-        let nextRemindersCard = reminders.accessState != .granted
         if calendar.accessState == .granted {
             do {
                 let descriptorIDs = Set(calendar.calendars().map(\.id))
@@ -92,17 +101,7 @@ final class TodayViewModel {
         } else {
             nextEvents = []
         }
-        if reminders.accessState == .granted {
-            do {
-                let descriptorIDs = Set(reminders.lists().map(\.id))
-                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
-                nextReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
-            } catch {
-                nextRemindersError = "Tasks could not be refreshed. Pull to try again."
-            }
-        } else {
-            nextReminders = []
-        }
+        _ = await refreshReminders(failureMessage: "Tasks could not be refreshed. Pull to try again.")
         do {
             let values = try routines.list(includeArchived: false)
             let days = try Dictionary(uniqueKeysWithValues: values.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
@@ -113,20 +112,24 @@ final class TodayViewModel {
         }
         guard generation == loadGeneration else { return }
         cachedEvents = nextEvents
-        cachedReminders = nextReminders
         cachedRoutines = nextRoutines
         cachedRoutineDays = nextDays
         calendarError = nextCalendarError
-        remindersError = nextRemindersError
         routinesError = nextRoutinesError
         showsCalendarPermissionCard = nextCalendarCard
-        showsRemindersPermissionCard = nextRemindersCard
+        reconcileReminderState()
         compose(day: day, calendar: systemCalendar)
         hasLoaded = true
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
-        guard case let .reminder(id) = item.origin, item.allowsModification else { return }
+        reconcileReminderState()
+        guard case let .reminder(id) = item.origin,
+              item.allowsModification,
+              !mutatingItemIDs.contains(item.id),
+              let snapshot = writableSelectedReminder(id: id)
+        else { return }
+        invalidateOlderReminderWork()
         mutatingItemIDs.insert(item.id)
         defer { mutatingItemIDs.remove(item.id) }
         do {
@@ -135,29 +138,29 @@ final class TodayViewModel {
                 guard value.id == id else { return value }
                 return ReminderSnapshot(id: value.id, title: value.title, notes: value.notes, dueDate: value.dueDate, dueHasTime: value.dueHasTime, priority: value.priority, listID: value.listID, listTitle: value.listTitle, isCompleted: completed, allowsModification: value.allowsModification, hasRecurrence: value.hasRecurrence)
             }
-            if completed, let snapshot = cachedReminders.first(where: { $0.id == id }) {
+            if completed {
                 latestTaskUndo = TaskUndoState(generation: UUID(), title: snapshot.title, rawID: id, snapshot: snapshot)
+            } else if latestTaskUndo?.rawID == id {
+                latestTaskUndo = nil
             }
             compose(day: localDay, calendar: calendarProvider())
-            do {
-                let descriptorIDs = Set(reminders.lists().map(\.id))
-                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
-                cachedReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
-                remindersError = nil
-            } catch {
-                remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
-            }
-            compose(day: localDay, calendar: calendarProvider())
+            _ = await refreshReminders(failureMessage: "Task changes were saved, but tasks could not be refreshed. Pull to try again.")
         } catch {
             remindersError = "This task could not be updated. Pull to try again."
+            reconcileReminderState()
         }
     }
 
     func undoLastTaskCompletion() async {
-        guard var undo = latestTaskUndo, !undo.isPending else { return }
-        let generation = undo.generation
+        reconcileReminderState()
+        guard var undo = latestTaskUndo,
+              !undo.isPending,
+              writableSelectedReminder(id: undo.rawID)?.listID == undo.snapshot.listID
+        else { return }
+        let undoGeneration = undo.generation
+        invalidateOlderReminderWork()
         undo.isPending = true
-        if latestTaskUndo?.generation == generation { latestTaskUndo = undo }
+        if latestTaskUndo?.generation == undoGeneration { latestTaskUndo = undo }
         do {
             try reminders.setCompleted(id: undo.rawID, completed: false)
             let restored = undo.snapshot
@@ -168,22 +171,13 @@ final class TodayViewModel {
             }
             if !cachedReminders.contains(where: { $0.id == undo.rawID }) { cachedReminders.append(restoredSnapshot) }
             compose(day: localDay, calendar: calendarProvider())
-            do {
-                let descriptorIDs = Set(reminders.lists().map(\.id))
-                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
-                let refreshed = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
-                guard latestTaskUndo?.generation == generation else { return }
-                cachedReminders = refreshed
-                remindersError = nil
-            } catch {
-                remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
-            }
-            compose(day: localDay, calendar: calendarProvider())
-            if latestTaskUndo?.generation == generation { latestTaskUndo = nil }
+            let outcome = await refreshReminders(failureMessage: "Task changes were saved, but tasks could not be refreshed. Pull to try again.")
+            if outcome != .stale, latestTaskUndo?.generation == undoGeneration { latestTaskUndo = nil }
         } catch {
             undo.isPending = false
-            if latestTaskUndo?.generation == generation { latestTaskUndo = undo }
+            if latestTaskUndo?.generation == undoGeneration { latestTaskUndo = undo }
             remindersError = "This task could not be updated. Pull to try again."
+            reconcileReminderState()
         }
     }
 
@@ -223,5 +217,105 @@ final class TodayViewModel {
         let reminders = cachedReminders.filter { settings.visibleReminderListIDs(availableIDs: reminderIDs).contains($0.listID) }
         let completed = Set(cachedRoutines.filter { cachedRoutineDays[$0.id]?.contains(day) == true }.map(\.id))
         agenda = composer.compose(day: day, events: events, reminders: reminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: true, calendar: calendar)
+    }
+
+    private func refreshReminders(failureMessage: String) async -> ReminderRefreshOutcome {
+        reminderRefreshGeneration += 1
+        let generation = reminderRefreshGeneration
+        let context = reminderContext()
+        reconcileReminderState()
+        guard context.access == .granted else {
+            remindersError = nil
+            return .unavailable
+        }
+        guard context.shouldFetch else {
+            cachedReminders = []
+            remindersError = nil
+            reconcileReminderState()
+            return .success
+        }
+        do {
+            let refreshed = try await reminders.fetchReminders(listIDs: context.selectedIDs)
+            guard generation == reminderRefreshGeneration, context == reminderContext() else {
+                reconcileReminderState()
+                return .stale
+            }
+            cachedReminders = refreshed
+            remindersError = nil
+            reconcileReminderState()
+            return .success
+        } catch {
+            guard generation == reminderRefreshGeneration, context == reminderContext() else {
+                reconcileReminderState()
+                return .stale
+            }
+            remindersError = failureMessage
+            reconcileReminderState()
+            return .failure
+        }
+    }
+
+    private func reminderContext() -> ReminderContext {
+        let descriptorIDs = Set(reminders.lists().map(\.id))
+        let selectedIDs = descriptorIDs.isEmpty
+            ? settings.selectedReminderListIDs
+            : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
+        return ReminderContext(
+            access: reminders.accessState,
+            descriptorIDs: descriptorIDs,
+            selectedIDs: selectedIDs,
+            selectionIsExplicit: settings.reminderSelectionIsExplicit
+        )
+    }
+
+    private func reconcileReminderState() {
+        let context = reminderContext()
+        showsRemindersPermissionCard = context.access != .granted
+        guard context.access == .granted else {
+            cachedReminders = []
+            remindersError = nil
+            latestTaskUndo = nil
+            compose(day: localDay, calendar: calendarProvider())
+            return
+        }
+        let availableIDs = context.descriptorIDs.isEmpty ? Set(cachedReminders.map(\.listID)) : context.descriptorIDs
+        let selectedIDs = context.descriptorIDs.isEmpty && !context.selectionIsExplicit
+            ? availableIDs
+            : settings.visibleReminderListIDs(availableIDs: availableIDs)
+        cachedReminders = cachedReminders.filter { selectedIDs.contains($0.listID) }
+        if let undo = latestTaskUndo {
+            let remainsWritable = undo.snapshot.allowsModification
+                && selectedIDs.contains(undo.snapshot.listID)
+                && availableIDs.contains(undo.snapshot.listID)
+                && cachedReminders.contains { $0.id == undo.rawID && $0.listID == undo.snapshot.listID && $0.allowsModification }
+            if !remainsWritable { latestTaskUndo = nil }
+        }
+        compose(day: localDay, calendar: calendarProvider())
+    }
+
+    private func writableSelectedReminder(id: String) -> ReminderSnapshot? {
+        guard reminders.accessState == .granted,
+              let value = cachedReminders.first(where: { $0.id == id }),
+              value.allowsModification
+        else {
+            if latestTaskUndo?.rawID == id { latestTaskUndo = nil }
+            return nil
+        }
+        let descriptorIDs = Set(reminders.lists().map(\.id))
+        let availableIDs = descriptorIDs.isEmpty ? Set(cachedReminders.map(\.listID)) : descriptorIDs
+        let selectedIDs = descriptorIDs.isEmpty && !settings.reminderSelectionIsExplicit
+            ? availableIDs
+            : settings.visibleReminderListIDs(availableIDs: availableIDs)
+        guard availableIDs.contains(value.listID), selectedIDs.contains(value.listID) else {
+            if latestTaskUndo?.rawID == id { latestTaskUndo = nil }
+            return nil
+        }
+        return value
+    }
+
+    private func invalidateOlderReminderWork() {
+        loadGeneration += 1
+        reminderRefreshGeneration += 1
+        isLoading = false
     }
 }
