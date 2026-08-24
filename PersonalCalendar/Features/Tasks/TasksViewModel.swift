@@ -50,7 +50,8 @@ final class TasksViewModel {
         guard service.accessState == .granted else { confirmed = []; publish(); reconcileMutationRecovery(authoritativeFetch: true); refreshErrorMessage = nil; isLoading = false; return }
         isLoading = true; defer { if generation == loadGeneration { isLoading = false } }
         do {
-            let fetched = try await service.fetchReminders(listIDs: settings.selectedReminderListIDs)
+            let visibleIDs = settings.visibleReminderListIDs(availableIDs: Set(service.lists().map(\.id)))
+            let fetched = try await service.fetchReminders(listIDs: visibleIDs)
             guard generation == loadGeneration else { return }
             confirmed = fetched
             refreshErrorMessage = nil; publish(); reconcileMutationRecovery(authoritativeFetch: true)
@@ -106,8 +107,8 @@ final class TasksViewModel {
 
     private func publish() {
         let todayDay = LocalDay(date: now(), calendar: calendar)
-        let selected = settings.selectedReminderListIDs
-        let visible = confirmed.filter { selected.isEmpty || selected.contains($0.listID) }
+        let selected = settings.visibleReminderListIDs(availableIDs: Set(service.lists().map(\.id)))
+        let visible = confirmed.filter { selected.contains($0.listID) }
         let incomplete = visible.filter { !$0.isCompleted }
         today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) <= todayDay } ?? false }.sorted(by: sort)
         upcoming = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? true }.sorted(by: sort)
@@ -115,11 +116,11 @@ final class TasksViewModel {
     }
     private func reconcileMutationRecovery(authoritativeFetch: Bool) {
         guard let operation = failedMutationOperation else { return }
-        let selected = settings.selectedReminderListIDs
-        guard service.accessState == .granted, let item = confirmed.first(where: { $0.id == operation.id }), (selected.isEmpty || selected.contains(item.listID)), item.allowsModification else { clearMutationRecovery(id: operation.id); return }
+        let selected = settings.visibleReminderListIDs(availableIDs: Set(service.lists().map(\.id)))
+        guard service.accessState == .granted, let item = confirmed.first(where: { $0.id == operation.id }), selected.contains(item.listID), item.allowsModification else { clearMutationRecovery(id: operation.id); return }
         if authoritativeFetch && item.isCompleted == operation.completed { clearMutationRecovery(id: operation.id) }
     }
-    private func isSelected(_ item: ReminderSnapshot) -> Bool { settings.selectedReminderListIDs.isEmpty || settings.selectedReminderListIDs.contains(item.listID) }
+    private func isSelected(_ item: ReminderSnapshot) -> Bool { settings.visibleReminderListIDs(availableIDs: Set(service.lists().map(\.id))).contains(item.listID) }
     private func clearMutationRecovery(id: String) { guard failedMutationOperation?.id == id else { return }; failedMutationOperation = nil; mutationErrorMessage = nil }
 
     private func sort(_ lhs: ReminderSnapshot, _ rhs: ReminderSnapshot) -> Bool {

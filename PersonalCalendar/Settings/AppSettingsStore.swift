@@ -45,14 +45,21 @@ final class AppSettingsStore {
         defaultReminderListID = defaults.string(forKey: Key.defaultList)
         didCompleteOnboarding = defaults.bool(forKey: Key.onboarding)
         // Older non-empty selections are intentional; an absent marker with an empty set remains implicit-all.
-        calendarSelectionIsExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendars.isEmpty
-        reminderSelectionIsExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedLists.isEmpty
+        let inferredCalendarExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendars.isEmpty
+        let inferredListExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedLists.isEmpty
+        calendarSelectionIsExplicit = inferredCalendarExplicit
+        reminderSelectionIsExplicit = inferredListExplicit
+        // Persist migration so a future empty persisted set is never mistaken for implicit-all.
+        defaults.set(inferredCalendarExplicit, forKey: Key.calendarsExplicit)
+        defaults.set(inferredListExplicit, forKey: Key.listsExplicit)
     }
 
     func toggleCalendar(id: String, availableIDs: Set<String>) { toggle(id: id, selection: &selectedCalendarIDs, explicit: &calendarSelectionIsExplicit, availableIDs: availableIDs) }
     func toggleReminderList(id: String, availableIDs: Set<String>) { toggle(id: id, selection: &selectedReminderListIDs, explicit: &reminderSelectionIsExplicit, availableIDs: availableIDs) }
     func visibleCalendarIDs(availableIDs: Set<String>) -> Set<String> { calendarSelectionIsExplicit ? selectedCalendarIDs.intersection(availableIDs) : availableIDs }
     func visibleReminderListIDs(availableIDs: Set<String>) -> Set<String> { reminderSelectionIsExplicit ? selectedReminderListIDs.intersection(availableIDs) : availableIDs }
+    func setSelectedCalendarsForTesting(_ ids: Set<String>, explicit: Bool) { selectedCalendarIDs = ids; calendarSelectionIsExplicit = explicit }
+    func setSelectedReminderListsForTesting(_ ids: Set<String>, explicit: Bool) { selectedReminderListIDs = ids; reminderSelectionIsExplicit = explicit }
 
     private func toggle(id: String, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) {
         guard availableIDs.contains(id) else { return }

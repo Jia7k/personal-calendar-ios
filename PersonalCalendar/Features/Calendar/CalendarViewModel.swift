@@ -52,7 +52,11 @@ final class CalendarViewModel {
         let interval = DateInterval(start: cells.first!.day.startDate(in: systemCalendar), end: systemCalendar.date(byAdding: .day, value: 1, to: cells.last!.day.startDate(in: systemCalendar))!)
 
         if calendarService.accessState == .granted {
-            do { cachedEvents = try calendarService.fetchEvents(in: interval, calendarIDs: settings.visibleCalendarIDs(availableIDs: Set(calendarService.calendars().map(\.id)))) }
+            do {
+                let ids = settings.visibleCalendarIDs(availableIDs: Set(calendarService.calendars().map(\.id)))
+                cachedEvents = try calendarService.fetchEvents(in: interval, calendarIDs: ids)
+                if settings.calendarSelectionIsExplicit { cachedEvents = cachedEvents.filter { ids.contains($0.calendarID) } }
+            }
             catch { encounteredFailure = true }
         } else {
             cachedEvents = []
@@ -60,7 +64,11 @@ final class CalendarViewModel {
         }
 
         if remindersService.accessState == .granted {
-            do { cachedReminders = try await remindersService.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(remindersService.lists().map(\.id)))) }
+            do {
+                let ids = settings.visibleReminderListIDs(availableIDs: Set(remindersService.lists().map(\.id)))
+                cachedReminders = try await remindersService.fetchReminders(listIDs: ids)
+                if settings.reminderSelectionIsExplicit { cachedReminders = cachedReminders.filter { ids.contains($0.listID) } }
+            }
             catch { encounteredFailure = true }
         } else {
             cachedReminders = []
