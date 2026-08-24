@@ -34,7 +34,7 @@ struct AppEnvironment {
 
     static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
         let calendarAccess: AccessState = arguments.contains("-calendar-not-determined") ? .notDetermined : arguments.contains("-calendar-restricted") ? .restricted : arguments.contains("-calendar-denied") ? .denied : .granted
-        let calendar = DemoCalendarService(access: calendarAccess, failFirstCreate: arguments.contains("-event-save-fails-once"))
+        let calendar = DemoCalendarService(access: calendarAccess, failFirstCreate: arguments.contains("-event-save-fails-once"), multipleSources: arguments.contains("-demo-multiple-sources"))
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
         let reminders = DemoRemindersService(access: reminderAccess, failFirstCreate: arguments.contains("-task-save-fails-once"))
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted

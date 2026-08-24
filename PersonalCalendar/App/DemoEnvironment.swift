@@ -11,10 +11,12 @@ final class DemoCalendarService: CalendarServicing {
         allowsContentModifications: true
     )
     private var shouldFailNextCreate: Bool
+    private let multipleSources: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, multipleSources: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
+        self.multipleSources = multipleSources
         let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
         events = [
             .init(
@@ -29,14 +31,20 @@ final class DemoCalendarService: CalendarServicing {
                 hasRecurrence: false
             )
         ]
+        if multipleSources {
+            events.append(.init(id: "demo-event-work", title: "Planning", start: start.addingTimeInterval(1_800), end: start.addingTimeInterval(5_400), isAllDay: false, calendarID: "demo-calendar-work", calendarTitle: "Work", allowsModification: true, hasRecurrence: false))
+        }
     }
 
     func requestFullAccess() async -> AccessState {
-        accessState = .granted
+        if accessState == .notDetermined { accessState = .granted }
         return accessState
     }
 
-    func calendars() -> [CalendarDescriptor] { accessState == .granted ? [descriptor] : [] }
+    func calendars() -> [CalendarDescriptor] {
+        guard accessState == .granted else { return [] }
+        return multipleSources ? [descriptor, .init(id: "demo-calendar-work", title: "Work", colorHex: "#4868A8", allowsContentModifications: true)] : [descriptor]
+    }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
         guard accessState == .granted else { return [] }
@@ -101,7 +109,7 @@ final class DemoRemindersService: RemindersServicing {
     init(access: AccessState, failFirstCreate: Bool = false) { accessState = access; shouldFailNextCreate = failFirstCreate }
 
     func requestFullAccess() async -> AccessState {
-        accessState = .granted
+        if accessState == .notDetermined { accessState = .granted }
         return accessState
     }
 
@@ -241,7 +249,7 @@ final class DemoNotificationAuthorizer: NotificationAuthorizing {
     }
 
     func requestAccess() async -> AccessState {
-        state = .granted
+        if state == .notDetermined { state = .granted }
         return state
     }
 }

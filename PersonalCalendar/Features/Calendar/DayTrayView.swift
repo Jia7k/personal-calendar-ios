@@ -26,7 +26,10 @@ struct DayTrayView: View {
             ForEach(deniedSourceMessages, id: \.self) { message in
                 VStack(alignment: .leading, spacing: 6) {
                     Label(message, systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary)
-                    Button("Settings", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    Button("Open Settings", action: openSettings)
+                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier(message.hasPrefix("Calendar") ? "calendar-permission-settings" : "reminders-permission-settings")
+                        .accessibilityLabel("Open in-app Settings for \(message)")
                 }.padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             }
             if state == .resting { restingContent } else { expandedContent }

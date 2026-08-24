@@ -33,6 +33,32 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertEqual(allReminders.map(\.id), ["demo-task"])
     }
 
+    func testMultiSourceDemoKeepsOtherCalendarContentWhenOneSourceIsHidden() throws {
+        let subject = DemoCalendarService(access: .granted, multipleSources: true)
+        let now = Date()
+        let interval = DateInterval(start: now.addingTimeInterval(-86_400), end: now.addingTimeInterval(86_400))
+
+        XCTAssertEqual(subject.calendars().map(\.id), ["demo-calendar", "demo-calendar-work"])
+        XCTAssertEqual(try subject.fetchEvents(in: interval, calendarIDs: ["demo-calendar-work"]).map(\.title), ["Planning"])
+        XCTAssertEqual(try subject.fetchEvents(in: interval, calendarIDs: ["demo-calendar"]).map(\.title), ["Coffee"])
+    }
+
+    func testDeniedAndRestrictedDemoRequestsAndMutationsDoNotGrantOrChangeContent() async throws {
+        for access in [AccessState.denied, .restricted] {
+            let calendar = DemoCalendarService(access: access)
+            let reminders = DemoRemindersService(access: access)
+            let calendarResult = await calendar.requestFullAccess()
+            let reminderResult = await reminders.requestFullAccess()
+            XCTAssertEqual(calendarResult, access)
+            XCTAssertEqual(reminderResult, access)
+            XCTAssertThrowsError(try calendar.createEvent(.init(title: "No", start: .now, end: .now.addingTimeInterval(60), isAllDay: false, calendarID: nil)))
+            XCTAssertThrowsError(try reminders.createReminder(.init(title: "No", notes: nil, dueDate: nil, priority: 0)))
+            XCTAssertThrowsError(try reminders.setCompleted(id: "demo-task", completed: true))
+            let values = try await reminders.fetchReminders(listIDs: [])
+            XCTAssertEqual(values, [])
+        }
+    }
+
     func testDemoEventCreationPersistsInFetchedEvents() throws {
         let subject = DemoCalendarService(access: .granted)
         let start = Date(timeIntervalSince1970: 10_000)

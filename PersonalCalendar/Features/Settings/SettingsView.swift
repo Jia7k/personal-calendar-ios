@@ -24,8 +24,14 @@ struct SettingsView: View {
         let calendars = SourceDescriptorOrdering.calendars(environment.calendar.calendars().filter(\.allowsContentModifications))
         let lists = SourceDescriptorOrdering.reminderLists(environment.reminders.lists().filter(\.allowsContentModifications))
         Section("Defaults") {
-            if calendars.isEmpty { Text("No writable calendar is available.").foregroundStyle(.secondary) } else { Picker("Calendar", selection: Binding(get: { calendars.contains { $0.id == environment.settings.defaultCalendarID } ? environment.settings.defaultCalendarID : nil }, set: { environment.settings.setDefaultCalendarID($0, descriptors: environment.calendar.calendars(), access: environment.calendar.accessState) })) { Text("None").tag(String?.none); ForEach(calendars) { Text($0.title).tag(Optional($0.id)) } } }
-            if lists.isEmpty { Text("No writable reminder list is available.").foregroundStyle(.secondary) } else { Picker("Reminder list", selection: Binding(get: { lists.contains { $0.id == environment.settings.defaultReminderListID } ? environment.settings.defaultReminderListID : nil }, set: { environment.settings.setDefaultReminderListID($0, descriptors: environment.reminders.lists(), access: environment.reminders.accessState) })) { Text("None").tag(String?.none); ForEach(lists) { Text($0.title).tag(Optional($0.id)) } } }
+            Picker("Calendar", selection: Binding(get: { calendars.contains { $0.id == environment.settings.defaultCalendarID } ? environment.settings.defaultCalendarID : nil }, set: { environment.settings.setDefaultCalendarID($0, descriptors: environment.calendar.calendars(), access: environment.calendar.accessState) })) { Text("None").tag(String?.none); ForEach(calendars) { Text($0.title).tag(Optional($0.id)) } }
+                .disabled(calendars.isEmpty)
+                .accessibilityValue(calendars.isEmpty ? "No writable calendar available" : (environment.settings.defaultCalendarID ?? "None"))
+            if calendars.isEmpty { Text("No writable calendar is available, so new events cannot be saved here.").foregroundStyle(.secondary) }
+            Picker("Reminder list", selection: Binding(get: { lists.contains { $0.id == environment.settings.defaultReminderListID } ? environment.settings.defaultReminderListID : nil }, set: { environment.settings.setDefaultReminderListID($0, descriptors: environment.reminders.lists(), access: environment.reminders.accessState) })) { Text("None").tag(String?.none); ForEach(lists) { Text($0.title).tag(Optional($0.id)) } }
+                .disabled(lists.isEmpty)
+                .accessibilityValue(lists.isEmpty ? "No writable reminder list available" : (environment.settings.defaultReminderListID ?? "None"))
+            if lists.isEmpty { Text("No writable reminder list is available, so new tasks cannot be saved here.").foregroundStyle(.secondary) }
         }
     }
     @ViewBuilder private func permission(_ source: String, state: AccessState, request: @escaping @MainActor () async -> Void) -> some View {

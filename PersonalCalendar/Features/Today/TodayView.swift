@@ -85,8 +85,10 @@ struct TodayView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if !restricted {
-                    Button("Open System Settings", action: openSettings)
+                    Button("Open Settings", action: openSettings)
                         .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier(title.hasPrefix("Calendar") ? "today-calendar-permission-settings" : "today-reminders-permission-settings")
+                        .accessibilityLabel("Open in-app Settings for \(title)")
                 }
             }
         }
