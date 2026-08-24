@@ -148,4 +148,11 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Retry Delete"].waitForExistence(timeout: 3)); app.buttons["Retry Delete"].tap(); XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); XCTAssertTrue(app.staticTexts["Read"].exists)
         app.buttons["Delete"].tap(); XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1))
     }
+
+    func testRoutinesRemainOperableAtAccessibilityXXXL() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]; app.launch()
+        app.tabBars.buttons["Routines"].tap(); XCTAssertTrue(app.staticTexts["Read"].waitForExistence(timeout: 3)); XCTAssertTrue(app.otherElements["14-day history"].exists)
+        for button in ["Edit", "Pause", "Archive", "Delete"] { let target = app.buttons[button]; if !target.isHittable { app.swipeUp() }; XCTAssertTrue(target.exists) }
+        app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 3)); app.buttons["Cancel"].tap(); XCTAssertTrue(app.staticTexts["Read"].exists)
+    }
 }
