@@ -513,6 +513,18 @@ final class FeatureViewModelTests: XCTestCase {
         repository.listError = nil; subject.reload(); XCTAssertEqual(repository.deleteCalls.count, 1); XCTAssertFalse(subject.active.contains { $0.id == routine.id })
     }
 
+    func testRoutineCreateFailureKeepsNormalizedDraftThenEditedRetryCreatesOnce() {
+        let repository = FakeRoutineRepository(); let subject = RoutinesViewModel(repository: repository, calendar: calendar); repository.createError = TestError.failed
+        XCTAssertFalse(subject.create(.init(title: "  First  ", weekdays: [1], window: .morning, reminderHour: 8, reminderMinute: 0))); XCTAssertEqual(subject.failedEditorOperation, .create); XCTAssertEqual(subject.draftOnFailure?.title, "First"); XCTAssertTrue(subject.active.isEmpty)
+        repository.createError = nil; let edited = RoutineDraft(title: "Edited", weekdays: [2, 3], window: .evening, reminderHour: 23, reminderMinute: 59); XCTAssertTrue(subject.create(edited)); XCTAssertEqual(repository.createdDrafts, [edited]); XCTAssertTrue(subject.active.contains { $0.routine.title == "Edited" }); XCTAssertNil(subject.failedEditorOperation)
+    }
+
+    func testRoutineUpdateFailureKeepsRowThenEditedRetryUsesExactIDAndDraft() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Old", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload(); repository.updateError = TestError.failed
+        XCTAssertFalse(subject.update(id: routine.id, draft: .init(title: "  Failed  ", weekdays: [2], window: .morning, reminderHour: 8, reminderMinute: 0))); XCTAssertEqual(subject.active[0].routine.title, "Old"); XCTAssertEqual(subject.failedEditorOperation, .update(routine.id)); XCTAssertEqual(subject.draftOnFailure?.title, "Failed")
+        repository.updateError = nil; let edited = RoutineDraft(title: "Edited", weekdays: [3, 4], window: .evening, reminderHour: 23, reminderMinute: 59); XCTAssertTrue(subject.update(id: routine.id, draft: edited)); XCTAssertEqual(repository.updateCalls, [.init(id: routine.id, draft: edited)]); XCTAssertEqual(subject.active[0].routine.title, "Edited"); XCTAssertNil(subject.failedEditorOperation)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
