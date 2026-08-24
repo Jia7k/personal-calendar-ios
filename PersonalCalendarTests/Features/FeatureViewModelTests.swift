@@ -525,6 +525,15 @@ final class FeatureViewModelTests: XCTestCase {
         repository.updateError = nil; let edited = RoutineDraft(title: "Edited", weekdays: [3, 4], window: .evening, reminderHour: 23, reminderMinute: 59); XCTAssertTrue(subject.update(id: routine.id, draft: edited)); XCTAssertEqual(repository.updateCalls, [.init(id: routine.id, draft: edited)]); XCTAssertEqual(subject.active[0].routine.title, "Edited"); XCTAssertNil(subject.failedEditorOperation)
     }
 
+    func testRoutineCompletionAndUndoRetainConfirmedHistoryAcrossRefreshFailures() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let yesterday = LocalDay(date: calendar.date(byAdding: .day, value: -1, to: now)!, calendar: calendar); let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1, 2, 3, 4, 5, 6, 7], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine]); try? repository.setCompleted(routineID: routine.id, day: yesterday, completed: true); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.listError = TestError.failed
+        await subject.setCompleted(id: routine.id, completed: true); XCTAssertEqual(repository.completionCalls.last, .init(id: routine.id, day: day, completed: true)); XCTAssertTrue(subject.active[0].isCompletedToday); XCTAssertGreaterThanOrEqual(subject.active[0].streak, 2); XCTAssertTrue(subject.errorMessage?.contains("saved") == true)
+        repository.listError = nil; subject.reload(); let calls = repository.completionCalls.count; XCTAssertNil(subject.errorMessage); XCTAssertEqual(repository.completionCalls.count, calls)
+        repository.completedDaysErrors[routine.id] = TestError.failed; await subject.setCompleted(id: routine.id, completed: false); XCTAssertEqual(repository.completionCalls.last, .init(id: routine.id, day: day, completed: false)); XCTAssertFalse(subject.active[0].isCompletedToday); XCTAssertTrue(subject.errorMessage?.contains("saved") == true)
+        repository.completedDaysErrors[routine.id] = nil; subject.reload(); XCTAssertEqual(repository.completionCalls.count, calls + 1)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
