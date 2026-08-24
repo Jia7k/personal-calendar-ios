@@ -30,7 +30,13 @@ final class RoutinesViewModel {
         isLoading = true; defer { isLoading = false }
         do {
             let snapshots = try repository.list(includeArchived: true)
-            let staged = try snapshots.map(makeRow)
+            var nextCompleted: [UUID: Set<LocalDay>] = [:]
+            let staged = try snapshots.map { routine -> RoutineRowState in
+                let completed = try repository.completedDays(routineID: routine.id)
+                nextCompleted[routine.id] = completed
+                return rowState(for: routine, completed: completed)
+            }
+            confirmedCompletedDays = nextCompleted
             active = staged.filter { !$0.routine.isArchived }; archived = staged.filter { $0.routine.isArchived }; errorMessage = nil
         } catch { errorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
     }
@@ -51,7 +57,7 @@ final class RoutinesViewModel {
     }
     func setPaused(id: UUID, paused: Bool) { mutate(id, patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
     func setArchived(id: UUID, archived: Bool) { mutate(id, patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
-    func delete(id: UUID) { guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; reload(savedMutation: true) } catch { errorMessage = "Your routine was not deleted. Try again." } }
+    func delete(id: UUID) { guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true) } catch { errorMessage = "Your routine was not deleted. Try again." } }
 
     private func mutateDraft(_ draft: RoutineDraft, action: (RoutineDraft) throws -> Void) -> Bool {
         guard valid(draft) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
@@ -61,9 +67,6 @@ final class RoutinesViewModel {
         guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         guard let old = row(id) else { return }
         do { try action(); replace(old, with: patch(old)); reload(savedMutation: true) } catch { errorMessage = "Your routine was not changed. Try again." }
-    }
-    private func makeRow(_ routine: RoutineSnapshot) throws -> RoutineRowState {
-        let completed = try repository.completedDays(routineID: routine.id); confirmedCompletedDays[routine.id] = completed; return rowState(for: routine, completed: completed)
     }
     private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>) -> RoutineRowState {
         let today = currentDay

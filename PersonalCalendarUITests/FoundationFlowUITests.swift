@@ -130,4 +130,14 @@ final class FoundationFlowUITests: XCTestCase {
         title.tap(); for _ in 0..<5 { title.typeText(XCUIKeyboardKey.delete.rawValue) }; title.typeText("Edited")
         app.buttons["Retry"].tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
     }
+
+    func testRoutineDeleteCancelPreservesThenConfirmRemoves() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing"]; app.launch()
+        app.tabBars.buttons["Routines"].tap()
+        XCTAssertTrue(app.staticTexts["Read"].waitForExistence(timeout: 3))
+        app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 3)); app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.staticTexts["Read"].exists)
+        app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); app.buttons["Delete"].tap()
+        XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1))
+    }
 }
