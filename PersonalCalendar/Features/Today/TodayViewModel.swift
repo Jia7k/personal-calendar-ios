@@ -26,42 +26,81 @@ final class TodayViewModel {
     private let calendarProvider: () -> Calendar
     private let now: () -> Date
 
-    init(calendar: any CalendarServicing, reminders: any RemindersServicing, routines: any RoutineRepository, composer: AgendaComposer, settings: AppSettingsStore, calendarProvider: @escaping () -> Calendar = { .current }, now: @escaping () -> Date = Date.init) {
-        self.calendar = calendar; self.reminders = reminders; self.routines = routines; self.composer = composer
-        self.settings = settings; self.calendarProvider = calendarProvider; self.now = now
+    init(
+        calendar: any CalendarServicing,
+        reminders: any RemindersServicing,
+        routines: any RoutineRepository,
+        composer: AgendaComposer,
+        settings: AppSettingsStore,
+        calendarProvider: @escaping () -> Calendar = { .current },
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.calendar = calendar
+        self.reminders = reminders
+        self.routines = routines
+        self.composer = composer
+        self.settings = settings
+        self.calendarProvider = calendarProvider
+        self.now = now
     }
 
     var localDay: LocalDay { LocalDay(date: now(), calendar: calendarProvider()) }
     var calendarAccessState: AccessState { calendar.accessState }
     var remindersAccessState: AccessState { reminders.accessState }
-    var isGenuinelyEmpty: Bool { hasLoaded && calendarError == nil && remindersError == nil && routinesError == nil && !showsCalendarPermissionCard && !showsRemindersPermissionCard && agenda.allDay.isEmpty && agenda.scheduled.isEmpty && agenda.priority.isEmpty }
+    var isGenuinelyEmpty: Bool {
+        hasLoaded && calendarError == nil && remindersError == nil && routinesError == nil
+            && !showsCalendarPermissionCard && !showsRemindersPermissionCard
+            && agenda.allDay.isEmpty && agenda.scheduled.isEmpty && agenda.priority.isEmpty
+    }
 
     func load() async {
         isLoading = true
-        let systemCalendar = calendarProvider(); let day = LocalDay(date: now(), calendar: systemCalendar)
-        let start = day.startDate(in: systemCalendar); let end = systemCalendar.date(byAdding: .day, value: 1, to: start)!
+        let systemCalendar = calendarProvider()
+        let day = LocalDay(date: now(), calendar: systemCalendar)
+        let start = day.startDate(in: systemCalendar)
+        let end = systemCalendar.date(byAdding: .day, value: 1, to: start)!
         showsCalendarPermissionCard = calendar.accessState != .granted
         showsRemindersPermissionCard = reminders.accessState != .granted
         if calendar.accessState == .granted {
-            do { cachedEvents = try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: settings.selectedCalendarIDs); calendarError = nil }
-            catch { calendarError = "Calendar events could not be refreshed. Pull to try again." }
-        } else { cachedEvents = []; calendarError = nil }
+            do {
+                cachedEvents = try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: settings.selectedCalendarIDs)
+                calendarError = nil
+            } catch {
+                calendarError = "Calendar events could not be refreshed. Pull to try again."
+            }
+        } else {
+            cachedEvents = []
+            calendarError = nil
+        }
         if reminders.accessState == .granted {
-            do { cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs); remindersError = nil }
-            catch { remindersError = "Tasks could not be refreshed. Pull to try again." }
-        } else { cachedReminders = []; remindersError = nil }
+            do {
+                cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
+                remindersError = nil
+            } catch {
+                remindersError = "Tasks could not be refreshed. Pull to try again."
+            }
+        } else {
+            cachedReminders = []
+            remindersError = nil
+        }
         do {
             let values = try routines.list(includeArchived: false)
             let days = try Dictionary(uniqueKeysWithValues: values.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
-            cachedRoutines = values; cachedRoutineDays = days; routinesError = nil
-        } catch { routinesError = "Routines could not be refreshed. Pull to try again." }
+            cachedRoutines = values
+            cachedRoutineDays = days
+            routinesError = nil
+        } catch {
+            routinesError = "Routines could not be refreshed. Pull to try again."
+        }
         compose(day: day, calendar: systemCalendar)
-        hasLoaded = true; isLoading = false
+        hasLoaded = true
+        isLoading = false
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
         guard case let .reminder(id) = item.origin, item.allowsModification else { return }
-        mutatingItemIDs.insert(item.id); defer { mutatingItemIDs.remove(item.id) }
+        mutatingItemIDs.insert(item.id)
+        defer { mutatingItemIDs.remove(item.id) }
         do {
             try reminders.setCompleted(id: id, completed: completed)
             cachedReminders = cachedReminders.map { value in
@@ -69,25 +108,43 @@ final class TodayViewModel {
                 return ReminderSnapshot(id: value.id, title: value.title, notes: value.notes, dueDate: value.dueDate, dueHasTime: value.dueHasTime, priority: value.priority, listID: value.listID, listTitle: value.listTitle, isCompleted: completed, allowsModification: value.allowsModification, hasRecurrence: value.hasRecurrence)
             }
             compose(day: localDay, calendar: calendarProvider())
-            do { cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs); remindersError = nil } catch { remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again." }
+            do {
+                cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
+                remindersError = nil
+            } catch {
+                remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
+            }
             compose(day: localDay, calendar: calendarProvider())
-        } catch { remindersError = "This task could not be updated. Pull to try again." }
+        } catch {
+            remindersError = "This task could not be updated. Pull to try again."
+        }
     }
 
     func setRoutineCompleted(_ item: AgendaItem, completed: Bool) async {
         guard case let .routine(id, day) = item.origin else { return }
-        mutatingItemIDs.insert(item.id); defer { mutatingItemIDs.remove(item.id) }
+        mutatingItemIDs.insert(item.id)
+        defer { mutatingItemIDs.remove(item.id) }
         do {
             try routines.setCompleted(routineID: id, day: day, completed: completed)
-            if completed { cachedRoutineDays[id, default: []].insert(day) } else { cachedRoutineDays[id]?.remove(day) }
+            if completed {
+                cachedRoutineDays[id, default: []].insert(day)
+            } else {
+                cachedRoutineDays[id]?.remove(day)
+            }
             compose(day: localDay, calendar: calendarProvider())
             do {
                 let values = try routines.list(includeArchived: false)
                 let days = try Dictionary(uniqueKeysWithValues: values.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
-                cachedRoutines = values; cachedRoutineDays = days; routinesError = nil
-            } catch { routinesError = "Routine changes were saved, but routines could not be refreshed. Pull to try again." }
+                cachedRoutines = values
+                cachedRoutineDays = days
+                routinesError = nil
+            } catch {
+                routinesError = "Routine changes were saved, but routines could not be refreshed. Pull to try again."
+            }
             compose(day: localDay, calendar: calendarProvider())
-        } catch { routinesError = "This routine could not be updated. Pull to try again." }
+        } catch {
+            routinesError = "This routine could not be updated. Pull to try again."
+        }
     }
 
     private func compose(day: LocalDay, calendar: Calendar) {

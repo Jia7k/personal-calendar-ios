@@ -39,7 +39,13 @@ struct AgendaRow: View {
         switch item.placement {
         case .allDay: String(localized: "All Day")
         case let .timed(date): date.formatted(date: .omitted, time: .shortened)
-        case let .window(window): window.rawValue.capitalized
+        case let .window(window):
+            switch window {
+            case .morning: String(localized: "Morning")
+            case .afternoon: String(localized: "Afternoon")
+            case .evening: String(localized: "Evening")
+            case .anytime: String(localized: "Anytime")
+            }
         case .unscheduled: String(localized: "Priority")
         }
     }
