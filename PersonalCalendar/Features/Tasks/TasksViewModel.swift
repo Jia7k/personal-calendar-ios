@@ -50,6 +50,7 @@ final class TasksViewModel {
             confirmed = fetched
             errorMessage = nil; publish()
         } catch {
+            guard generation == loadGeneration else { return }
             errorMessage = "Your tasks could not be refreshed. Pull to try again."
             publish()
         }
