@@ -49,7 +49,63 @@ final class CalendarViewModelTests: XCTestCase {
         await model.load()
 
         XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Read"])
-        XCTAssertTrue(model.deniedSourceMessages.contains { $0.contains("Calendar") })
+        let notice = try! XCTUnwrap(model.sourceAccessNotices.first)
+        XCTAssertEqual(model.sourceAccessNotices.count, 1)
+        XCTAssertEqual(notice.source, .calendar)
+        XCTAssertEqual(notice.accessState, .denied)
+        XCTAssertEqual(notice.message, "Calendar access is unavailable. Calendar events are hidden.")
+        XCTAssertEqual(notice.action, .openSettings)
+        XCTAssertTrue(notice.canOpenSettings)
+    }
+
+    func testRestrictedCalendarReportsControlledHiddenSourceWithoutHidingRoutine() async {
+        let model = makeModel(
+            calendarService: FakeCalendarService(access: .restricted),
+            routines: FakeRoutineRepository(routines: [.sampleRoutine])
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Read"])
+        let notice = try! XCTUnwrap(model.sourceAccessNotices.first)
+        XCTAssertEqual(model.sourceAccessNotices.count, 1)
+        XCTAssertEqual(notice.source, .calendar)
+        XCTAssertEqual(notice.accessState, .restricted)
+        XCTAssertEqual(notice.message, "Calendar access is restricted. Calendar events are hidden because this access is controlled by your device or account.")
+        XCTAssertNil(notice.action)
+        XCTAssertFalse(notice.canOpenSettings)
+    }
+
+    func testRestrictedRemindersReportsControlledHiddenSourceWithoutHidingRoutine() async {
+        let model = makeModel(
+            reminders: FakeRemindersService(access: .restricted),
+            routines: FakeRoutineRepository(routines: [.sampleRoutine])
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Read"])
+        let notice = try! XCTUnwrap(model.sourceAccessNotices.first)
+        XCTAssertEqual(model.sourceAccessNotices.count, 1)
+        XCTAssertEqual(notice.source, .reminders)
+        XCTAssertEqual(notice.accessState, .restricted)
+        XCTAssertEqual(notice.message, "Reminders access is restricted. Tasks are hidden because this access is controlled by your device or account.")
+        XCTAssertNil(notice.action)
+        XCTAssertFalse(notice.canOpenSettings)
+    }
+
+    func testNotDeterminedSourcesRetainInAppSettingsRoute() async {
+        let model = makeModel(
+            calendarService: FakeCalendarService(access: .notDetermined),
+            reminders: FakeRemindersService(access: .notDetermined)
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.sourceAccessNotices.map(\.source), [.calendar, .reminders])
+        XCTAssertEqual(model.sourceAccessNotices.map(\.accessState), [.notDetermined, .notDetermined])
+        XCTAssertEqual(model.sourceAccessNotices.map(\.action), [.openSettings, .openSettings])
+        XCTAssertTrue(model.sourceAccessNotices.allSatisfy(\.canOpenSettings))
     }
 
     func testSelectingDayRecomposesAgendaForThatDay() async {

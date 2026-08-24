@@ -23,7 +23,7 @@ struct CalendarHomeView: View {
                 VStack(spacing: 16) {
                     monthHeader
                     grid
-                    DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, deniedSourceMessages: viewModel.deniedSourceMessages, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } })
+                    DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } })
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)

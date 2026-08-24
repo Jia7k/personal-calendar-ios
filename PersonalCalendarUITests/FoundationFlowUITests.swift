@@ -32,6 +32,42 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Reminders"].waitForExistence(timeout: 2))
     }
 
+    func testRestrictedOnboardingAtAccessibilityXXXLTraversesTerminalPagesWithStableControls() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-show-onboarding", "-calendar-restricted", "-reminders-restricted", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+
+        let heading = app.staticTexts["onboarding-heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        waitForLabel("Calendar", on: heading)
+        XCTAssertTrue(app.staticTexts["Show your schedule and events in one place."].exists)
+        XCTAssertTrue(app.staticTexts["Calendar access is restricted by device or account controls."].exists)
+        XCTAssertFalse(app.buttons["onboarding-not-now"].exists)
+        let primary = app.buttons["onboarding-primary"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 3))
+        XCTAssertEqual(primary.label, "Continue")
+        scrollToHittable(primary, in: app)
+        primary.tap()
+
+        waitForLabel("Reminders", on: heading)
+        XCTAssertTrue(app.staticTexts["Show and manage your tasks alongside your schedule."].exists)
+        XCTAssertTrue(app.staticTexts["Reminders access is restricted by device or account controls."].exists)
+        XCTAssertFalse(app.buttons["onboarding-not-now"].exists)
+        XCTAssertEqual(primary.label, "Continue")
+        scrollToHittable(primary, in: app)
+        primary.tap()
+
+        waitForLabel("Notifications", on: heading)
+        XCTAssertTrue(app.staticTexts["Deliver local reminders and summaries."].exists)
+        XCTAssertTrue(app.staticTexts["Notifications access is allowed."].exists)
+        XCTAssertFalse(app.buttons["onboarding-not-now"].exists)
+        XCTAssertEqual(primary.label, "Continue")
+        scrollToHittable(primary, in: app)
+        primary.tap()
+
+        XCTAssertTrue(app.tabBars.buttons["Calendar"].waitForExistence(timeout: 3))
+    }
+
     func testSettingsExplainsDeniedCalendarWithoutBlockingRoutines() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-calendar-denied"]
@@ -147,6 +183,40 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 3))
         settings.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+    }
+
+    func testRestrictedCalendarHasNoCardActionAndToolbarSettingsRemainsUsable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-restricted"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Calendar access is restricted. Calendar events are hidden because this access is controlled by your device or account."].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["calendar-permission-settings"].exists)
+        XCTAssertTrue(app.staticTexts["Buy milk"].exists)
+        XCTAssertTrue(app.staticTexts["Read"].exists)
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.isHittable)
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Calendar access is restricted"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["This access is controlled by your device or account."].exists)
+    }
+
+    func testRestrictedRemindersHasNoCardActionAndToolbarSettingsRemainsUsable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-reminders-restricted"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Reminders access is restricted. Tasks are hidden because this access is controlled by your device or account."].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.buttons["reminders-permission-settings"].exists)
+        XCTAssertTrue(app.staticTexts["Coffee"].exists)
+        XCTAssertTrue(app.staticTexts["Read"].exists)
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.isHittable)
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Reminders access is restricted"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["This access is controlled by your device or account."].exists)
     }
 
     func testCalendarDegradedPathReachesHittableSettingsControlsAtAccessibilityXXXL() {
@@ -371,6 +441,11 @@ final class FoundationFlowUITests: XCTestCase {
 
     private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 3) {
         let expectation = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        wait(for: [expectation], timeout: timeout)
+    }
+
+    private func waitForLabel(_ label: String, on element: XCUIElement, timeout: TimeInterval = 3) {
+        let expectation = expectation(for: NSPredicate(format: "label == %@", label), evaluatedWith: element)
         wait(for: [expectation], timeout: timeout)
     }
 

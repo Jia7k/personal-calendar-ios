@@ -6,6 +6,63 @@ enum TrayState: Equatable {
     case expanded
 }
 
+struct SourceAccessNotice: Equatable, Identifiable, Sendable {
+    enum Source: Hashable, Sendable {
+        case calendar
+        case reminders
+
+        var displayName: String {
+            switch self {
+            case .calendar: "Calendar"
+            case .reminders: "Reminders"
+            }
+        }
+
+        var settingsActionIdentifier: String {
+            switch self {
+            case .calendar: "calendar-permission-settings"
+            case .reminders: "reminders-permission-settings"
+            }
+        }
+    }
+
+    enum Action: Equatable, Sendable {
+        case openSettings
+    }
+
+    let source: Source
+    let accessState: AccessState
+
+    var id: Source { source }
+
+    var message: String {
+        switch (source, accessState) {
+        case (.calendar, .restricted):
+            "Calendar access is restricted. Calendar events are hidden because this access is controlled by your device or account."
+        case (.reminders, .restricted):
+            "Reminders access is restricted. Tasks are hidden because this access is controlled by your device or account."
+        case (.calendar, .granted):
+            "Calendar access is available."
+        case (.reminders, .granted):
+            "Reminders access is available."
+        case (.calendar, .denied), (.calendar, .notDetermined):
+            "Calendar access is unavailable. Calendar events are hidden."
+        case (.reminders, .denied), (.reminders, .notDetermined):
+            "Reminders access is unavailable. Tasks are hidden."
+        }
+    }
+
+    var action: Action? {
+        switch accessState {
+        case .denied, .notDetermined: .openSettings
+        case .granted, .restricted: nil
+        }
+    }
+
+    var canOpenSettings: Bool { action == .openSettings }
+    var settingsActionIdentifier: String { source.settingsActionIdentifier }
+}
+
 @MainActor
 @Observable
 final class CalendarViewModel {
@@ -17,7 +74,7 @@ final class CalendarViewModel {
     private(set) var errorMessage: String?
     private(set) var eventDraftOnFailure: EventDraft?
     private(set) var isLoading = false
-    private(set) var deniedSourceMessages: [String] = []
+    private(set) var sourceAccessNotices: [SourceAccessNotice] = []
 
     private var cachedEvents: [CalendarEventSnapshot] = []
     private var cachedReminders: [ReminderSnapshot] = []
@@ -53,12 +110,13 @@ final class CalendarViewModel {
         var nextReminders = cachedReminders
         var nextRoutines = cachedRoutines
         var nextCompletions = cachedRoutineCompletions
-        var messages: [String] = []
+        var notices: [SourceAccessNotice] = []
         var encounteredFailure = false
         let cells = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth)
         let interval = DateInterval(start: cells.first!.day.startDate(in: systemCalendar), end: systemCalendar.date(byAdding: .day, value: 1, to: cells.last!.day.startDate(in: systemCalendar))!)
 
-        if calendarService.accessState == .granted {
+        let calendarAccess = calendarService.accessState
+        if calendarAccess == .granted {
             do {
                 let descriptorIDs = Set(calendarService.calendars().map(\.id))
                 let ids = descriptorIDs.isEmpty ? settings.selectedCalendarIDs : settings.visibleCalendarIDs(availableIDs: descriptorIDs)
@@ -68,10 +126,11 @@ final class CalendarViewModel {
             catch { encounteredFailure = true }
         } else {
             nextEvents = []
-            messages.append("Calendar access is unavailable. Calendar events are hidden.")
+            notices.append(SourceAccessNotice(source: .calendar, accessState: calendarAccess))
         }
 
-        if remindersService.accessState == .granted {
+        let remindersAccess = remindersService.accessState
+        if remindersAccess == .granted {
             do {
                 let descriptorIDs = Set(remindersService.lists().map(\.id))
                 let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
@@ -81,7 +140,7 @@ final class CalendarViewModel {
             catch { encounteredFailure = true }
         } else {
             nextReminders = []
-            messages.append("Reminders access is unavailable. Tasks are hidden.")
+            notices.append(SourceAccessNotice(source: .reminders, accessState: remindersAccess))
         }
 
         do {
@@ -96,7 +155,7 @@ final class CalendarViewModel {
         cachedReminders = nextReminders
         cachedRoutines = nextRoutines
         cachedRoutineCompletions = nextCompletions
-        deniedSourceMessages = messages
+        sourceAccessNotices = notices
         rebuildVisibleAgendas()
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }

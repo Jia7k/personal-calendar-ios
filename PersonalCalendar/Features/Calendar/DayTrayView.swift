@@ -6,7 +6,7 @@ struct DayTrayView: View {
     let state: TrayState
     let isLoading: Bool
     let errorMessage: String?
-    let deniedSourceMessages: [String]
+    let sourceAccessNotices: [SourceAccessNotice]
     let calendar: Calendar
     let openSettings: @MainActor () -> Void
     let onSetState: (TrayState) -> Void
@@ -23,13 +23,15 @@ struct DayTrayView: View {
             }
             if isLoading { ProgressView("Loading your day") }
             if let errorMessage { Label(errorMessage, systemImage: "exclamationmark.triangle"); Button("Retry", action: onRetry).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
-            ForEach(deniedSourceMessages, id: \.self) { message in
+            ForEach(sourceAccessNotices) { notice in
                 VStack(alignment: .leading, spacing: 6) {
-                    Label(message, systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary)
-                    Button("Open Settings", action: openSettings)
-                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                        .accessibilityIdentifier(message.hasPrefix("Calendar") ? "calendar-permission-settings" : "reminders-permission-settings")
-                        .accessibilityLabel("Open in-app Settings for \(message)")
+                    Label(notice.message, systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary)
+                    if notice.canOpenSettings {
+                        Button("Open Settings", action: openSettings)
+                            .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                            .accessibilityIdentifier(notice.settingsActionIdentifier)
+                            .accessibilityLabel("Open in-app Settings for \(notice.source.displayName)")
+                    }
                 }.padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             }
             if state == .resting { restingContent } else { expandedContent }
