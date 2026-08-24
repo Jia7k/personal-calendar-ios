@@ -169,7 +169,7 @@ final class DemoRoutineRepository: RoutineRepository {
     private var shouldFailNextDelete: Bool
     private var shouldFailNextCreate: Bool
     private var shouldFailNextUpdate: Bool
-    init(failFirstDelete: Bool = false, failFirstCreate: Bool = false, failFirstUpdate: Bool = false) { shouldFailNextDelete = failFirstDelete; shouldFailNextCreate = failFirstCreate; shouldFailNextUpdate = failFirstUpdate }
+    init(failFirstDelete: Bool = false, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, longTitle: Bool = false) { shouldFailNextDelete = failFirstDelete; shouldFailNextCreate = failFirstCreate; shouldFailNextUpdate = failFirstUpdate; if longTitle { let old = values[0]; values[0] = .init(id: old.id, title: "Read a long and thoughtfully named routine before bed every evening", weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived) } }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
         includeArchived ? values : values.filter { !$0.isArchived }

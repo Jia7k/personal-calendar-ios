@@ -98,7 +98,7 @@ final class RoutinesViewModel {
             active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil
             reload(savedMutation: true)
             return true
-        } catch { failAction(operation, message: "Your routine was not deleted. Try again."); return false }
+        } catch { failAction(operation, message: "Your routine was not deleted. Try again. The routine and its completion history are still safe on this iPhone."); return false }
     }
     func retryFailedAction() {
         guard let recovery = actionRecovery else { return }
