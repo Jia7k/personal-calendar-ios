@@ -16,10 +16,10 @@ struct RootTabView: View {
             TodayView(environment: environment)
                 .tabItem { Label("Today", systemImage: "sun.max") }
                 .tag(RootTab.today)
-            NavigationStack { Text("Tasks") }
+            TasksView(environment: environment)
                 .tabItem { Label("Tasks", systemImage: "checklist") }
                 .tag(RootTab.tasks)
-            NavigationStack { Text("Routines") }
+            RoutinesView(environment: environment)
                 .tabItem { Label("Routines", systemImage: "repeat") }
                 .tag(RootTab.routines)
         }

@@ -78,6 +78,10 @@ final class FakeRoutineRepository: RoutineRepository {
     var completedDaysCallCount = 0
     var completedDaysError: Error?
     var completionError: Error?
+    var listError: Error?
+    var createError: Error?
+    var updateError: Error?
+    var deleteError: Error?
     private var completions: [UUID: Set<LocalDay>] = [:]
 
     init(routines: [RoutineSnapshot] = []) {
@@ -85,21 +89,25 @@ final class FakeRoutineRepository: RoutineRepository {
     }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
-        includeArchived ? routines : routines.filter { !$0.isArchived }
+        if let listError { throw listError }
+        return includeArchived ? routines : routines.filter { !$0.isArchived }
     }
 
     func create(_ draft: RoutineDraft) throws -> UUID {
+        if let createError { throw createError }
         createdDrafts.append(draft)
-        return UUID()
+        let id = UUID(); routines.append(.init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: false, isArchived: false)); return id
     }
 
-    func update(id: UUID, draft: RoutineDraft) throws { }
+    func update(id: UUID, draft: RoutineDraft) throws { if let updateError { throw updateError }; guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; let old = routines[index]; routines[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived) }
 
-    func setPaused(id: UUID, paused: Bool) throws { }
+    func setPaused(id: UUID, paused: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: paused, isArchived: old.isArchived) }
 
-    func setArchived(id: UUID, archived: Bool) throws { }
+    func setArchived(id: UUID, archived: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: archived) }
 
     func delete(id: UUID) throws {
+        if let deleteError { throw deleteError }
+        guard routines.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         routines.removeAll { $0.id == id }
         completions[id] = nil
     }
@@ -135,6 +143,7 @@ final class FakeRemindersService: RemindersServicing {
     var createdDrafts: [ReminderDraft] = []
     var completedCalls: [CompletionCall] = []
     var completionError: Error?
+    var createError: Error?
     var fetchErrorAfterCompletion: Error?
     var suspendFetchAfterUndo = false
     private var fetchContinuation: CheckedContinuation<Void, Never>?
@@ -178,12 +187,14 @@ final class FakeRemindersService: RemindersServicing {
     func resumeSuspendedFetch() { fetchContinuation?.resume(); fetchContinuation = nil }
 
     func createReminder(_ draft: ReminderDraft) throws -> String {
+        if let createError { throw createError }
         createdDrafts.append(draft)
-        return "created-task"
+        let id = "created-task-\(createdDrafts.count)"; reminders.append(.init(id: id, title: draft.title, notes: draft.notes, dueDate: draft.dueDate, dueHasTime: draft.dueHasTime, priority: draft.priority, listID: draft.listID ?? descriptors.first?.id ?? "tasks", listTitle: descriptors.first(where: { $0.id == draft.listID })?.title ?? "Tasks", isCompleted: false, allowsModification: true, hasRecurrence: false)); return id
     }
 
     func setCompleted(id: String, completed: Bool) throws {
         if let completionError { throw completionError }
+        guard reminders.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         completedCalls.append(.init(id: id, completed: completed))
         if let index = reminders.firstIndex(where: { $0.id == id }) {
             let old = reminders[index]

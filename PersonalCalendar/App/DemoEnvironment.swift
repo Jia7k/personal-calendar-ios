@@ -131,7 +131,7 @@ final class DemoRemindersService: RemindersServicing {
     }
 
     func setCompleted(id: String, completed: Bool) throws {
-        guard let index = values.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = values.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         let old = values[index]
         values[index] = .init(
             id: old.id,
@@ -176,7 +176,7 @@ final class DemoRoutineRepository: RoutineRepository {
     }
 
     func update(id: UUID, draft: RoutineDraft) throws {
-        guard let index = values.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = values.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         let old = values[index]
         values[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived)
     }
@@ -190,6 +190,7 @@ final class DemoRoutineRepository: RoutineRepository {
     }
 
     func delete(id: UUID) throws {
+        guard values.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         values.removeAll { $0.id == id }
         completed[id] = nil
     }

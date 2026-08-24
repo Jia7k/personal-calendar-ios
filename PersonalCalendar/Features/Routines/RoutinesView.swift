@@ -1,0 +1,24 @@
+import SwiftUI
+
+struct RoutinesView: View {
+    @State private var model: RoutinesViewModel
+    @State private var editing: RoutineRowState?
+    @State private var showingNew = false
+    @State private var deleteTarget: RoutineRowState?
+    init(environment: AppEnvironment) { _model = State(initialValue: RoutinesViewModel(repository: environment.routines)) }
+    var body: some View { NavigationStack { List {
+        if let error = model.errorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry") { model.reload() }.frame(minHeight: 44) } }
+        Section("Active") { if model.active.isEmpty { ContentUnavailableView("No routines", systemImage: "repeat", description: Text("Create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
+        if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
+    }.navigationTitle("Routines").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Routine", systemImage: "plus") { showingNew = true }.frame(minWidth: 44, minHeight: 44) } }
+    .sheet(isPresented: $showingNew) { RoutineEditorView(model: model) }.sheet(item: $editing) { RoutineEditorView(model: model, row: $0) }
+    .confirmationDialog("Delete \(deleteTarget?.routine.title ?? "routine")?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }), titleVisibility: .visible) { Button("Delete", role: .destructive) { if let target = deleteTarget { model.delete(id: target.id) }; deleteTarget = nil }; Button("Cancel", role: .cancel) { deleteTarget = nil } }
+    .task { model.reload() }.refreshable { model.reload() }
+    } }
+    private func row(_ row: RoutineRowState) -> some View { VStack(alignment: .leading, spacing: 8) {
+        HStack { Button { Task { await model.setCompleted(id: row.id, completed: !row.isCompletedToday) } } label: { Image(systemName: row.isCompletedToday ? "checkmark.circle.fill" : "circle") }.frame(minWidth: 44, minHeight: 44).disabled(row.routine.isArchived || (row.routine.isPaused && !row.isCompletedToday)).accessibilityLabel("Mark \(row.routine.title) \(row.isCompletedToday ? "incomplete" : "complete")").accessibilityValue(row.isCompletedToday ? "Completed" : "Not completed")
+        VStack(alignment: .leading) { Text(row.routine.title); Text("\(row.streak) day streak").font(.footnote).foregroundStyle(.secondary) }; Spacer(); Button("Edit") { editing = row }.frame(minWidth: 44, minHeight: 44) }
+        HStack(spacing: 4) { ForEach(row.history) { day in Image(systemName: day.isCompleted ? "checkmark.circle.fill" : (day.isScheduled ? "circle" : "minus")) } }.accessibilityElement(children: .ignore).accessibilityLabel("14-day history").accessibilityValue("\(row.history.filter(\.isCompleted).count) completed days")
+        HStack { Button(row.routine.isPaused ? "Resume" : "Pause") { model.setPaused(id: row.id, paused: !row.routine.isPaused) }.frame(minHeight: 44); Button("Archive") { model.setArchived(id: row.id, archived: !row.routine.isArchived) }.frame(minHeight: 44); Button("Delete", role: .destructive) { deleteTarget = row }.frame(minHeight: 44) }
+    }.padding(.vertical, 4) }
+}

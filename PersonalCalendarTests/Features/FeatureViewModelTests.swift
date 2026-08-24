@@ -236,6 +236,37 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertTrue(subject.agenda.scheduled.isEmpty)
     }
 
+    func testTasksGroupsOverdueTodayTomorrowUndatedAndCompletedInInjectedTimezone() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let overdue = reminder(id: "overdue", title: "Overdue", due: calendar.date(byAdding: .day, value: -1, to: now)!, hasTime: false)
+        let today = reminder(id: "today", title: "Today", due: now, hasTime: true)
+        let tomorrow = reminder(id: "tomorrow", title: "Tomorrow", due: calendar.date(byAdding: .day, value: 1, to: now)!, hasTime: false)
+        let undated = reminder(id: "undated", title: "Inbox", due: nil, hasTime: false)
+        let done = ReminderSnapshot(id: "done", title: "Done", notes: nil, dueDate: nil, dueHasTime: false, priority: 1, listID: "list", listTitle: "List", isCompleted: true, allowsModification: true, hasRecurrence: false)
+        let subject = TasksViewModel(service: FakeRemindersService(access: .granted, reminders: [undated, tomorrow, done, today, overdue]), settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+
+        await subject.load()
+
+        XCTAssertEqual(subject.today.map(\.id), ["overdue", "today"])
+        XCTAssertEqual(subject.upcoming.map(\.id), ["tomorrow", "undated"])
+        XCTAssertEqual(subject.completed.map(\.id), ["done"])
+    }
+
+    func testRoutinesBuildFourteenDayHistoryWithOneQueryPerRoutine() {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1, 2, 3, 4, 5, 6, 7], window: .evening, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine])
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now })
+
+        subject.reload()
+
+        XCTAssertEqual(subject.active.count, 1)
+        XCTAssertEqual(subject.active[0].history.count, 14)
+        XCTAssertEqual(subject.active[0].history.first?.day, LocalDay(year: 2026, month: 8, day: 11))
+        XCTAssertEqual(subject.active[0].history.last?.day, LocalDay(year: 2026, month: 8, day: 24))
+        XCTAssertEqual(repository.completedDaysCallCount, 1)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

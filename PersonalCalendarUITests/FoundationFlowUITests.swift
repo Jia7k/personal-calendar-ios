@@ -99,4 +99,26 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Buy milk"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["Mark Buy milk complete"].exists)
     }
+
+    func testCreateTaskAndCompleteRoutineInDemoMode() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+
+        app.tabBars.buttons["Tasks"].tap()
+        app.buttons["New Task"].tap()
+        let title = app.textFields["Task title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        title.tap(); title.typeText("Call Alex")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.staticTexts["Call Alex"].waitForExistence(timeout: 3))
+
+        app.tabBars.buttons["Routines"].tap()
+        let complete = app.buttons["Mark Read complete"]
+        XCTAssertTrue(complete.waitForExistence(timeout: 3))
+        complete.tap()
+        XCTAssertEqual(complete.value as? String, "Completed")
+        XCTAssertTrue(app.staticTexts["1 day streak"].exists)
+        XCTAssertTrue(app.otherElements["14-day history"].exists)
+    }
 }
