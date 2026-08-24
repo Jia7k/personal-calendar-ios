@@ -203,6 +203,8 @@ final class FeatureViewModelTests: XCTestCase {
         let work = Task { await subject.undoLastTaskCompletion() }
         for _ in 0..<20 where !service.isFetchSuspended { await Task.yield() }
         XCTAssertTrue(service.isFetchSuspended); XCTAssertTrue(subject.latestTaskUndo?.isPending == true)
+        await subject.undoLastTaskCompletion()
+        XCTAssertEqual(service.completedCalls.filter { !$0.completed }.count, 1)
         service.resumeSuspendedFetch(); await work.value
         XCTAssertNil(subject.latestTaskUndo)
     }
@@ -216,6 +218,22 @@ final class FeatureViewModelTests: XCTestCase {
         await subject.undoLastTaskCompletion()
         XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Task"])
         XCTAssertNil(subject.latestTaskUndo); XCTAssertEqual(service.completedCalls.last, .init(id: "opaque|raw", completed: false)); XCTAssertNotNil(subject.remindersError)
+    }
+
+    func testOlderUndoRefreshDoesNotClearNewCompletionUndo() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)])
+        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
+        service.suspendFetchAfterUndo = true
+        let oldUndo = Task { await subject.undoLastTaskCompletion() }
+        for _ in 0..<20 where !service.isFetchSuspended { await Task.yield() }
+        let restored = subject.agenda.scheduled[0]
+        await subject.setTaskCompleted(restored, completed: true)
+        let newGeneration = subject.latestTaskUndo?.generation
+        service.resumeSuspendedFetch(); await oldUndo.value
+        XCTAssertEqual(subject.latestTaskUndo?.generation, newGeneration)
+        XCTAssertTrue(subject.agenda.scheduled.isEmpty)
     }
 
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {

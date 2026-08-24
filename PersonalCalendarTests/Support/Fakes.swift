@@ -164,6 +164,7 @@ final class FakeRemindersService: RemindersServicing {
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
         if suspendFetchAfterUndo, completedCalls.last?.completed == false {
             isFetchSuspended = true
+            suspendFetchAfterUndo = false
             await withCheckedContinuation { continuation in fetchContinuation = continuation }
             isFetchSuspended = false
         }

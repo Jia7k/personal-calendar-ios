@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 struct TaskUndoState: Equatable {
+    let generation: UUID
     let title: String
     let rawID: String
     let snapshot: ReminderSnapshot
@@ -116,7 +117,7 @@ final class TodayViewModel {
                 return ReminderSnapshot(id: value.id, title: value.title, notes: value.notes, dueDate: value.dueDate, dueHasTime: value.dueHasTime, priority: value.priority, listID: value.listID, listTitle: value.listTitle, isCompleted: completed, allowsModification: value.allowsModification, hasRecurrence: value.hasRecurrence)
             }
             if completed, let snapshot = cachedReminders.first(where: { $0.id == id }) {
-                latestTaskUndo = TaskUndoState(title: snapshot.title, rawID: id, snapshot: snapshot)
+                latestTaskUndo = TaskUndoState(generation: UUID(), title: snapshot.title, rawID: id, snapshot: snapshot)
             }
             compose(day: localDay, calendar: calendarProvider())
             do {
@@ -132,9 +133,10 @@ final class TodayViewModel {
     }
 
     func undoLastTaskCompletion() async {
-        guard var undo = latestTaskUndo else { return }
+        guard var undo = latestTaskUndo, !undo.isPending else { return }
+        let generation = undo.generation
         undo.isPending = true
-        latestTaskUndo = undo
+        if latestTaskUndo?.generation == generation { latestTaskUndo = undo }
         do {
             try reminders.setCompleted(id: undo.rawID, completed: false)
             let restored = undo.snapshot
@@ -152,10 +154,10 @@ final class TodayViewModel {
                 remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
             }
             compose(day: localDay, calendar: calendarProvider())
-            latestTaskUndo = nil
+            if latestTaskUndo?.generation == generation { latestTaskUndo = nil }
         } catch {
             undo.isPending = false
-            latestTaskUndo = undo
+            if latestTaskUndo?.generation == generation { latestTaskUndo = undo }
             remindersError = "This task could not be updated. Pull to try again."
         }
     }
