@@ -89,6 +89,10 @@ final class TasksViewModel {
             if refreshErrorMessage != nil { refreshErrorMessage = "Your task change was saved, but tasks could not be refreshed. Pull to try again." }
         } catch { failedMutationOperation = .init(id: id, completed: state); mutationErrorMessage = "Your task was not changed. Try again." }
     }
+    func retryFailedMutation() async {
+        guard let operation = failedMutationOperation else { return }
+        await setCompleted(id: operation.id, completed: operation.completed)
+    }
 
     private func publish() {
         let todayDay = LocalDay(date: now(), calendar: calendar)
