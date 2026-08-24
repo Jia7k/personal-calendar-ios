@@ -6,11 +6,13 @@ struct CalendarHomeView: View {
     @State private var showingNewEvent = false
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
+    private let revision: Int
     private var calendar: Calendar { .current }
 
-    init(environment: AppEnvironment, openSettings: @escaping @MainActor () -> Void = {}) {
+    init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = {}) {
         self.environment = environment
         self.openSettings = openSettings
+        self.revision = revision
         let systemCalendar = Calendar.current
         _viewModel = State(initialValue: CalendarViewModel(today: LocalDay(date: .now, calendar: systemCalendar), calendarService: environment.calendar, remindersService: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings, systemCalendar: systemCalendar))
     }
@@ -31,7 +33,7 @@ struct CalendarHomeView: View {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
                 ToolbarItem(placement: .topBarTrailing) { Button("New Event", systemImage: "plus") { showingNewEvent = true }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             }
-            .task { await viewModel.load() }
+            .task(id: revision) { await viewModel.load() }
             .sheet(isPresented: $showingNewEvent) {
                 NewEventSheet(selectedDay: viewModel.selectedDay, calendarService: environment.calendar, settings: environment.settings, systemCalendar: calendar, isSaving: viewModel.isLoading, failedDraft: viewModel.eventDraftOnFailure, saveErrorMessage: viewModel.eventDraftOnFailure == nil ? nil : viewModel.errorMessage, onSave: { draft in
                     Task { await viewModel.createEvent(draft); if viewModel.eventDraftOnFailure == nil { showingNewEvent = false } }

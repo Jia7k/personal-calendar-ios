@@ -365,6 +365,44 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(subject.today.map(\.id), ["new"]); XCTAssertNil(subject.errorMessage)
     }
 
+    func testOlderSuspendedTodayLoadCannotRestoreDeselectedReminder() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let old = reminder(id: "old", title: "Old", due: now, hasTime: true)
+        let fresh = reminder(id: "fresh", title: "Fresh", due: now, hasTime: true)
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        settings.setSelectedReminderListsForTesting(["old", "fresh"], explicit: true)
+        let service = FakeRemindersService(access: .granted, reminders: [old, fresh])
+        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: settings, calendarProvider: { self.calendar }, now: { now })
+
+        service.suspendNextFetch = true
+        let older = Task { await subject.load() }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        settings.setSelectedReminderListsForTesting(["fresh"], explicit: true)
+        await subject.load()
+        service.resumeSuspendedFetch()
+        await older.value
+
+        XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Fresh"])
+    }
+
+    func testOlderSuspendedTodayFailureCannotPublishErrorAfterNewerSuccess() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "old", title: "Old", due: now, hasTime: true)])
+        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+
+        service.suspendNextFetch = true
+        let older = Task { await subject.load() }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        service.reminders = []
+        await subject.load()
+        service.fetchError = TestError.failed
+        service.resumeSuspendedFetch()
+        await older.value
+
+        XCTAssertTrue(subject.agenda.scheduled.isEmpty)
+        XCTAssertNil(subject.remindersError)
+    }
+
     func testOlderSuspendedTaskLoadFailureCannotSetErrorAfterNewerSuccess() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
         let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "old", title: "Old", due: now, hasTime: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })

@@ -34,6 +34,7 @@ final class TodayViewModel {
     private let settings: AppSettingsStore
     private let calendarProvider: () -> Calendar
     private let now: () -> Date
+    private var loadGeneration = 0
 
     init(
         calendar: any CalendarServicing,
@@ -63,47 +64,63 @@ final class TodayViewModel {
     }
 
     func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
+        defer { if generation == loadGeneration { isLoading = false } }
+        var nextEvents = cachedEvents
+        var nextReminders = cachedReminders
+        var nextRoutines = cachedRoutines
+        var nextDays = cachedRoutineDays
+        var nextCalendarError: String?
+        var nextRemindersError: String?
+        var nextRoutinesError: String?
         let systemCalendar = calendarProvider()
         let day = LocalDay(date: now(), calendar: systemCalendar)
         let start = day.startDate(in: systemCalendar)
         let end = systemCalendar.date(byAdding: .day, value: 1, to: start)!
-        showsCalendarPermissionCard = calendar.accessState != .granted
-        showsRemindersPermissionCard = reminders.accessState != .granted
+        let nextCalendarCard = calendar.accessState != .granted
+        let nextRemindersCard = reminders.accessState != .granted
         if calendar.accessState == .granted {
             do {
-                cachedEvents = try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: settings.visibleCalendarIDs(availableIDs: Set(calendar.calendars().map(\.id))))
-                calendarError = nil
+                let ids = settings.visibleCalendarIDs(availableIDs: Set(calendar.calendars().map(\.id)))
+                nextEvents = ids.isEmpty ? [] : try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: ids)
             } catch {
-                calendarError = "Calendar events could not be refreshed. Pull to try again."
+                nextCalendarError = "Calendar events could not be refreshed. Pull to try again."
             }
         } else {
-            cachedEvents = []
-            calendarError = nil
+            nextEvents = []
         }
         if reminders.accessState == .granted {
             do {
-                cachedReminders = try await reminders.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id))))
-                remindersError = nil
+                let ids = settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id)))
+                nextReminders = ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
             } catch {
-                remindersError = "Tasks could not be refreshed. Pull to try again."
+                nextRemindersError = "Tasks could not be refreshed. Pull to try again."
             }
         } else {
-            cachedReminders = []
-            remindersError = nil
+            nextReminders = []
         }
         do {
             let values = try routines.list(includeArchived: false)
             let days = try Dictionary(uniqueKeysWithValues: values.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
-            cachedRoutines = values
-            cachedRoutineDays = days
-            routinesError = nil
+            nextRoutines = values
+            nextDays = days
         } catch {
-            routinesError = "Routines could not be refreshed. Pull to try again."
+            nextRoutinesError = "Routines could not be refreshed. Pull to try again."
         }
+        guard generation == loadGeneration else { return }
+        cachedEvents = nextEvents
+        cachedReminders = nextReminders
+        cachedRoutines = nextRoutines
+        cachedRoutineDays = nextDays
+        calendarError = nextCalendarError
+        remindersError = nextRemindersError
+        routinesError = nextRoutinesError
+        showsCalendarPermissionCard = nextCalendarCard
+        showsRemindersPermissionCard = nextRemindersCard
         compose(day: day, calendar: systemCalendar)
         hasLoaded = true
-        isLoading = false
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
@@ -190,8 +207,12 @@ final class TodayViewModel {
     }
 
     private func compose(day: LocalDay, calendar: Calendar) {
-        let events = cachedEvents.filter { settings.visibleCalendarIDs(availableIDs: Set(self.calendar.calendars().map(\.id))).contains($0.calendarID) }
-        let reminders = cachedReminders.filter { settings.visibleReminderListIDs(availableIDs: Set(self.reminders.lists().map(\.id))).contains($0.listID) }
+        let descriptorCalendarIDs = Set(self.calendar.calendars().map(\.id))
+        let descriptorReminderIDs = Set(self.reminders.lists().map(\.id))
+        let calendarIDs = descriptorCalendarIDs.isEmpty ? Set(cachedEvents.map(\.calendarID)) : descriptorCalendarIDs
+        let reminderIDs = descriptorReminderIDs.isEmpty ? Set(cachedReminders.map(\.listID)) : descriptorReminderIDs
+        let events = cachedEvents.filter { settings.visibleCalendarIDs(availableIDs: calendarIDs).contains($0.calendarID) }
+        let reminders = cachedReminders.filter { settings.visibleReminderListIDs(availableIDs: reminderIDs).contains($0.listID) }
         let completed = Set(cachedRoutines.filter { cachedRoutineDays[$0.id]?.contains(day) == true }.map(\.id))
         agenda = composer.compose(day: day, events: events, reminders: reminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: true, calendar: calendar)
     }

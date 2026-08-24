@@ -4,9 +4,10 @@ import UIKit
 struct SettingsView: View {
     let environment: AppEnvironment
     let openSystemSettings: @MainActor () -> Void
+    let onContentChanged: @MainActor () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var loading = true
-    init(environment: AppEnvironment, openSystemSettings: @escaping @MainActor () -> Void = { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }) { self.environment = environment; self.openSystemSettings = openSystemSettings }
+    init(environment: AppEnvironment, onContentChanged: @escaping @MainActor () -> Void = {}, openSystemSettings: @escaping @MainActor () -> Void = { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }) { self.environment = environment; self.onContentChanged = onContentChanged; self.openSystemSettings = openSystemSettings }
     var body: some View {
         NavigationStack { List {
             Section("Permissions") {
@@ -14,8 +15,8 @@ struct SettingsView: View {
                 permission("Reminders", state: environment.permissions.remindersAccess, request: environment.permissions.requestReminders)
                 permission("Notifications", state: environment.permissions.notificationAccess, request: environment.permissions.requestNotifications)
             }
-            Section("Visible calendars") { ForEach(environment.calendar.calendars()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleCalendarIDs(availableIDs: Set(environment.calendar.calendars().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleCalendar(id: value.id, availableIDs: Set(environment.calendar.calendars().map(\.id))) })) } }
-            Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))) })) } }
+            Section("Visible calendars") { ForEach(environment.calendar.calendars()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleCalendarIDs(availableIDs: Set(environment.calendar.calendars().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleCalendar(id: value.id, availableIDs: Set(environment.calendar.calendars().map(\.id))); onContentChanged() })) } }
+            Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))); onContentChanged() })) } }
             defaults
         }.navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); loading = false } }
     }
@@ -35,7 +36,7 @@ struct SettingsView: View {
             case .granted: PermissionCard(title: "\(source) access is on", explanation: "This source is available.", actionTitle: nil, action: nil)
             case .restricted: PermissionCard(title: "\(source) access is restricted", explanation: "This access is controlled by your device or account.", actionTitle: nil, action: nil)
             case .denied: PermissionCard(title: "\(source) access is off", explanation: "Allow access in System Settings.", actionTitle: "Open System Settings", action: openSystemSettings)
-            case .notDetermined: PermissionCard(title: "Allow \(source)", explanation: "You can choose this later.", actionTitle: "Allow", action: { Task { await request() } }).disabled(loading || environment.permissions.isPending(source.lowercased()))
+            case .notDetermined: PermissionCard(title: "Allow \(source)", explanation: "You can choose this later.", actionTitle: "Allow", action: { Task { await request(); onContentChanged() } }).disabled(loading || environment.permissions.isPending(source.lowercased()))
             }
         }
     }

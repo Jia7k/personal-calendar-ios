@@ -17,11 +17,11 @@ final class AppSettingsStore {
     private let defaults: UserDefaults
 
     var selectedCalendarIDs: Set<String> {
-        didSet { defaults.set(selectedCalendarIDs.sorted(), forKey: Key.selectedCalendars) }
+        didSet { defaults.set(selectedCalendarIDs.sorted(), forKey: Key.selectedCalendars); calendarSelectionIsExplicit = true }
     }
 
     var selectedReminderListIDs: Set<String> {
-        didSet { defaults.set(selectedReminderListIDs.sorted(), forKey: Key.selectedLists) }
+        didSet { defaults.set(selectedReminderListIDs.sorted(), forKey: Key.selectedLists); reminderSelectionIsExplicit = true }
     }
 
     var defaultCalendarID: String? {

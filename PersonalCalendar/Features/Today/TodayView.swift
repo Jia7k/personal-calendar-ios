@@ -4,10 +4,12 @@ import UIKit
 struct TodayView: View {
     @State private var model: TodayViewModel
     private let openSettings: @MainActor () -> Void
+    private let revision: Int
 
-    init(environment: AppEnvironment, openSettings: @escaping @MainActor () -> Void = TodayView.defaultOpenSettings) {
+    init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = TodayView.defaultOpenSettings) {
         _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings))
         self.openSettings = openSettings
+        self.revision = revision
     }
 
     var body: some View {
@@ -39,7 +41,7 @@ struct TodayView: View {
             }
             .overlay { if model.isLoading && !model.hasLoaded { ProgressView() } }
             .navigationTitle("Today")
-            .task { await model.load() }
+            .task(id: revision) { await model.load() }
             .refreshable { await model.load() }
         }
     }

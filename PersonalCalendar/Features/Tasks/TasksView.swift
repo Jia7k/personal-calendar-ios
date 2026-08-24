@@ -3,7 +3,8 @@ import SwiftUI
 struct TasksView: View {
     @State private var model: TasksViewModel
     @State private var showingNewTask = false
-    init(environment: AppEnvironment) { _model = State(initialValue: TasksViewModel(service: environment.reminders, settings: environment.settings)) }
+    private let revision: Int
+    init(environment: AppEnvironment, revision: Int = 0) { _model = State(initialValue: TasksViewModel(service: environment.reminders, settings: environment.settings)); self.revision = revision }
     var body: some View {
         NavigationStack {
             List {
@@ -17,7 +18,7 @@ struct TasksView: View {
             .navigationTitle("Tasks")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Task", systemImage: "plus") { showingNewTask = true }.disabled(model.accessExplanation != nil).frame(minWidth: 44, minHeight: 44) } }
             .sheet(isPresented: $showingNewTask) { NewTaskSheet(model: model) }
-            .task { await model.load() }
+            .task(id: revision) { await model.load() }
             .refreshable { await model.load() }
         }
     }

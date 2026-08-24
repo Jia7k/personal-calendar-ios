@@ -10,7 +10,7 @@ protocol NotificationAuthorizing: AnyObject {
 
 @MainActor
 @Observable
-final class PermissionCoordinator {
+final class PermissionCoordinator: PermissionRefreshing {
     private(set) var calendarAccess: AccessState
     private(set) var remindersAccess: AccessState
     private(set) var notificationAccess: AccessState

@@ -107,7 +107,8 @@ final class TasksViewModel {
 
     private func publish() {
         let todayDay = LocalDay(date: now(), calendar: calendar)
-        let selected = settings.visibleReminderListIDs(availableIDs: Set(service.lists().map(\.id)))
+        let descriptorIDs = Set(service.lists().map(\.id))
+        let selected = settings.visibleReminderListIDs(availableIDs: descriptorIDs.isEmpty ? Set(confirmed.map(\.listID)) : descriptorIDs)
         let visible = confirmed.filter { selected.contains($0.listID) }
         let incomplete = visible.filter { !$0.isCompleted }
         today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) <= todayDay } ?? false }.sorted(by: sort)

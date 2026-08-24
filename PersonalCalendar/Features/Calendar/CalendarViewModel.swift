@@ -30,6 +30,7 @@ final class CalendarViewModel {
     private let composer: AgendaComposer
     private let settings: AppSettingsStore
     private let systemCalendar: Calendar
+    private var loadGeneration = 0
 
     init(today: LocalDay, calendarService: any CalendarServicing, remindersService: any RemindersServicing, routines: any RoutineRepository, composer: AgendaComposer, settings: AppSettingsStore, systemCalendar: Calendar) {
         self.today = today
@@ -44,9 +45,15 @@ final class CalendarViewModel {
     }
 
     func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
-        defer { isLoading = false }
-        deniedSourceMessages = []
+        defer { if generation == loadGeneration { isLoading = false } }
+        var nextEvents = cachedEvents
+        var nextReminders = cachedReminders
+        var nextRoutines = cachedRoutines
+        var nextCompletions = cachedRoutineCompletions
+        var messages: [String] = []
         var encounteredFailure = false
         let cells = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth)
         let interval = DateInterval(start: cells.first!.day.startDate(in: systemCalendar), end: systemCalendar.date(byAdding: .day, value: 1, to: cells.last!.day.startDate(in: systemCalendar))!)
@@ -54,34 +61,40 @@ final class CalendarViewModel {
         if calendarService.accessState == .granted {
             do {
                 let ids = settings.visibleCalendarIDs(availableIDs: Set(calendarService.calendars().map(\.id)))
-                cachedEvents = try calendarService.fetchEvents(in: interval, calendarIDs: ids)
-                if settings.calendarSelectionIsExplicit { cachedEvents = cachedEvents.filter { ids.contains($0.calendarID) } }
+                nextEvents = ids.isEmpty ? [] : try calendarService.fetchEvents(in: interval, calendarIDs: ids)
+                if settings.calendarSelectionIsExplicit { nextEvents = nextEvents.filter { ids.contains($0.calendarID) } }
             }
             catch { encounteredFailure = true }
         } else {
-            cachedEvents = []
-            deniedSourceMessages.append("Calendar access is unavailable. Calendar events are hidden.")
+            nextEvents = []
+            messages.append("Calendar access is unavailable. Calendar events are hidden.")
         }
 
         if remindersService.accessState == .granted {
             do {
                 let ids = settings.visibleReminderListIDs(availableIDs: Set(remindersService.lists().map(\.id)))
-                cachedReminders = try await remindersService.fetchReminders(listIDs: ids)
-                if settings.reminderSelectionIsExplicit { cachedReminders = cachedReminders.filter { ids.contains($0.listID) } }
+                nextReminders = ids.isEmpty ? [] : try await remindersService.fetchReminders(listIDs: ids)
+                if settings.reminderSelectionIsExplicit { nextReminders = nextReminders.filter { ids.contains($0.listID) } }
             }
             catch { encounteredFailure = true }
         } else {
-            cachedReminders = []
-            deniedSourceMessages.append("Reminders access is unavailable. Tasks are hidden.")
+            nextReminders = []
+            messages.append("Reminders access is unavailable. Tasks are hidden.")
         }
 
         do {
             let refreshed = try routines.list(includeArchived: false)
             let completions = try Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
-            cachedRoutines = refreshed
-            cachedRoutineCompletions = completions
+            nextRoutines = refreshed
+            nextCompletions = completions
         } catch { encounteredFailure = true }
 
+        guard generation == loadGeneration else { return }
+        cachedEvents = nextEvents
+        cachedReminders = nextReminders
+        cachedRoutines = nextRoutines
+        cachedRoutineCompletions = nextCompletions
+        deniedSourceMessages = messages
         rebuildVisibleAgendas()
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }
@@ -117,10 +130,14 @@ final class CalendarViewModel {
     }
 
     private func rebuildVisibleAgendas() {
+        let calendarIDs = Set(calendarService.calendars().map(\.id)).isEmpty ? Set(cachedEvents.map(\.calendarID)) : Set(calendarService.calendars().map(\.id))
+        let reminderIDs = Set(remindersService.lists().map(\.id)).isEmpty ? Set(cachedReminders.map(\.listID)) : Set(remindersService.lists().map(\.id))
+        let visibleEvents = cachedEvents.filter { settings.visibleCalendarIDs(availableIDs: calendarIDs).contains($0.calendarID) }
+        let visibleReminders = cachedReminders.filter { settings.visibleReminderListIDs(availableIDs: reminderIDs).contains($0.listID) }
         let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
         visibleAgendas = Dictionary(uniqueKeysWithValues: days.map { day in
             let completed = Set(cachedRoutines.filter { cachedRoutineCompletions[$0.id]?.contains(day) == true }.map(\.id))
-            return (day, composer.compose(day: day, events: cachedEvents, reminders: cachedReminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: day == today, calendar: systemCalendar))
+            return (day, composer.compose(day: day, events: visibleEvents, reminders: visibleReminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: day == today, calendar: systemCalendar))
         })
         agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
     }

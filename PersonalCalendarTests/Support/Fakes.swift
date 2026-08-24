@@ -218,6 +218,8 @@ final class FakeRemindersService: RemindersServicing {
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
         fetchListIDs.append(listIDs)
+        let result = reminders.filter { listIDs.isEmpty || listIDs.contains($0.listID) }
+        let error = fetchError
         if suspendNextFetch {
             isFetchSuspended = true
             suspendNextFetch = false
@@ -232,10 +234,10 @@ final class FakeRemindersService: RemindersServicing {
         }
         if let fetchErrorAfterCompletion, !completedCalls.isEmpty { throw fetchErrorAfterCompletion }
         if let fetchErrorAfterCreate, !createdDrafts.isEmpty { throw fetchErrorAfterCreate }
-        if let fetchError {
-            throw fetchError
+        if let error {
+            throw error
         }
-        return reminders.filter { listIDs.isEmpty || listIDs.contains($0.listID) }
+        return result
     }
 
     func resumeSuspendedFetch() { fetchContinuation?.resume(); fetchContinuation = nil }
