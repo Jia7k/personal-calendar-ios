@@ -1,5 +1,6 @@
 import XCTest
 
+@MainActor
 final class FoundationFlowUITests: XCTestCase {
     func testLaunchShowsFourPrimaryTabs() {
         let app = XCUIApplication()

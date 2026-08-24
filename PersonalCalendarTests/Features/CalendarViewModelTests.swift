@@ -3,13 +3,12 @@ import XCTest
 
 @MainActor
 final class CalendarViewModelTests: XCTestCase {
-    private var calendar: Calendar!
-    private let today = LocalDay(year: 2026, month: 8, day: 24)
-
-    override func setUp() {
-        calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    private var calendar: Calendar {
+        var value = Calendar(identifier: .gregorian)
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        return value
     }
+    private let today = LocalDay(year: 2026, month: 8, day: 24)
 
     func testLoadUsesOnlySelectedSources() async {
         let start = today.startDate(in: calendar).addingTimeInterval(3_600)
