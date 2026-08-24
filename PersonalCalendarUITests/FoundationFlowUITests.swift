@@ -54,11 +54,11 @@ final class FoundationFlowUITests: XCTestCase {
         title.tap()
         title.typeText("Dentist")
         app.buttons["Save"].tap()
-        XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["event-save-retry"].waitForExistence(timeout: 3))
         title.tap()
         for _ in 0..<7 { title.typeText(XCUIKeyboardKey.delete.rawValue) }
         title.typeText("Dentist Updated")
-        app.buttons["Retry"].tap()
+        app.buttons["event-save-retry"].tap()
         XCTAssertTrue(app.staticTexts["Dentist Updated"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Dentist"].exists)
     }
@@ -116,9 +116,13 @@ final class FoundationFlowUITests: XCTestCase {
 
         app.tabBars.buttons["Routines"].tap()
         let complete = app.buttons["Mark Read complete"]
+        let undo = app.buttons["Mark Read incomplete"]
+        if undo.exists { undo.tap(); XCTAssertTrue(complete.waitForExistence(timeout: 3)) }
         XCTAssertTrue(complete.waitForExistence(timeout: 3))
         complete.tap()
-        XCTAssertEqual(complete.value as? String, "Completed")
+        let completed = app.buttons["Mark Read incomplete"]
+        XCTAssertTrue(completed.waitForExistence(timeout: 3))
+        XCTAssertEqual(completed.value as? String, "Completed")
         XCTAssertTrue(app.staticTexts["1 day streak"].exists)
         XCTAssertTrue(app.otherElements["14-day history"].exists)
     }
