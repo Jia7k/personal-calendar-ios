@@ -4,10 +4,15 @@ import Observation
 @MainActor
 @Observable
 final class TasksViewModel {
+    struct TaskMutationOperation: Equatable { let id: String; let completed: Bool }
     private(set) var today: [ReminderSnapshot] = []
     private(set) var upcoming: [ReminderSnapshot] = []
     private(set) var completed: [ReminderSnapshot] = []
-    private(set) var errorMessage: String?
+    private(set) var refreshErrorMessage: String?
+    private(set) var createErrorMessage: String?
+    private(set) var mutationErrorMessage: String?
+    private(set) var failedMutationOperation: TaskMutationOperation?
+    var errorMessage: String? { mutationErrorMessage ?? createErrorMessage ?? refreshErrorMessage }
     private(set) var draftOnFailure: ReminderDraft?
     private(set) var isLoading = false
     private(set) var isSaving = false
@@ -41,34 +46,34 @@ final class TasksViewModel {
     }
 
     func load() async {
-        guard service.accessState == .granted else { confirmed = []; publish(); errorMessage = nil; return }
+        guard service.accessState == .granted else { confirmed = []; publish(); refreshErrorMessage = nil; return }
         loadGeneration += 1; let generation = loadGeneration
         isLoading = true; defer { if generation == loadGeneration { isLoading = false } }
         do {
             let fetched = try await service.fetchReminders(listIDs: settings.selectedReminderListIDs)
             guard generation == loadGeneration else { return }
             confirmed = fetched
-            errorMessage = nil; publish()
+            refreshErrorMessage = nil; publish()
         } catch {
             guard generation == loadGeneration else { return }
-            errorMessage = "Your tasks could not be refreshed. Pull to try again."
+            refreshErrorMessage = "Your tasks could not be refreshed. Pull to try again."
             publish()
         }
     }
 
     func create(_ draft: ReminderDraft) async -> Bool {
         guard !isSaving else { return false }
-        guard isValid(draft), let listID = resolvedListID(for: draft) else { errorMessage = "Enter a title and choose a writable reminder list."; return false }
+        guard isValid(draft), let listID = resolvedListID(for: draft) else { createErrorMessage = "Enter a title and choose a writable reminder list."; return false }
         isSaving = true; defer { isSaving = false }
         var saved = draft; saved.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines); saved.listID = listID
         if saved.dueDate == nil { saved.dueHasTime = false }
         do {
-            _ = try service.createReminder(saved); draftOnFailure = nil
+            _ = try service.createReminder(saved); draftOnFailure = nil; createErrorMessage = nil
             await load()
-            if errorMessage != nil { errorMessage = "Your task was saved, but tasks could not be refreshed. Pull to try again." }
+            if refreshErrorMessage != nil { refreshErrorMessage = "Your task was saved, but tasks could not be refreshed. Pull to try again." }
             return true
         } catch {
-            draftOnFailure = saved; errorMessage = "Your task was not saved. Edit it and try again."; return false
+            draftOnFailure = saved; createErrorMessage = "Your task was not saved. Edit it and try again."; return false
         }
     }
 
@@ -80,8 +85,9 @@ final class TasksViewModel {
             confirmed = confirmed.map { $0.id == id ? replacing($0, completed: state) : $0 }
             publish()
             await load()
-            if errorMessage != nil { errorMessage = "Your task change was saved, but tasks could not be refreshed. Pull to try again." }
-        } catch { errorMessage = "Your task was not changed. Try again." }
+            mutationErrorMessage = nil; failedMutationOperation = nil
+            if refreshErrorMessage != nil { refreshErrorMessage = "Your task change was saved, but tasks could not be refreshed. Pull to try again." }
+        } catch { failedMutationOperation = .init(id: id, completed: state); mutationErrorMessage = "Your task was not changed. Try again." }
     }
 
     private func publish() {
