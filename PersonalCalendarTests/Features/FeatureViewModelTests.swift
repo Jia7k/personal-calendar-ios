@@ -534,6 +534,19 @@ final class FeatureViewModelTests: XCTestCase {
         repository.completedDaysErrors[routine.id] = nil; subject.reload(); XCTAssertEqual(repository.completionCalls.count, calls + 1)
     }
 
+    func testRoutineDeleteAndRefreshErrorsStaySeparateAndRefreshNeverDeletes() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload(); repository.deleteError = TestError.failed
+        XCTAssertFalse(subject.delete(id: routine.id)); XCTAssertEqual(subject.failedActionOperation, .delete(routine.id)); XCTAssertNotNil(subject.actionErrorMessage); XCTAssertEqual(subject.deleteRetryTarget?.id, routine.id)
+        subject.reload(); repository.listError = TestError.failed; subject.reload(); XCTAssertNotNil(subject.refreshErrorMessage); XCTAssertEqual(repository.deleteCalls.count, 0)
+        subject.reload(); XCTAssertEqual(repository.deleteCalls.count, 0); repository.deleteError = nil; XCTAssertTrue(subject.delete(id: routine.id)); XCTAssertEqual(repository.deleteCalls, [routine.id])
+    }
+
+    func testRoutineEditorErrorSurvivesSuccessfulReloadIndependently() {
+        let repository = FakeRoutineRepository(); let subject = RoutinesViewModel(repository: repository, calendar: calendar); repository.createError = TestError.failed
+        XCTAssertFalse(subject.create(.init(title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); let editor = subject.editorErrorMessage; subject.reload()
+        XCTAssertEqual(subject.editorErrorMessage, editor); XCTAssertEqual(subject.failedEditorOperation, .create); XCTAssertNil(subject.refreshErrorMessage); XCTAssertNil(subject.failedActionOperation)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
