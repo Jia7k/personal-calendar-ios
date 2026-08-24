@@ -315,8 +315,8 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.switches["Work"].waitForExistence(timeout: 3))
         let work = app.switches["Work"]
-        work.tap()
-        XCTAssertEqual(work.value as? String, "0")
+        work.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        waitForValue("0", on: work)
         app.buttons["Done"].tap()
         XCTAssertTrue(app.otherElements["selected-week-strip"].waitForExistence(timeout: 3))
         waitForDisappearance(app.staticTexts["Planning"])
@@ -446,6 +446,11 @@ final class FoundationFlowUITests: XCTestCase {
 
     private func waitForLabel(_ label: String, on element: XCUIElement, timeout: TimeInterval = 3) {
         let expectation = expectation(for: NSPredicate(format: "label == %@", label), evaluatedWith: element)
+        wait(for: [expectation], timeout: timeout)
+    }
+
+    private func waitForValue(_ value: String, on element: XCUIElement, timeout: TimeInterval = 3) {
+        let expectation = expectation(for: NSPredicate(format: "value == %@", value), evaluatedWith: element)
         wait(for: [expectation], timeout: timeout)
     }
 
