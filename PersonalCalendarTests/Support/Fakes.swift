@@ -56,6 +56,8 @@ struct RoutineCompletionCall: Equatable {
     let day: LocalDay
     let completed: Bool
 }
+struct RoutineUpdateCall: Equatable { let id: UUID; let draft: RoutineDraft }
+struct RoutineBooleanCall: Equatable { let id: UUID; let value: Bool }
 
 extension RoutineSnapshot {
     static let sampleRoutine = RoutineSnapshot(
@@ -74,6 +76,10 @@ extension RoutineSnapshot {
 final class FakeRoutineRepository: RoutineRepository {
     var routines: [RoutineSnapshot]
     var createdDrafts: [RoutineDraft] = []
+    var updateCalls: [RoutineUpdateCall] = []
+    var pauseCalls: [RoutineBooleanCall] = []
+    var archiveCalls: [RoutineBooleanCall] = []
+    var deleteCalls: [UUID] = []
     var completionCalls: [RoutineCompletionCall] = []
     var completedDaysCallCount = 0
     var listCallCount = 0
@@ -103,16 +109,16 @@ final class FakeRoutineRepository: RoutineRepository {
         let id = UUID(); routines.append(.init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: false, isArchived: false)); return id
     }
 
-    func update(id: UUID, draft: RoutineDraft) throws { if let updateError { throw updateError }; guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; let old = routines[index]; routines[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived) }
+    func update(id: UUID, draft: RoutineDraft) throws { if let updateError { throw updateError }; guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; updateCalls.append(.init(id: id, draft: draft)); let old = routines[index]; routines[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived) }
 
-    func setPaused(id: UUID, paused: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: paused, isArchived: old.isArchived) }
+    func setPaused(id: UUID, paused: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; pauseCalls.append(.init(id: id, value: paused)); let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: paused, isArchived: old.isArchived) }
 
-    func setArchived(id: UUID, archived: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: archived) }
+    func setArchived(id: UUID, archived: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; archiveCalls.append(.init(id: id, value: archived)); let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: archived) }
 
     func delete(id: UUID) throws {
         if let deleteError { throw deleteError }
         guard routines.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
-        routines.removeAll { $0.id == id }
+        deleteCalls.append(id); routines.removeAll { $0.id == id }
         completions[id] = nil
     }
 
