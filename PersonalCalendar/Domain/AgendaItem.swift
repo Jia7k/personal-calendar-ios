@@ -29,14 +29,57 @@ extension AgendaItem {
         }
 
         self.init(
-            id: reminder.id,
+            id: "task|\(reminder.id)",
             title: reminder.title,
             source: .task,
             placement: placement,
-            sortDate: reminder.dueDate,
+            sortDate: reminder.dueHasTime ? reminder.dueDate : nil,
             priority: reminder.priority,
             isCompleted: reminder.isCompleted,
             allowsModification: reminder.allowsModification
         )
+    }
+
+    init(event: CalendarEventSnapshot) {
+        self.init(
+            id: "event|\(event.id)",
+            title: event.title,
+            source: .event,
+            placement: event.isAllDay ? .allDay : .timed(event.start),
+            sortDate: event.isAllDay ? nil : event.start,
+            priority: 0,
+            isCompleted: false,
+            allowsModification: event.allowsModification
+        )
+    }
+
+    init(routine: RoutineSnapshot, completed: Bool, day: LocalDay, calendar: Calendar) {
+        let sortDate = routine.window.anchorHour.flatMap {
+            calendar.date(bySettingHour: $0, minute: 0, second: 0, of: day.startDate(in: calendar))
+        }
+
+        self.init(
+            id: "routine|\(routine.id.uuidString)|\(day.year)-\(day.month)-\(day.day)",
+            title: routine.title,
+            source: .routine,
+            placement: .window(routine.window),
+            sortDate: sortDate,
+            priority: 0,
+            isCompleted: completed,
+            allowsModification: true
+        )
+    }
+
+    static func stableSort(_ lhs: AgendaItem, _ rhs: AgendaItem) -> Bool {
+        switch (lhs.sortDate, rhs.sortDate) {
+        case let (left?, right?) where left != right:
+            return left < right
+        default:
+            return (lhs.source.rawValue, lhs.title, lhs.id) < (rhs.source.rawValue, rhs.title, rhs.id)
+        }
+    }
+
+    static func prioritySort(_ lhs: AgendaItem, _ rhs: AgendaItem) -> Bool {
+        lhs.priority == rhs.priority ? stableSort(lhs, rhs) : lhs.priority > rhs.priority
     }
 }

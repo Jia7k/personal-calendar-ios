@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0326E0C3B09C29FD9F233CE4 /* Drafts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8609613CA7D41FBA9F361D /* Drafts.swift */; };
+		0B8AF2D3E9D73F367992049C /* AgendaComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5021C67427C6B125C25408 /* AgendaComposerTests.swift */; };
 		0BC46EE714C5B96DF10D5167 /* EventKitMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682D2D6896B3FC8506DC0440 /* EventKitMapping.swift */; };
 		101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */; };
 		24417F7F5F60897AAE27CA48 /* SwiftDataRoutineRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */; };
@@ -19,6 +20,7 @@
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
 		58E1C3B01A2B6D9F004B69D9 /* RemindersServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9B9D6B59D700174A556740 /* RemindersServicing.swift */; };
 		67F5EBBB97AD60FF649FAFA6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2FC04E5363299D6D14B5C06 /* Assets.xcassets */; };
+		6809715C49E055E45CD15358 /* AgendaComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E982605EFFB1AD12838972FF /* AgendaComposer.swift */; };
 		71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */; };
 		75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */; };
 		76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0F4CAF444E648C867C92FD /* Fakes.swift */; };
@@ -71,6 +73,7 @@
 		6A68B5210318A29399B499D2 /* PersonalCalendarTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PersonalCalendarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNotificationAuthorizer.swift; sourceTree = "<group>"; };
 		777DF563D8F009E685D3D51D /* PersonalCalendarUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PersonalCalendarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7B5021C67427C6B125C25408 /* AgendaComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaComposerTests.swift; sourceTree = "<group>"; };
 		8A8609613CA7D41FBA9F361D /* Drafts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Drafts.swift; sourceTree = "<group>"; };
 		91EF6FEBDD3C20D483D57C42 /* EventKitCalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitCalendarService.swift; sourceTree = "<group>"; };
 		9635321CC649FEA69B57A29F /* PersonalCalendar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PersonalCalendar.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -82,6 +85,7 @@
 		B766A1797C82BCFBE072693F /* CalendarTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTheme.swift; sourceTree = "<group>"; };
 		CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServicing.swift; sourceTree = "<group>"; };
 		E02776B6366CB5D539044404 /* RoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepository.swift; sourceTree = "<group>"; };
+		E982605EFFB1AD12838972FF /* AgendaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaComposer.swift; sourceTree = "<group>"; };
 		F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSnapshot.swift; sourceTree = "<group>"; };
 		F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinatorTests.swift; sourceTree = "<group>"; };
 		FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitRemindersService.swift; sourceTree = "<group>"; };
@@ -92,6 +96,7 @@
 		00F143C07124C0AD86FAFF7A /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				7B5021C67427C6B125C25408 /* AgendaComposerTests.swift */,
 				A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */,
 				F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */,
 			);
@@ -101,6 +106,7 @@
 		0143E00823F6E13E83A672D5 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				395267E5B1820C9962C21EC1 /* Agenda */,
 				6BBD379284F70645E7B61EE7 /* EventKit */,
 				20A4F773CF101B9A848791D6 /* Permissions */,
 			);
@@ -143,6 +149,14 @@
 				22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */,
 			);
 			path = PersonalCalendarUITests;
+			sourceTree = "<group>";
+		};
+		395267E5B1820C9962C21EC1 /* Agenda */ = {
+			isa = PBXGroup;
+			children = (
+				E982605EFFB1AD12838972FF /* AgendaComposer.swift */,
+			);
+			path = Agenda;
 			sourceTree = "<group>";
 		};
 		41487D283D0484D42220F254 /* PersonalCalendarTests */ = {
@@ -380,6 +394,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6809715C49E055E45CD15358 /* AgendaComposer.swift in Sources */,
 				75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */,
 				33AF2479A22CB20B095AB8BA /* AppEnvironment.swift in Sources */,
 				EB75D60C51870941DFF5003D /* CalendarEventSnapshot.swift in Sources */,
@@ -408,6 +423,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0B8AF2D3E9D73F367992049C /* AgendaComposerTests.swift in Sources */,
 				101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */,
 				76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */,
 				92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */,

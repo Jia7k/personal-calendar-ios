@@ -92,7 +92,7 @@ final class EventKitServiceMappingTests: XCTestCase {
         let item = AgendaItem(reminder: reminder)
 
         XCTAssertEqual(item.placement, .unscheduled)
-        XCTAssertEqual(item.sortDate, dueDate)
+        XCTAssertNil(item.sortDate)
     }
 
     func testEventDraftRejectsBlankTitleAndInvertedDates() {
