@@ -166,6 +166,8 @@ final class DemoRoutineRepository: RoutineRepository {
         )
     ]
     private var completed: [UUID: Set<LocalDay>] = [:]
+    private var shouldFailNextDelete: Bool
+    init(failFirstDelete: Bool = false) { shouldFailNextDelete = failFirstDelete }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
         includeArchived ? values : values.filter { !$0.isArchived }
@@ -192,6 +194,7 @@ final class DemoRoutineRepository: RoutineRepository {
     }
 
     func delete(id: UUID) throws {
+        if shouldFailNextDelete { shouldFailNextDelete = false; throw DemoCreateError.failed }
         guard values.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         values.removeAll { $0.id == id }
         completed[id] = nil

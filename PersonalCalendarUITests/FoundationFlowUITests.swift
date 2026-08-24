@@ -140,4 +140,11 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); app.buttons["Delete"].tap()
         XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1))
     }
+
+    func testRoutineDeleteRetryRequiresSecondConfirmation() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-routine-delete-fails-once"]; app.launch(); app.tabBars.buttons["Routines"].tap()
+        app.buttons["Delete"].tap(); app.buttons["Delete"].tap(); XCTAssertTrue(app.staticTexts["Read"].exists)
+        XCTAssertTrue(app.buttons["Retry Delete"].waitForExistence(timeout: 3)); app.buttons["Retry Delete"].tap(); XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); XCTAssertTrue(app.staticTexts["Read"].exists)
+        app.buttons["Delete"].tap(); XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1))
+    }
 }
