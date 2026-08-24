@@ -38,3 +38,24 @@ extension CalendarEventSnapshot {
         )
     }
 }
+
+extension ReminderSnapshot {
+    init(reminder: EKReminder) {
+        let list = reminder.calendar
+        let dueComponents = reminder.dueDateComponents
+
+        self.init(
+            id: reminder.calendarItemIdentifier,
+            title: reminder.title ?? "",
+            notes: reminder.notes,
+            dueDate: dueComponents?.date,
+            dueHasTime: dueComponents?.hour != nil,
+            priority: reminder.priority,
+            listID: list?.calendarIdentifier ?? "",
+            listTitle: list?.title ?? "",
+            isCompleted: reminder.isCompleted,
+            allowsModification: list?.allowsContentModifications ?? false,
+            hasRecurrence: reminder.hasRecurrenceRules
+        )
+    }
+}

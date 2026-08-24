@@ -23,6 +23,7 @@
 		AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */; };
 		BF8AE8405E98A3E6621831F7 /* PersonalCalendarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3133012C2D91DDD347CFA0A7 /* PersonalCalendarApp.swift */; };
 		C79693272B1AD1AE438ECD91 /* FoundationFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */; };
+		C8986CA8CFA4922425B576A3 /* EventKitRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */; };
 		D71F641DFE696D96353013AB /* ReminderSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */; };
 		E3F00C8B2BE2A11B793C24CB /* CalendarServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */; };
 		EB75D60C51870941DFF5003D /* CalendarEventSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */; };
@@ -73,6 +74,7 @@
 		CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServicing.swift; sourceTree = "<group>"; };
 		F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSnapshot.swift; sourceTree = "<group>"; };
 		F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinatorTests.swift; sourceTree = "<group>"; };
+		FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitRemindersService.swift; sourceTree = "<group>"; };
 		FC500C0ADDC6ACCF98F33F62 /* LocalDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -187,6 +189,7 @@
 				CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */,
 				91EF6FEBDD3C20D483D57C42 /* EventKitCalendarService.swift */,
 				682D2D6896B3FC8506DC0440 /* EventKitMapping.swift */,
+				FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */,
 				0E9B9D6B59D700174A556740 /* RemindersServicing.swift */,
 			);
 			path = EventKit;
@@ -354,6 +357,7 @@
 				0326E0C3B09C29FD9F233CE4 /* Drafts.swift in Sources */,
 				A3677D3E1B137DED57141F64 /* EventKitCalendarService.swift in Sources */,
 				0BC46EE714C5B96DF10D5167 /* EventKitMapping.swift in Sources */,
+				C8986CA8CFA4922425B576A3 /* EventKitRemindersService.swift in Sources */,
 				F025561331FF3463890E05E9 /* LocalDay.swift in Sources */,
 				26924EB8B191A5E28AA0674E /* PermissionCoordinator.swift in Sources */,
 				BF8AE8405E98A3E6621831F7 /* PersonalCalendarApp.swift in Sources */,

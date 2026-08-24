@@ -18,3 +18,25 @@ struct AgendaItem: Identifiable, Equatable, Sendable {
     let isCompleted: Bool
     let allowsModification: Bool
 }
+
+extension AgendaItem {
+    init(reminder: ReminderSnapshot) {
+        let placement: AgendaPlacement
+        if reminder.dueHasTime, let dueDate = reminder.dueDate {
+            placement = .timed(dueDate)
+        } else {
+            placement = .unscheduled
+        }
+
+        self.init(
+            id: reminder.id,
+            title: reminder.title,
+            source: .task,
+            placement: placement,
+            sortDate: reminder.dueDate,
+            priority: reminder.priority,
+            isCompleted: reminder.isCompleted,
+            allowsModification: reminder.allowsModification
+        )
+    }
+}

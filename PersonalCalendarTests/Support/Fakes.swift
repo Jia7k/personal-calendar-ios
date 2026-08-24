@@ -91,6 +91,22 @@ final class FakeRemindersService: RemindersServicing {
     }
 }
 
+extension ReminderSnapshot {
+    static let sampleTask = ReminderSnapshot(
+        id: "task",
+        title: "Buy milk",
+        notes: nil,
+        dueDate: nil,
+        dueHasTime: false,
+        priority: 5,
+        listID: "tasks",
+        listTitle: "Tasks",
+        isCompleted: false,
+        allowsModification: true,
+        hasRecurrence: false
+    )
+}
+
 @MainActor
 final class FakeNotificationAuthorizer: NotificationAuthorizing {
     private var state: AccessState
