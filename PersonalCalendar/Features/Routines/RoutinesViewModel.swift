@@ -28,6 +28,9 @@ final class RoutinesViewModel {
     var currentDay: LocalDay { LocalDay(date: now(), calendar: calendar) }
     var weekdayOrder: [Int] { (0..<7).map { ((calendar.firstWeekday - 1 + $0) % 7) + 1 } }
     func weekdayName(_ weekday: Int) -> String { calendar.weekdaySymbols[weekday - 1] }
+    func windowName(_ window: RoutineWindow) -> String { switch window { case .morning: "Morning"; case .afternoon: "Afternoon"; case .evening: "Evening"; case .anytime: "Anytime" } }
+    func localizedDate(for day: LocalDay) -> String { let formatter = DateFormatter(); formatter.calendar = calendar; formatter.locale = .current; formatter.timeZone = calendar.timeZone; formatter.dateStyle = .medium; formatter.timeStyle = .none; return formatter.string(from: day.startDate(in: calendar)) }
+    func historyAccessibilityValue(_ history: [RoutineHistoryDay]) -> String { history.map { "\(localizedDate(for: $0.day)): \($0.isScheduled ? "scheduled" : "not scheduled"), \($0.isCompleted ? "completed" : "not completed")" }.joined(separator: "; ") }
     func reminderComponents(for date: Date) -> DateComponents { calendar.dateComponents([.hour, .minute], from: date) }
     func reminderDate(hour: Int?, minute: Int?) -> Date {
         let components = DateComponents(calendar: calendar, timeZone: calendar.timeZone, year: 2001, month: 1, day: 1, hour: hour ?? 9, minute: minute ?? 0, second: 0)

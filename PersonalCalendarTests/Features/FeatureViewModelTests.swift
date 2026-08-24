@@ -496,6 +496,13 @@ final class FeatureViewModelTests: XCTestCase {
         for pair in [(2, 30), (1, 30), (23, 59)] { let parts = subject.reminderComponents(for: subject.reminderDate(hour: pair.0, minute: pair.1)); XCTAssertEqual(parts.hour, pair.0); XCTAssertEqual(parts.minute, pair.1) }
     }
 
+    func testRoutineHistoryAccessibilityUsesLocalizedDatesAndStates() {
+        let subject = RoutinesViewModel(repository: FakeRoutineRepository(), calendar: calendar)
+        let history = [RoutineHistoryDay(day: .init(year: 2026, month: 8, day: 24), isScheduled: true, isCompleted: true), RoutineHistoryDay(day: .init(year: 2026, month: 8, day: 25), isScheduled: false, isCompleted: false)]
+        let text = subject.historyAccessibilityValue(history)
+        XCTAssertFalse(text.contains("2026-8-24")); XCTAssertTrue(text.contains("scheduled")); XCTAssertTrue(text.contains("completed")); XCTAssertEqual(subject.windowName(.anytime), "Anytime")
+    }
+
     func testRoutinePauseAndArchiveRetainExactStateAcrossRefreshFailure() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [calendar.component(.weekday, from: now)], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
         let repository = FakeRoutineRepository(routines: [routine]); try? repository.setCompleted(routineID: routine.id, day: day, completed: true); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.listError = TestError.failed
