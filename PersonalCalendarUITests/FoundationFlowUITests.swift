@@ -18,9 +18,14 @@ final class FoundationFlowUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["calendar-day-today"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["month-grid"].exists)
         app.buttons["Expand day"].tap()
 
         XCTAssertTrue(app.buttons["Collapse day"].exists)
+        XCTAssertTrue(app.otherElements["selected-week-strip"].exists)
+        XCTAssertFalse(app.otherElements["month-grid"].exists)
+        app.buttons["Collapse day"].tap()
+        XCTAssertTrue(app.otherElements["month-grid"].exists)
     }
 
     func testCreateBasicEventInDemoMode() {

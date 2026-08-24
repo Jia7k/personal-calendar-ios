@@ -50,7 +50,12 @@ struct CalendarHomeView: View {
     }
 
     private var grid: some View {
-        MonthGridView(cells: MonthGridBuilder(calendar: calendar).days(containing: viewModel.displayedMonth), displayedMonth: viewModel.displayedMonth, selectedDay: viewModel.selectedDay, today: LocalDay(date: .now, calendar: calendar), agendaByDay: [viewModel.selectedDay: viewModel.agenda], calendar: calendar, onSelect: { day in Task { await viewModel.select(day) } })
+        let builder = MonthGridBuilder(calendar: calendar)
+        let cells = viewModel.trayState == .expanded
+            ? builder.week(containing: viewModel.selectedDay, displayedMonth: viewModel.displayedMonth)
+            : builder.days(containing: viewModel.displayedMonth)
+        return MonthGridView(cells: cells, displayedMonth: viewModel.displayedMonth, selectedDay: viewModel.selectedDay, today: LocalDay(date: .now, calendar: calendar), agendaByDay: [viewModel.selectedDay: viewModel.agenda], calendar: calendar, onSelect: { day in Task { await viewModel.select(day) } })
+            .accessibilityIdentifier(viewModel.trayState == .expanded ? "selected-week-strip" : "month-grid")
             .gesture(DragGesture(minimumDistance: 20).onEnded { value in
                 guard abs(value.translation.height) >= 60 else { return }
                 setTray(value.translation.height < 0 ? .expanded : .resting)

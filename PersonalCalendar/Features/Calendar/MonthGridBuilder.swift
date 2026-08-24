@@ -24,4 +24,19 @@ struct MonthGridBuilder {
             )
         }
     }
+
+    func week(containing selectedDay: LocalDay, displayedMonth: LocalDay) -> [CalendarCell] {
+        let selectedDate = selectedDay.startDate(in: calendar)
+        let weekdayOffset = (calendar.component(.weekday, from: selectedDate) - calendar.firstWeekday + 7) % 7
+        let weekStart = calendar.date(byAdding: .day, value: -weekdayOffset, to: selectedDate)!
+
+        return (0..<7).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: weekStart)!
+            let day = LocalDay(date: date, calendar: calendar)
+            return CalendarCell(
+                day: day,
+                belongsToDisplayedMonth: day.month == displayedMonth.month && day.year == displayedMonth.year
+            )
+        }
+    }
 }
