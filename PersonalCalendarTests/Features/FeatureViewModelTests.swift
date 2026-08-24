@@ -672,6 +672,10 @@ final class FeatureViewModelTests: XCTestCase {
         repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: routine.id, draft: failed))
         XCTAssertEqual(subject.failedDraft(for: .update(routine.id)), failed)
         XCTAssertNil(subject.failedDraft(for: .create))
+        XCTAssertEqual(subject.failedDraft(for: .update(routine.id))?.weekdays, [2, 3])
+        XCTAssertEqual(subject.failedDraft(for: .update(routine.id))?.window, .evening)
+        XCTAssertEqual(subject.failedDraft(for: .update(routine.id))?.reminderHour, 23)
+        XCTAssertEqual(subject.failedDraft(for: .update(routine.id))?.reminderMinute, 59)
     }
 
     func testRoutineDeleteRecoverySurvivesUnrelatedSuccessfulPauseAndMissingTargetClearsWithoutWrite() {

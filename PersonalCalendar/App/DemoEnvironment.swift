@@ -167,19 +167,23 @@ final class DemoRoutineRepository: RoutineRepository {
     ]
     private var completed: [UUID: Set<LocalDay>] = [:]
     private var shouldFailNextDelete: Bool
-    init(failFirstDelete: Bool = false) { shouldFailNextDelete = failFirstDelete }
+    private var shouldFailNextCreate: Bool
+    private var shouldFailNextUpdate: Bool
+    init(failFirstDelete: Bool = false, failFirstCreate: Bool = false, failFirstUpdate: Bool = false) { shouldFailNextDelete = failFirstDelete; shouldFailNextCreate = failFirstCreate; shouldFailNextUpdate = failFirstUpdate }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
         includeArchived ? values : values.filter { !$0.isArchived }
     }
 
     func create(_ draft: RoutineDraft) throws -> UUID {
+        if shouldFailNextCreate { shouldFailNextCreate = false; throw DemoCreateError.failed }
         let id = UUID()
         values.append(.init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: false, isArchived: false))
         return id
     }
 
     func update(id: UUID, draft: RoutineDraft) throws {
+        if shouldFailNextUpdate { shouldFailNextUpdate = false; throw DemoCreateError.failed }
         guard let index = values.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         let old = values[index]
         values[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived)

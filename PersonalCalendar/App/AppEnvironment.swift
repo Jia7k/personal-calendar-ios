@@ -45,7 +45,7 @@ struct AppEnvironment {
         return .init(
             calendar: calendar,
             reminders: reminders,
-            routines: DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once")),
+            routines: DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once")),
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(),
