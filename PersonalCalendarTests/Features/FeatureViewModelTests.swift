@@ -365,6 +365,33 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(subject.today.map(\.id), ["new"]); XCTAssertNil(subject.errorMessage)
     }
 
+    func testOlderSuspendedTaskLoadFailureCannotSetErrorAfterNewerSuccess() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "old", title: "Old", due: now, hasTime: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        service.suspendNextFetch = true; let older = Task { await subject.load() }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        service.reminders = [reminder(id: "fresh", title: "Fresh", due: now, hasTime: true)]; await subject.load(); service.fetchError = TestError.failed; service.resumeSuspendedFetch(); await older.value
+        XCTAssertEqual(subject.today.map(\.id), ["fresh"]); XCTAssertNil(subject.errorMessage)
+    }
+
+    func testSuspendedTaskCreatePreventsSecondCreateAndShowsSaving() async {
+        let service = FakeRemindersService(access: .granted, descriptors: [.init(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
+        let draft = ReminderDraft(title: "One", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: "list")
+        service.suspendNextFetch = true; let first = Task { await subject.create(draft) }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        XCTAssertTrue(subject.isSaving); let second = await subject.create(draft); XCTAssertFalse(second); XCTAssertEqual(service.createdDrafts.count, 1)
+        service.resumeSuspendedFetch(); let firstResult = await first.value; XCTAssertTrue(firstResult)
+    }
+
+    func testSuspendedTaskCompletionPreventsDuplicateMutation() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let item = reminder(id: "same", title: "Same", due: now, hasTime: true)
+        let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        await subject.load(); service.suspendNextFetch = true; let first = Task { await subject.setCompleted(id: "same", completed: true) }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        XCTAssertTrue(subject.mutatingIDs.contains("same")); await subject.setCompleted(id: "same", completed: true); XCTAssertEqual(service.completedCalls.count, 1)
+        service.resumeSuspendedFetch(); await first.value
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
