@@ -469,6 +469,15 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(parts.hour, 23); XCTAssertEqual(parts.minute, 59)
     }
 
+    func testRoutinePauseAndArchiveRetainExactStateAcrossRefreshFailure() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [calendar.component(.weekday, from: now)], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine]); try? repository.setCompleted(routineID: routine.id, day: day, completed: true); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.listError = TestError.failed
+        subject.setPaused(id: routine.id, paused: true); XCTAssertEqual(repository.pauseCalls, [.init(id: routine.id, value: true)]); XCTAssertTrue(subject.active[0].routine.isPaused); XCTAssertTrue(subject.active[0].isCompletedToday)
+        subject.setArchived(id: routine.id, archived: true); XCTAssertEqual(repository.archiveCalls, [.init(id: routine.id, value: true)]); XCTAssertTrue(subject.archived[0].routine.isArchived); XCTAssertTrue(subject.archived[0].isCompletedToday)
+        await subject.setCompleted(id: routine.id, completed: false); XCTAssertEqual(repository.completionCalls.last, .init(id: routine.id, day: day, completed: false))
+        repository.listError = nil; subject.reload(); XCTAssertNil(subject.errorMessage); XCTAssertEqual(repository.pauseCalls.count, 1); XCTAssertEqual(repository.archiveCalls.count, 1)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
