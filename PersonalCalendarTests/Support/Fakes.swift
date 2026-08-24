@@ -126,6 +126,7 @@ final class FakeRoutineRepository: RoutineRepository {
 
     func setCompleted(routineID: UUID, day: LocalDay, completed: Bool) throws {
         if let completionError { throw completionError }
+        guard routines.contains(where: { $0.id == routineID }) else { throw RoutineRepositoryError.routineNotFound }
         completionCalls.append(.init(id: routineID, day: day, completed: completed))
         if completed {
             completions[routineID, default: []].insert(day)

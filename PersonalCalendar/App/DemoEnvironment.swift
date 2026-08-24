@@ -201,6 +201,7 @@ final class DemoRoutineRepository: RoutineRepository {
     }
 
     func setCompleted(routineID: UUID, day: LocalDay, completed state: Bool) throws {
+        guard values.contains(where: { $0.id == routineID }) else { throw RoutineRepositoryError.routineNotFound }
         if state {
             completed[routineID, default: []].insert(day)
         } else {

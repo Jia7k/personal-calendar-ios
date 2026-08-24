@@ -475,6 +475,10 @@ final class FeatureViewModelTests: XCTestCase {
         let row = subject.active.first { $0.id == first.id }!; XCTAssertEqual(row.history.count, 14); XCTAssertEqual(row.history.last?.day, today); XCTAssertEqual(row.history.first?.day, LocalDay(date: calendar.date(byAdding: .day, value: -13, to: now)!, calendar: calendar)); XCTAssertTrue(row.isCompletedToday); XCTAssertEqual(row.streak, RoutineStreakCalculator().currentStreak(routine: first, completedDays: [today, yesterday], through: today, calendar: calendar))
     }
 
+    func testFakeRoutineCompletionRejectsMissingIdentityWithoutRecording() {
+        let repository = FakeRoutineRepository(); XCTAssertThrowsError(try repository.setCompleted(routineID: UUID(), day: .init(year: 2026, month: 8, day: 24), completed: true)); XCTAssertTrue(repository.completionCalls.isEmpty)
+    }
+
     func testRoutineCreateAndUpdateRetainConfirmedRowsWhenRefreshFails() {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let old = RoutineSnapshot(id: UUID(), title: "Old", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
         let repository = FakeRoutineRepository(routines: [old]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.listError = TestError.failed
