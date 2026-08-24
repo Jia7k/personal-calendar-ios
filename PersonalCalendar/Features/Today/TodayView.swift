@@ -15,7 +15,9 @@ struct TodayView: View {
             List {
                 if model.showsCalendarPermissionCard { permissionCard(title: "Calendar events are unavailable", restricted: model.calendarAccessState == .restricted) }
                 if model.showsRemindersPermissionCard { permissionCard(title: "Tasks are unavailable", restricted: model.remindersAccessState == .restricted) }
-                errorRow(model.calendarError); errorRow(model.remindersError); errorRow(model.routinesError)
+                errorRow(model.calendarError, source: "Calendar")
+                errorRow(model.remindersError, source: "Reminders")
+                errorRow(model.routinesError, source: "Routines")
                 section("All Day", items: model.agenda.allDay)
                 section("Schedule", items: model.agenda.scheduled)
                 section("Priority", items: model.agenda.priority)
@@ -31,11 +33,23 @@ struct TodayView: View {
     }
 
     @ViewBuilder private func section(_ title: LocalizedStringKey, items: [AgendaItem]) -> some View {
-        if !items.isEmpty { Section(title) { ForEach(items) { item in AgendaRow(item: item, isMutating: model.mutatingItemIDs.contains(item.id)) { state in
-            Task { if item.source == .task { await model.setTaskCompleted(item, completed: state) } else { await model.setRoutineCompleted(item, completed: state) } }
-        } } } }
+        if !items.isEmpty {
+            Section(title) {
+                ForEach(items) { item in
+                    AgendaRow(item: item, isMutating: model.mutatingItemIDs.contains(item.id)) { state in
+                        Task {
+                            if item.source == .task {
+                                await model.setTaskCompleted(item, completed: state)
+                            } else {
+                                await model.setRoutineCompleted(item, completed: state)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
-    @ViewBuilder private func errorRow(_ message: String?) -> some View {
+    @ViewBuilder private func errorRow(_ message: String?, source: String) -> some View {
         if let message {
             Section {
                 HStack {
@@ -44,13 +58,24 @@ struct TodayView: View {
                     Button("Retry") { Task { await model.load() }
                     }
                     .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                    .accessibilityLabel("Retry this source")
+                    .accessibilityLabel("Retry \(source)")
                 }
             }
         }
     }
     private func permissionCard(title: String, restricted: Bool) -> some View {
-            Section { VStack(alignment: .leading, spacing: 8) { Label(title, systemImage: "lock") ; Text(restricted ? "This access is controlled by your device or account." : "Allow access in System Settings to include this source.").font(.footnote).foregroundStyle(.secondary); if !restricted { Button("Open System Settings", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) } } }
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(title, systemImage: "lock")
+                Text(restricted ? "This access is controlled by your device or account." : "Allow access in System Settings to include this source.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if !restricted {
+                    Button("Open System Settings", action: openSettings)
+                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                }
+            }
+        }
     }
     @MainActor private static func defaultOpenSettings() { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
 }

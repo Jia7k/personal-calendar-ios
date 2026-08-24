@@ -104,6 +104,58 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertNotNil(subject.routinesError)
     }
 
+    func testDeselectedCachedSourceDoesNotReturnWhenRefreshFails() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let kept = CalendarEventSnapshot(id: "kept", title: "Kept", start: now, end: now.addingTimeInterval(60), isAllDay: false, calendarID: "kept", calendarTitle: "Kept", allowsModification: true, hasRecurrence: false)
+        let removed = CalendarEventSnapshot(id: "removed", title: "Removed", start: now, end: now.addingTimeInterval(60), isAllDay: false, calendarID: "removed", calendarTitle: "Removed", allowsModification: true, hasRecurrence: false)
+        let taskKept = ReminderSnapshot(id: "task-kept", title: "Task kept", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list-kept", listTitle: "Kept", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let taskRemoved = ReminderSnapshot(id: "task-removed", title: "Task removed", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list-removed", listTitle: "Removed", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let settings = AppSettingsStore(defaults: .ephemeral); settings.selectedCalendarIDs = ["kept", "removed"]; settings.selectedReminderListIDs = ["list-kept", "list-removed"]
+        let calendars = FakeCalendarService(access: .granted, events: [kept, removed]); let reminders = FakeRemindersService(access: .granted, reminders: [taskKept, taskRemoved])
+        let subject = TodayViewModel(calendar: calendars, reminders: reminders, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: settings, calendarProvider: { self.calendar }, now: { now })
+        await subject.load()
+        settings.selectedCalendarIDs = ["kept"]; settings.selectedReminderListIDs = ["list-kept"]; calendars.fetchError = TestError.failed; reminders.fetchError = TestError.failed
+        await subject.load()
+        XCTAssertEqual(Set(subject.agenda.scheduled.map(\.title)), ["Kept", "Task kept"])
+    }
+
+    func testCalendarFailureRetainsEventWhileReminderAndRoutineRefreshThenRecovers() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let event = CalendarEventSnapshot(id: "event", title: "Confirmed event", start: now, end: now.addingTimeInterval(60), isAllDay: false, calendarID: "cal", calendarTitle: "Cal", allowsModification: true, hasRecurrence: false)
+        let calendarService = FakeCalendarService(access: .granted, events: [event]); let reminders = FakeRemindersService(access: .granted, reminders: [])
+        let routines = FakeRoutineRepository(); let subject = TodayViewModel(calendar: calendarService, reminders: reminders, routines: routines, composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        await subject.load(); calendarService.fetchError = TestError.failed
+        reminders.reminders = [reminder(id: "fresh", title: "Fresh task", due: now, hasTime: true)]
+        routines.routines = [RoutineSnapshot(id: UUID(), title: "Fresh routine", weekdays: [calendar.component(.weekday, from: now)], window: .morning, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)]
+        await subject.load()
+        XCTAssertEqual(Set(subject.agenda.scheduled.map(\.title)), ["Confirmed event", "Fresh task", "Fresh routine"])
+        XCTAssertNotNil(subject.calendarError)
+        calendarService.fetchError = nil; calendarService.events = [CalendarEventSnapshot(id: "new", title: "New event", start: now, end: now.addingTimeInterval(60), isAllDay: false, calendarID: "cal", calendarTitle: "Cal", allowsModification: true, hasRecurrence: false)]
+        await subject.load(); XCTAssertNil(subject.calendarError); XCTAssertTrue(subject.agenda.scheduled.contains(where: { $0.title == "New event" }))
+    }
+
+    func testReminderFailureRetainsTaskWhileCalendarAndRoutineRefresh() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let reminders = FakeRemindersService(access: .granted, reminders: [reminder(id: "task", title: "Confirmed task", due: now, hasTime: true)])
+        let calendars = FakeCalendarService(access: .granted); let routines = FakeRoutineRepository()
+        let subject = TodayViewModel(calendar: calendars, reminders: reminders, routines: routines, composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        await subject.load(); reminders.fetchError = TestError.failed
+        calendars.events = [CalendarEventSnapshot(id: "fresh", title: "Fresh event", start: now, end: now.addingTimeInterval(60), isAllDay: false, calendarID: "cal", calendarTitle: "Cal", allowsModification: true, hasRecurrence: false)]
+        routines.routines = [RoutineSnapshot(id: UUID(), title: "Fresh routine", weekdays: [calendar.component(.weekday, from: now)], window: .morning, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)]
+        await subject.load()
+        XCTAssertEqual(Set(subject.agenda.scheduled.map(\.title)), ["Confirmed task", "Fresh event", "Fresh routine"])
+    }
+
+    func testTaskCompletionFailurePreservesAgendaAndDoesNotRecordSuccessfulCall() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw|id", title: "Task", due: now, hasTime: true)])
+        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        await subject.load(); service.completionError = TestError.failed
+        await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
+        XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Task"]); XCTAssertFalse(subject.agenda.scheduled[0].isCompleted)
+        XCTAssertTrue(service.completedCalls.isEmpty); XCTAssertNotNil(subject.remindersError)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

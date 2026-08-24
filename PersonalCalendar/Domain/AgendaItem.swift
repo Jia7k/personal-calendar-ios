@@ -50,8 +50,8 @@ extension AgendaItem {
             sortDate: reminder.dueHasTime ? reminder.dueDate : nil,
             priority: reminder.priority,
             isCompleted: reminder.isCompleted,
-            allowsModification: reminder.allowsModification
-            , origin: .reminder(id: reminder.id)
+            allowsModification: reminder.allowsModification,
+            origin: .reminder(id: reminder.id)
         )
     }
 
@@ -64,8 +64,8 @@ extension AgendaItem {
             sortDate: event.isAllDay ? nil : event.start,
             priority: 0,
             isCompleted: false,
-            allowsModification: event.allowsModification
-            , origin: .event(id: event.id)
+            allowsModification: event.allowsModification,
+            origin: .event(id: event.id)
         )
     }
 
@@ -82,8 +82,8 @@ extension AgendaItem {
             sortDate: sortDate,
             priority: 0,
             isCompleted: completed,
-            allowsModification: true
-            , origin: .routine(id: routine.id, day: day)
+            allowsModification: true,
+            origin: .routine(id: routine.id, day: day)
         )
     }
 
