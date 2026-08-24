@@ -186,11 +186,11 @@ final class DemoRoutineRepository: RoutineRepository {
     }
 
     func setPaused(id: UUID, paused: Bool) throws {
-        mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: paused, isArchived: $0.isArchived) }
+        try mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: paused, isArchived: $0.isArchived) }
     }
 
     func setArchived(id: UUID, archived: Bool) throws {
-        mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: $0.isPaused, isArchived: archived) }
+        try mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: $0.isPaused, isArchived: archived) }
     }
 
     func delete(id: UUID) throws {
@@ -217,10 +217,9 @@ final class DemoRoutineRepository: RoutineRepository {
         completed[routineID, default: []]
     }
 
-    private func mutate(_ id: UUID, _ transform: (RoutineSnapshot) -> RoutineSnapshot) {
-        if let index = values.firstIndex(where: { $0.id == id }) {
-            values[index] = transform(values[index])
-        }
+    private func mutate(_ id: UUID, _ transform: (RoutineSnapshot) -> RoutineSnapshot) throws {
+        guard let index = values.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
+        values[index] = transform(values[index])
     }
 }
 
