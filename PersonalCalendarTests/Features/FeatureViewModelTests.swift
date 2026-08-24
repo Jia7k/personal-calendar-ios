@@ -214,7 +214,7 @@ final class FeatureViewModelTests: XCTestCase {
         let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "opaque|raw", title: "Task", due: now, hasTime: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
         await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
-        service.reminders = []; await subject.load(); service.fetchErrorAfterCompletion = TestError.failed
+        service.reminders = []; await subject.load(); service.allowMissingCompletion = true; service.fetchErrorAfterCompletion = TestError.failed
         await subject.undoLastTaskCompletion()
         XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Task"])
         XCTAssertNil(subject.latestTaskUndo); XCTAssertEqual(service.completedCalls.last, .init(id: "opaque|raw", completed: false)); XCTAssertNotNil(subject.remindersError)
@@ -353,6 +353,16 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertTrue(subject.active[0].routine.isPaused)
         subject.setArchived(id: routine.id, archived: true)
         XCTAssertTrue(subject.archived[0].routine.isArchived)
+    }
+
+    func testOlderSuspendedTaskLoadCannotOverwriteNewerSuccessfulLoad() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let first = reminder(id: "first", title: "First", due: now, hasTime: true)
+        let service = FakeRemindersService(access: .granted, reminders: [first]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        service.suspendNextFetch = true; let older = Task { await subject.load() }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        service.reminders = [self.reminder(id: "new", title: "New", due: now, hasTime: true)]; await subject.load(); service.resumeSuspendedFetch(); await older.value
+        XCTAssertEqual(subject.today.map(\.id), ["new"]); XCTAssertNil(subject.errorMessage)
     }
 
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {

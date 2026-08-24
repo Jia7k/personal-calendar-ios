@@ -148,6 +148,8 @@ final class FakeRemindersService: RemindersServicing {
     var fetchErrorAfterCreate: Error?
     private(set) var fetchListIDs: [Set<String>] = []
     var suspendFetchAfterUndo = false
+    var suspendNextFetch = false
+    var allowMissingCompletion = false
     private var fetchContinuation: CheckedContinuation<Void, Never>?
     private(set) var isFetchSuspended = false
 
@@ -174,6 +176,12 @@ final class FakeRemindersService: RemindersServicing {
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
         fetchListIDs.append(listIDs)
+        if suspendNextFetch {
+            isFetchSuspended = true
+            suspendNextFetch = false
+            await withCheckedContinuation { continuation in fetchContinuation = continuation }
+            isFetchSuspended = false
+        }
         if suspendFetchAfterUndo, completedCalls.last?.completed == false {
             isFetchSuspended = true
             suspendFetchAfterUndo = false
@@ -198,6 +206,7 @@ final class FakeRemindersService: RemindersServicing {
 
     func setCompleted(id: String, completed: Bool) throws {
         if let completionError { throw completionError }
+        guard allowMissingCompletion || reminders.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         completedCalls.append(.init(id: id, completed: completed))
         if let index = reminders.firstIndex(where: { $0.id == id }) {
             let old = reminders[index]
