@@ -98,6 +98,7 @@ final class FakeRoutineRepository: RoutineRepository {
     init(routines: [RoutineSnapshot] = []) {
         self.routines = routines
     }
+    func seedCompletedDays(_ days: Set<LocalDay>, routineID: UUID) { completions[routineID] = days }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
         listCallCount += 1

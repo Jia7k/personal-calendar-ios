@@ -475,6 +475,13 @@ final class FeatureViewModelTests: XCTestCase {
         let row = subject.active.first { $0.id == first.id }!; XCTAssertEqual(row.history.count, 14); XCTAssertEqual(row.history.last?.day, today); XCTAssertEqual(row.history.first?.day, LocalDay(date: calendar.date(byAdding: .day, value: -13, to: now)!, calendar: calendar)); XCTAssertTrue(row.isCompletedToday); XCTAssertEqual(row.streak, RoutineStreakCalculator().currentStreak(routine: first, completedDays: [today, yesterday], through: today, calendar: calendar))
     }
 
+    func testRoutineReloadBuildsExactFourteenDayNonDailyHistory() {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [2, 3], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine]); let completed: Set<LocalDay> = [.init(year: 2026, month: 8, day: 17), .init(year: 2026, month: 8, day: 18), .init(year: 2026, month: 8, day: 24)]; repository.seedCompletedDays(completed, routineID: routine.id); repository.listCallCount = 0; repository.completedDaysCallCounts = [:]
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); let expected: [RoutineHistoryDay] = (11...24).map { day in .init(day: .init(year: 2026, month: 8, day: day), isScheduled: [17, 18, 24].contains(day), isCompleted: [17, 18, 24].contains(day)) }
+        XCTAssertEqual(subject.active[0].history, expected); XCTAssertTrue(subject.active[0].isCompletedToday); XCTAssertEqual(subject.active[0].streak, 3); XCTAssertEqual(repository.listCallCount, 1); XCTAssertEqual(repository.completedDaysCallCounts[routine.id], 1)
+    }
+
     func testFakeRoutineCompletionRejectsMissingIdentityWithoutRecording() {
         let repository = FakeRoutineRepository(); XCTAssertThrowsError(try repository.setCompleted(routineID: UUID(), day: .init(year: 2026, month: 8, day: 24), completed: true)); XCTAssertTrue(repository.completionCalls.isEmpty)
     }
