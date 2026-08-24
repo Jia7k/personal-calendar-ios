@@ -813,6 +813,29 @@ final class FeatureViewModelTests: XCTestCase {
         service.completionError = nil; await subject.setCompleted(id: "b", completed: true); XCTAssertEqual(subject.failedMutationOperation, .init(id: "a", completed: true)); await subject.retryFailedMutation(); XCTAssertNil(subject.failedMutationOperation); XCTAssertEqual(service.completedCalls.last?.id, "a")
     }
 
+    func testRoutineVanishedFailedUpdateClearsEditorRecoveryOnSuccessfulReload() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload(); repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: a.id, draft: .init(title: "Draft", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil)))
+        repository.routines = []; repository.updateError = nil; subject.reload(); XCTAssertNil(subject.failedEditorOperation); XCTAssertNil(subject.draftOnFailure); XCTAssertNil(subject.editorErrorMessage)
+    }
+
+    func testTaskDeselectionWithFetchFailureClearsRecoveryWithoutRetryWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list-a", listTitle: "A", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let settings = AppSettingsStore(defaults: .ephemeral); settings.selectedReminderListIDs = ["list-a"]
+        let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: settings, calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true)
+        service.completionError = nil; settings.selectedReminderListIDs = ["list-b"]; service.fetchError = TestError.failed; await subject.load(); let calls = service.completedCalls.count
+        XCTAssertTrue(subject.today.isEmpty); XCTAssertNil(subject.failedMutationOperation); XCTAssertNil(subject.mutationErrorMessage); await subject.retryFailedMutation(); XCTAssertEqual(service.completedCalls.count, calls)
+    }
+
+    func testTaskAuthoritativeReadOnlyRefreshClearsRecoveryWithoutRetryWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true)
+        service.completionError = nil; service.reminders = [.init(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: false, hasRecurrence: false)]; await subject.load(); let calls = service.completedCalls.count; XCTAssertNil(subject.failedMutationOperation); XCTAssertNil(subject.mutationErrorMessage); await subject.retryFailedMutation(); XCTAssertEqual(service.completedCalls.count, calls)
+    }
+
+    func testTaskUnchangedSelectionFetchFailurePreservesVisibleRecoveryWithoutWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true); let expected = subject.failedMutationOperation; let error = subject.mutationErrorMessage
+        service.completionError = nil; service.fetchError = TestError.failed; await subject.load(); XCTAssertTrue(subject.upcoming.contains { $0.id == "a" }); XCTAssertEqual(subject.failedMutationOperation, expected); XCTAssertEqual(subject.mutationErrorMessage, error); XCTAssertTrue(service.completedCalls.isEmpty)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

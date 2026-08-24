@@ -47,17 +47,17 @@ final class TasksViewModel {
 
     func load() async {
         loadGeneration += 1; let generation = loadGeneration
-        guard service.accessState == .granted else { confirmed = []; publish(); reconcileMutationRecovery(); refreshErrorMessage = nil; isLoading = false; return }
+        guard service.accessState == .granted else { confirmed = []; publish(); reconcileMutationRecovery(authoritativeFetch: true); refreshErrorMessage = nil; isLoading = false; return }
         isLoading = true; defer { if generation == loadGeneration { isLoading = false } }
         do {
             let fetched = try await service.fetchReminders(listIDs: settings.selectedReminderListIDs)
             guard generation == loadGeneration else { return }
             confirmed = fetched
-            refreshErrorMessage = nil; publish(); reconcileMutationRecovery()
+            refreshErrorMessage = nil; publish(); reconcileMutationRecovery(authoritativeFetch: true)
         } catch {
             guard generation == loadGeneration else { return }
             refreshErrorMessage = "Your tasks could not be refreshed. Pull to try again."
-            publish()
+            publish(); reconcileMutationRecovery(authoritativeFetch: false)
         }
     }
 
@@ -79,7 +79,8 @@ final class TasksViewModel {
     }
 
     func setCompleted(id: String, completed state: Bool) async {
-        guard let item = confirmed.first(where: { $0.id == id }), item.allowsModification, !mutatingIDs.contains(id) else { return }
+        reconcileMutationRecovery(authoritativeFetch: false)
+        guard let item = confirmed.first(where: { $0.id == id }), item.allowsModification, isSelected(item), !mutatingIDs.contains(id) else { clearMutationRecovery(id: id); return }
         mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         do {
             try service.setCompleted(id: id, completed: state)
@@ -96,7 +97,8 @@ final class TasksViewModel {
     }
     func retryFailedMutation() async {
         guard let operation = failedMutationOperation else { return }
-        guard let item = confirmed.first(where: { $0.id == operation.id }), item.isCompleted != operation.completed else { failedMutationOperation = nil; mutationErrorMessage = nil; return }
+        reconcileMutationRecovery(authoritativeFetch: false)
+        guard let item = confirmed.first(where: { $0.id == operation.id }), item.allowsModification, isSelected(item), item.isCompleted != operation.completed else { clearMutationRecovery(id: operation.id); return }
         await setCompleted(id: operation.id, completed: operation.completed)
     }
 
@@ -109,11 +111,14 @@ final class TasksViewModel {
         upcoming = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? true }.sorted(by: sort)
         completed = visible.filter(\.isCompleted).sorted(by: sort)
     }
-    private func reconcileMutationRecovery() {
+    private func reconcileMutationRecovery(authoritativeFetch: Bool) {
         guard let operation = failedMutationOperation else { return }
         let selected = settings.selectedReminderListIDs
-        guard let item = confirmed.first(where: { $0.id == operation.id }), (selected.isEmpty || selected.contains(item.listID)), item.isCompleted != operation.completed else { failedMutationOperation = nil; mutationErrorMessage = nil; return }
+        guard service.accessState == .granted, let item = confirmed.first(where: { $0.id == operation.id }), (selected.isEmpty || selected.contains(item.listID)), item.allowsModification else { clearMutationRecovery(id: operation.id); return }
+        if authoritativeFetch && item.isCompleted == operation.completed { clearMutationRecovery(id: operation.id) }
     }
+    private func isSelected(_ item: ReminderSnapshot) -> Bool { settings.selectedReminderListIDs.isEmpty || settings.selectedReminderListIDs.contains(item.listID) }
+    private func clearMutationRecovery(id: String) { guard failedMutationOperation?.id == id else { return }; failedMutationOperation = nil; mutationErrorMessage = nil }
 
     private func sort(_ lhs: ReminderSnapshot, _ rhs: ReminderSnapshot) -> Bool {
         switch (lhs.dueDate, rhs.dueDate) { case let (a?, b?): if a != b { return a < b }; case (_?, nil): return true; case (nil, _?): return false; case (nil, nil): break }
