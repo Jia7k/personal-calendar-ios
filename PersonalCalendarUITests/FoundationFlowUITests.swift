@@ -84,4 +84,19 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Buy milk"].exists)
         XCTAssertTrue(app.staticTexts["Read"].exists)
     }
+
+    func testTodayTaskCompletionCanBeUndone() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        app.tabBars.buttons["Today"].tap()
+        let complete = app.buttons["Mark Buy milk complete"]
+        XCTAssertTrue(complete.waitForExistence(timeout: 3))
+        complete.tap()
+        XCTAssertTrue(app.buttons["Undo completion for Buy milk"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Buy milk"].exists)
+        app.buttons["Undo completion for Buy milk"].tap()
+        XCTAssertTrue(app.staticTexts["Buy milk"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Mark Buy milk complete"].exists)
+    }
 }

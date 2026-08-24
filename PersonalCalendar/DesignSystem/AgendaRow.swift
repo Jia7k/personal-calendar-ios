@@ -14,6 +14,8 @@ struct AgendaRow: View {
                 Text(item.title).font(.body).strikethrough(item.isCompleted)
                 Text(timeDescription).font(.caption).foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(Self.sourceDescription(item.source)), \(item.title), \(timeDescription)")
             Spacer(minLength: 8)
             if item.source == .task || item.source == .routine {
                 if item.allowsModification {
@@ -34,6 +36,13 @@ struct AgendaRow: View {
     }
 
     private var sourceSymbol: String { switch item.source { case .event: "calendar"; case .task: "checkmark.circle"; case .routine: "repeat" } }
+    static func sourceDescription(_ source: AgendaSource) -> String {
+        switch source {
+        case .event: String(localized: "Event")
+        case .task: String(localized: "Task")
+        case .routine: String(localized: "Routine")
+        }
+    }
     private var sourceColor: Color { switch item.source { case .event: CalendarTheme.accent; case .task: .orange; case .routine: .purple } }
     private var timeDescription: String {
         switch item.placement {

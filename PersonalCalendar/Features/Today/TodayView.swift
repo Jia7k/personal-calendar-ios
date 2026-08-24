@@ -18,6 +18,18 @@ struct TodayView: View {
                 errorRow(model.calendarError, source: "Calendar")
                 errorRow(model.remindersError, source: "Reminders")
                 errorRow(model.routinesError, source: "Routines")
+                if let undo = model.latestTaskUndo {
+                    Section {
+                        HStack {
+                            Text("Marked \(undo.title) complete")
+                            Spacer(minLength: 8)
+                            Button("Undo") { Task { await model.undoLastTaskCompletion() } }
+                                .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                                .disabled(undo.isPending)
+                                .accessibilityLabel("Undo completion for \(undo.title)")
+                        }
+                    }
+                }
                 section("All Day", items: model.agenda.allDay)
                 section("Schedule", items: model.agenda.scheduled)
                 section("Priority", items: model.agenda.priority)

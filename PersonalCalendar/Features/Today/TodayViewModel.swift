@@ -1,6 +1,13 @@
 import Foundation
 import Observation
 
+struct TaskUndoState: Equatable {
+    let title: String
+    let rawID: String
+    let snapshot: ReminderSnapshot
+    var isPending = false
+}
+
 @MainActor
 @Observable
 final class TodayViewModel {
@@ -13,6 +20,7 @@ final class TodayViewModel {
     private(set) var mutatingItemIDs: Set<String> = []
     private(set) var showsCalendarPermissionCard = false
     private(set) var showsRemindersPermissionCard = false
+    private(set) var latestTaskUndo: TaskUndoState?
 
     private var cachedEvents: [CalendarEventSnapshot] = []
     private var cachedReminders: [ReminderSnapshot] = []
@@ -107,6 +115,9 @@ final class TodayViewModel {
                 guard value.id == id else { return value }
                 return ReminderSnapshot(id: value.id, title: value.title, notes: value.notes, dueDate: value.dueDate, dueHasTime: value.dueHasTime, priority: value.priority, listID: value.listID, listTitle: value.listTitle, isCompleted: completed, allowsModification: value.allowsModification, hasRecurrence: value.hasRecurrence)
             }
+            if completed, let snapshot = cachedReminders.first(where: { $0.id == id }) {
+                latestTaskUndo = TaskUndoState(title: snapshot.title, rawID: id, snapshot: snapshot)
+            }
             compose(day: localDay, calendar: calendarProvider())
             do {
                 cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
@@ -116,6 +127,35 @@ final class TodayViewModel {
             }
             compose(day: localDay, calendar: calendarProvider())
         } catch {
+            remindersError = "This task could not be updated. Pull to try again."
+        }
+    }
+
+    func undoLastTaskCompletion() async {
+        guard var undo = latestTaskUndo else { return }
+        undo.isPending = true
+        latestTaskUndo = undo
+        do {
+            try reminders.setCompleted(id: undo.rawID, completed: false)
+            let restored = undo.snapshot
+            let restoredSnapshot = ReminderSnapshot(id: restored.id, title: restored.title, notes: restored.notes, dueDate: restored.dueDate, dueHasTime: restored.dueHasTime, priority: restored.priority, listID: restored.listID, listTitle: restored.listTitle, isCompleted: false, allowsModification: restored.allowsModification, hasRecurrence: restored.hasRecurrence)
+            cachedReminders = cachedReminders.map { value in
+                guard value.id == undo.rawID else { return value }
+                return restoredSnapshot
+            }
+            if !cachedReminders.contains(where: { $0.id == undo.rawID }) { cachedReminders.append(restoredSnapshot) }
+            compose(day: localDay, calendar: calendarProvider())
+            latestTaskUndo = nil
+            do {
+                cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
+                remindersError = nil
+            } catch {
+                remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
+            }
+            compose(day: localDay, calendar: calendarProvider())
+        } catch {
+            undo.isPending = false
+            latestTaskUndo = undo
             remindersError = "This task could not be updated. Pull to try again."
         }
     }
