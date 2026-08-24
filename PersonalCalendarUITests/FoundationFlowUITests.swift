@@ -137,6 +137,24 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["Retry"].tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
     }
 
+    func testRoutineCreateFailureCancelReopenAndEditedRetry() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-routine-create-fails-once"]; app.launch(); app.tabBars.buttons["Routines"].tap()
+        app.buttons["New Routine"].tap(); let title = app.textFields["Routine title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("Draft Routine"); app.keyboards.buttons["Return"].tap(); app.buttons["Daily"].tap()
+        XCTAssertTrue(app.buttons["routine-save"].isHittable); app.buttons["routine-save"].tap(); XCTAssertTrue(findRoutineRetry(in: app).exists); XCTAssertTrue(app.staticTexts["Your routine was not saved. Edit it and try again."].exists)
+        app.buttons["Cancel"].tap(); app.buttons["New Routine"].tap(); let reopenedTitle = app.textFields["Routine title"]; XCTAssertEqual(reopenedTitle.value as? String, "Draft Routine"); XCTAssertTrue(app.buttons["Clear daily"].exists)
+        reopenedTitle.tap(); for _ in 0..<13 { reopenedTitle.typeText(XCUIKeyboardKey.delete.rawValue) }; reopenedTitle.typeText("Edited Routine")
+        findRoutineRetry(in: app).tap(); XCTAssertTrue(app.staticTexts["Edited Routine"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["Draft Routine"].exists)
+    }
+
+    func testRoutineUpdateFailureCancelReopenAndEditedRetry() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-routine-update-fails-once"]; app.launch(); app.tabBars.buttons["Routines"].tap()
+        tapRoutineAction("edit", in: app); let title = app.textFields["Routine title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); for _ in 0..<4 { title.typeText(XCUIKeyboardKey.delete.rawValue) }; title.typeText("Draft Read"); app.keyboards.buttons["Return"].tap()
+        XCTAssertTrue(app.buttons["routine-save"].isHittable); app.buttons["routine-save"].tap(); XCTAssertTrue(findRoutineRetry(in: app).exists); XCTAssertTrue(app.staticTexts["Your routine was not saved. Edit it and try again."].exists)
+        app.buttons["Cancel"].tap(); tapRoutineAction("edit", in: app); let reopenedTitle = app.textFields["Routine title"]; XCTAssertEqual(reopenedTitle.value as? String, "Draft Read")
+        reopenedTitle.tap(); for _ in 0..<10 { reopenedTitle.typeText(XCUIKeyboardKey.delete.rawValue) }; reopenedTitle.typeText("Edited Read"); app.keyboards.buttons["Return"].tap()
+        findRoutineRetry(in: app).tap(); XCTAssertTrue(app.staticTexts["Edited Read"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["Read"].exists)
+    }
+
     func testRoutineDeleteCancelPreservesThenConfirmRemoves() {
         let app = XCUIApplication(); app.launchArguments = ["-ui-testing"]; app.launch()
         app.tabBars.buttons["Routines"].tap()
@@ -177,4 +195,5 @@ final class FoundationFlowUITests: XCTestCase {
         XCTFail("Routine \(action) action was not hittable", file: file, line: line)
     }
     private func confirmationDelete(in app: XCUIApplication) -> XCUIElement { app.buttons["Confirm Delete"] }
+    private func findRoutineRetry(in app: XCUIApplication) -> XCUIElement { for _ in 0..<5 { let button = app.buttons["routine-save-retry"]; if button.exists && button.isHittable { return button }; app.swipeUp() }; return app.buttons["routine-save-retry"] }
 }
