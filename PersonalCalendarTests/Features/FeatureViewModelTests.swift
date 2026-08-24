@@ -568,6 +568,13 @@ final class FeatureViewModelTests: XCTestCase {
         subject.reload(); XCTAssertEqual(repository.deleteCalls.count, 0); repository.deleteError = nil; XCTAssertTrue(subject.delete(id: routine.id)); XCTAssertEqual(repository.deleteCalls, [routine.id])
     }
 
+    func testRoutineStaleRepresentedDayCannotWriteUntilReload() async {
+        var now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day1 = LocalDay(date: now, calendar: calendar); let weekday1 = calendar.component(.weekday, from: now)
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [weekday1, weekday1 == 7 ? 1 : weekday1 + 1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); try? repository.setCompleted(routineID: routine.id, day: day1, completed: true); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); XCTAssertEqual(subject.active[0].representedDay, day1)
+        now = calendar.date(byAdding: .day, value: 1, to: now)!; let calls = repository.completionCalls.count; await subject.setCompleted(id: routine.id, completed: false); XCTAssertEqual(repository.completionCalls.count, calls); XCTAssertEqual(subject.active[0].representedDay, day1); XCTAssertNotNil(subject.refreshErrorMessage)
+        subject.reload(); let day2 = LocalDay(date: now, calendar: calendar); XCTAssertEqual(subject.active[0].representedDay, day2); XCTAssertFalse(subject.active[0].isCompletedToday); await subject.setCompleted(id: routine.id, completed: true); XCTAssertEqual(repository.completionCalls.last, .init(id: routine.id, day: day2, completed: true)); XCTAssertEqual(subject.active[0].representedDay, day2)
+    }
+
     func testRoutineEditorErrorSurvivesSuccessfulReloadIndependently() {
         let repository = FakeRoutineRepository(); let subject = RoutinesViewModel(repository: repository, calendar: calendar); repository.createError = TestError.failed
         XCTAssertFalse(subject.create(.init(title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); let editor = subject.editorErrorMessage; subject.reload()
