@@ -478,6 +478,14 @@ final class FeatureViewModelTests: XCTestCase {
         repository.listError = nil; subject.reload(); XCTAssertNil(subject.errorMessage); XCTAssertEqual(repository.pauseCalls.count, 1); XCTAssertEqual(repository.archiveCalls.count, 1)
     }
 
+    func testRoutinePauseFailureCapturesExactActionAndRetriesOnce() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar)
+        subject.reload(); repository.pauseError = TestError.failed; subject.setPaused(id: routine.id, paused: true)
+        XCTAssertFalse(subject.active[0].routine.isPaused); XCTAssertEqual(subject.failedActionOperation, .pause(routine.id, true)); XCTAssertTrue(repository.pauseCalls.isEmpty)
+        repository.pauseError = nil; subject.retryFailedAction(); XCTAssertEqual(repository.pauseCalls, [.init(id: routine.id, value: true)]); XCTAssertTrue(subject.active[0].routine.isPaused); XCTAssertNil(subject.failedActionOperation)
+        subject.retryFailedAction(); XCTAssertEqual(repository.pauseCalls.count, 1)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

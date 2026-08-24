@@ -61,6 +61,15 @@ final class RoutinesViewModel {
     func setPaused(id: UUID, paused: Bool) { mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
     func setArchived(id: UUID, archived: Bool) { mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
     func delete(id: UUID) { guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true) } catch { errorMessage = "Your routine was not deleted. Try again." } }
+    func retryFailedAction() {
+        guard let operation = failedActionOperation else { return }
+        failedActionOperation = nil
+        switch operation {
+        case let .pause(id, value): setPaused(id: id, paused: value)
+        case let .archive(id, value): setArchived(id: id, archived: value)
+        case .completion, .delete: failedActionOperation = operation
+        }
+    }
 
     private func mutateDraft(_ draft: RoutineDraft, action: (RoutineDraft) throws -> Void) -> Bool {
         guard valid(draft) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }

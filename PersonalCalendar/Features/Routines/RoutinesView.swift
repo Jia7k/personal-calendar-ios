@@ -7,7 +7,7 @@ struct RoutinesView: View {
     @State private var deleteTarget: RoutineRowState?
     init(environment: AppEnvironment) { _model = State(initialValue: RoutinesViewModel(repository: environment.routines)) }
     var body: some View { NavigationStack { List {
-        if let error = model.errorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry") { model.reload() }.frame(minHeight: 44) } }
+        if let error = model.errorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(model.failedActionOperation == nil ? "Retry Refresh" : "Retry") { if model.failedActionOperation == nil { model.reload() } else { model.retryFailedAction() } }.frame(minWidth: 44, minHeight: 44) } }
         Section("Active") { if model.active.isEmpty { ContentUnavailableView("No routines", systemImage: "repeat", description: Text("Create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
     }.navigationTitle("Routines").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Routine", systemImage: "plus") { showingNew = true }.frame(minWidth: 44, minHeight: 44) } }
