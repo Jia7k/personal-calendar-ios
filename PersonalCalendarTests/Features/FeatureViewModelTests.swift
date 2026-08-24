@@ -486,6 +486,15 @@ final class FeatureViewModelTests: XCTestCase {
         subject.retryFailedAction(); XCTAssertEqual(repository.pauseCalls.count, 1)
     }
 
+    func testRoutineCompletionFailureRetryUsesOriginallyCapturedDay() async {
+        var now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let original = LocalDay(date: now, calendar: calendar); let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [calendar.component(.weekday, from: now)], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.completionError = TestError.failed
+        await subject.setCompleted(id: routine.id, completed: true); XCTAssertEqual(subject.failedActionOperation, .completion(routine.id, original, true)); XCTAssertFalse(subject.active[0].isCompletedToday)
+        now = calendar.date(byAdding: .day, value: 1, to: now)!; repository.completionError = nil; subject.retryFailedAction()
+        XCTAssertEqual(repository.completionCalls.last, .init(id: routine.id, day: original, completed: true)); XCTAssertNil(subject.failedActionOperation); XCTAssertTrue(subject.active[0].history.contains { $0.day == original && $0.isCompleted })
+        let calls = repository.completionCalls.count; subject.retryFailedAction(); XCTAssertEqual(repository.completionCalls.count, calls)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
