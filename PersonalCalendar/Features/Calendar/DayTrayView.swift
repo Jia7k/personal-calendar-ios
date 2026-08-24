@@ -8,6 +8,7 @@ struct DayTrayView: View {
     let errorMessage: String?
     let deniedSourceMessages: [String]
     let calendar: Calendar
+    let openSettings: @MainActor () -> Void
     let onSetState: (TrayState) -> Void
     let onRetry: () -> Void
 
@@ -23,7 +24,10 @@ struct DayTrayView: View {
             if isLoading { ProgressView("Loading your day") }
             if let errorMessage { Label(errorMessage, systemImage: "exclamationmark.triangle"); Button("Retry", action: onRetry).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             ForEach(deniedSourceMessages, id: \.self) { message in
-                Label(message, systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary).padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(message, systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary)
+                    Button("Settings", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                }.padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             }
             if state == .resting { restingContent } else { expandedContent }
         }
