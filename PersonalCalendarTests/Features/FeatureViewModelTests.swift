@@ -423,6 +423,27 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(repository.completionCalls.last, .init(id: first.id, day: day, completed: false)); XCTAssertFalse(subject.active.first(where: { $0.id == first.id })!.isCompletedToday)
     }
 
+    func testRoutineValidationRejectsInvalidDraftsAndNormalizesValidDrafts() {
+        let repository = FakeRoutineRepository(); let subject = RoutinesViewModel(repository: repository, calendar: calendar)
+        let invalid = [
+            RoutineDraft(title: " ", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil), RoutineDraft(title: "Empty", weekdays: [], window: .anytime, reminderHour: nil, reminderMinute: nil), RoutineDraft(title: "Day", weekdays: [0], window: .anytime, reminderHour: nil, reminderMinute: nil), RoutineDraft(title: "Day", weekdays: [8], window: .anytime, reminderHour: nil, reminderMinute: nil), RoutineDraft(title: "Hour", weekdays: [1], window: .anytime, reminderHour: 9, reminderMinute: nil), RoutineDraft(title: "Minute", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: 9), RoutineDraft(title: "Hour", weekdays: [1], window: .anytime, reminderHour: 24, reminderMinute: 0), RoutineDraft(title: "Minute", weekdays: [1], window: .anytime, reminderHour: 0, reminderMinute: 60)
+        ]
+        for draft in invalid { XCTAssertFalse(subject.create(draft)) }; XCTAssertTrue(repository.createdDrafts.isEmpty)
+        XCTAssertTrue(subject.create(.init(title: "  Read  ", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); XCTAssertTrue(subject.create(.init(title: "Clock", weekdays: [1], window: .anytime, reminderHour: 23, reminderMinute: 59)))
+        XCTAssertEqual(repository.createdDrafts.map(\.title), ["Read", "Clock"]); XCTAssertEqual(repository.createdDrafts.last?.reminderHour, 23); XCTAssertEqual(repository.createdDrafts.last?.reminderMinute, 59)
+    }
+
+    func testRoutineCompletionGatingAllowsCompletedRowsToUndo() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let wrong = calendar.component(.weekday, from: now) == 1 ? 2 : 1
+        let paused = RoutineSnapshot(id: UUID(), title: "Paused", weekdays: [wrong], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: true, isArchived: false); let archived = RoutineSnapshot(id: UUID(), title: "Archived", weekdays: [wrong], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: true); let unscheduled = RoutineSnapshot(id: UUID(), title: "Wrong", weekdays: [wrong], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [paused, archived, unscheduled]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload()
+        for id in [paused.id, archived.id, unscheduled.id] { await subject.setCompleted(id: id, completed: true) }
+        XCTAssertTrue(repository.completionCalls.isEmpty)
+        try? repository.setCompleted(routineID: paused.id, day: day, completed: true); try? repository.setCompleted(routineID: archived.id, day: day, completed: true); try? repository.setCompleted(routineID: unscheduled.id, day: day, completed: true); subject.reload()
+        await subject.setCompleted(id: paused.id, completed: false); await subject.setCompleted(id: archived.id, completed: false); await subject.setCompleted(id: unscheduled.id, completed: false)
+        XCTAssertEqual(repository.completionCalls.suffix(3).map(\.completed), [false, false, false])
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
