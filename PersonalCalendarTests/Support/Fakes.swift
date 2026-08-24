@@ -11,6 +11,9 @@ final class FakeCalendarService: CalendarServicing {
     var createdDrafts: [EventDraft] = []
     var fetchError: Error?
     var createError: Error?
+    var suspendNextRequest = false
+    private var requestContinuation: CheckedContinuation<Void, Never>?
+    private(set) var isRequestSuspended = false
 
     init(
         access: AccessState,
@@ -30,9 +33,17 @@ final class FakeCalendarService: CalendarServicing {
 
     func requestFullAccess() async -> AccessState {
         requestCount += 1
+        if suspendNextRequest {
+            suspendNextRequest = false
+            isRequestSuspended = true
+            await withCheckedContinuation { requestContinuation = $0 }
+            isRequestSuspended = false
+        }
         accessState = requestedAccess
         return accessState
     }
+
+    func resumeSuspendedRequest() { requestContinuation?.resume(); requestContinuation = nil }
 
     func calendars() -> [CalendarDescriptor] { descriptors }
 
@@ -165,12 +176,15 @@ final class FakeRemindersService: RemindersServicing {
     var createError: Error?
     var fetchErrorAfterCompletion: Error?
     var fetchErrorAfterCreate: Error?
+    var suspendNextRequest = false
     private(set) var fetchListIDs: [Set<String>] = []
     var suspendFetchAfterUndo = false
     var suspendNextFetch = false
     var allowMissingCompletion = false
     private var fetchContinuation: CheckedContinuation<Void, Never>?
     private(set) var isFetchSuspended = false
+    private var requestContinuation: CheckedContinuation<Void, Never>?
+    private(set) var isRequestSuspended = false
 
     init(
         access: AccessState,
@@ -188,9 +202,17 @@ final class FakeRemindersService: RemindersServicing {
 
     func requestFullAccess() async -> AccessState {
         requestCount += 1
+        if suspendNextRequest {
+            suspendNextRequest = false
+            isRequestSuspended = true
+            await withCheckedContinuation { requestContinuation = $0 }
+            isRequestSuspended = false
+        }
         accessState = requestedAccess
         return accessState
     }
+
+    func resumeSuspendedRequest() { requestContinuation?.resume(); requestContinuation = nil }
 
     func lists() -> [ReminderListDescriptor] { descriptors }
 
@@ -256,21 +278,42 @@ final class FakeNotificationAuthorizer: NotificationAuthorizing {
     private var state: AccessState
     private let requested: AccessState
     private var readContinuation: CheckedContinuation<Void, Never>?
-    private let suspendRead: Bool
+    private var requestContinuation: CheckedContinuation<Void, Never>?
+    private var suspendNextRead: Bool
+    var suspendNextRequest = false
+    private(set) var requestCount = 0
+    private(set) var isReadSuspended = false
+    private(set) var isRequestSuspended = false
 
     init(access: AccessState, requestedAccess: AccessState? = nil, suspendRead: Bool = false) {
         state = access
         requested = requestedAccess ?? access
-        self.suspendRead = suspendRead
+        suspendNextRead = suspendRead
     }
 
     var accessState: AccessState {
-        get async { if suspendRead { await withCheckedContinuation { readContinuation = $0 } }; return state }
+        get async {
+            if suspendNextRead {
+                suspendNextRead = false
+                isReadSuspended = true
+                await withCheckedContinuation { readContinuation = $0 }
+                isReadSuspended = false
+            }
+            return state
+        }
     }
 
     func requestAccess() async -> AccessState {
+        requestCount += 1
+        if suspendNextRequest {
+            suspendNextRequest = false
+            isRequestSuspended = true
+            await withCheckedContinuation { requestContinuation = $0 }
+            isRequestSuspended = false
+        }
         state = requested
         return state
     }
     func resumeRead() { readContinuation?.resume(); readContinuation = nil }
+    func resumeSuspendedRequest() { requestContinuation?.resume(); requestContinuation = nil }
 }
