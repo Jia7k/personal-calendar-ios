@@ -36,7 +36,7 @@ final class DemoCalendarService: CalendarServicing {
         return accessState
     }
 
-    func calendars() -> [CalendarDescriptor] { [descriptor] }
+    func calendars() -> [CalendarDescriptor] { accessState == .granted ? [descriptor] : [] }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
         guard accessState == .granted else { return [] }
@@ -47,6 +47,7 @@ final class DemoCalendarService: CalendarServicing {
     }
 
     func createEvent(_ draft: EventDraft) throws -> String {
+        guard accessState == .granted else { throw DemoCreateError.failed }
         if shouldFailNextCreate {
             shouldFailNextCreate = false
             throw DemoCreateError.failed
@@ -104,7 +105,7 @@ final class DemoRemindersService: RemindersServicing {
         return accessState
     }
 
-    func lists() -> [ReminderListDescriptor] { [descriptor] }
+    func lists() -> [ReminderListDescriptor] { accessState == .granted ? [descriptor] : [] }
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
         guard accessState == .granted else { return [] }
@@ -112,6 +113,7 @@ final class DemoRemindersService: RemindersServicing {
     }
 
     func createReminder(_ draft: ReminderDraft) throws -> String {
+        guard accessState == .granted else { throw DemoCreateError.failed }
         if shouldFailNextCreate { shouldFailNextCreate = false; throw DemoCreateError.failed }
         let id = "demo-task-\(values.count + 1)"
         values.append(
@@ -133,6 +135,7 @@ final class DemoRemindersService: RemindersServicing {
     }
 
     func setCompleted(id: String, completed: Bool) throws {
+        guard accessState == .granted else { throw DemoCreateError.failed }
         guard let index = values.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         let old = values[index]
         values[index] = .init(
