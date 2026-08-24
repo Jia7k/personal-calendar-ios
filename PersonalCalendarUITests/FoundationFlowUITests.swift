@@ -43,4 +43,23 @@ final class FoundationFlowUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Dentist"].waitForExistence(timeout: 3))
     }
+
+    func testRetryUsesEditedEventDraftAfterFailOnce() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-event-save-fails-once"]
+        app.launch()
+        app.buttons["New Event"].tap()
+        let title = app.textFields["Title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        title.tap()
+        title.typeText("Dentist")
+        app.buttons["Save"].tap()
+        XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 3))
+        title.tap()
+        for _ in 0..<7 { title.typeText(XCUIKeyboardKey.delete.rawValue) }
+        title.typeText("Dentist Updated")
+        app.buttons["Retry"].tap()
+        XCTAssertTrue(app.staticTexts["Dentist Updated"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Dentist"].exists)
+    }
 }

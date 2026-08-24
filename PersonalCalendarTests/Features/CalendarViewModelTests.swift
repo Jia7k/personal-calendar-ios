@@ -158,6 +158,18 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(routines.completedDaysCallCount, callsAfterLoad)
     }
 
+    func testFailedRoutineHistoryRefreshPreservesConfirmedRoutinesWhileEventsRefresh() async {
+        let routines = FakeRoutineRepository(routines: [.sampleRoutine])
+        let events = FakeCalendarService(access: .granted)
+        let model = makeModel(calendarService: events, routines: routines)
+        await model.load()
+        events.events = [CalendarEventSnapshot(id: "fresh", title: "Fresh", start: today.startDate(in: calendar).addingTimeInterval(3_600), end: today.startDate(in: calendar).addingTimeInterval(7_200), isAllDay: false, calendarID: "calendar", calendarTitle: "Calendar", allowsModification: true, hasRecurrence: false)]
+        routines.completedDaysError = TestError.failed
+        await model.load()
+        XCTAssertTrue(model.agenda.scheduled.contains { $0.title == "Fresh" })
+        XCTAssertTrue(model.agenda.scheduled.contains { $0.title == "Read" })
+    }
+
     private func makeModel(calendarService: FakeCalendarService = FakeCalendarService(access: .granted), reminders: FakeRemindersService = FakeRemindersService(access: .granted), routines: FakeRoutineRepository = FakeRoutineRepository(), settings: AppSettingsStore = AppSettingsStore(defaults: .ephemeral)) -> CalendarViewModel {
         CalendarViewModel(today: today, calendarService: calendarService, remindersService: reminders, routines: routines, composer: AgendaComposer(), settings: settings, systemCalendar: calendar)
     }

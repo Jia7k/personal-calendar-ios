@@ -10,9 +10,11 @@ final class DemoCalendarService: CalendarServicing {
         colorHex: "#3A8D7C",
         allowsContentModifications: true
     )
+    private var shouldFailNextCreate: Bool
 
-    init(access: AccessState) {
+    init(access: AccessState, failFirstCreate: Bool = false) {
         accessState = access
+        shouldFailNextCreate = failFirstCreate
         let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
         events = [
             .init(
@@ -45,6 +47,10 @@ final class DemoCalendarService: CalendarServicing {
     }
 
     func createEvent(_ draft: EventDraft) throws -> String {
+        if shouldFailNextCreate {
+            shouldFailNextCreate = false
+            throw DemoCreateError.failed
+        }
         let id = "demo-event-\(events.count + 1)"
         events.append(
             .init(
@@ -62,6 +68,8 @@ final class DemoCalendarService: CalendarServicing {
         return id
     }
 }
+
+private enum DemoCreateError: Error { case failed }
 
 @MainActor
 final class DemoRemindersService: RemindersServicing {
