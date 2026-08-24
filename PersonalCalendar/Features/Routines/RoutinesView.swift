@@ -12,7 +12,7 @@ struct RoutinesView: View {
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
     }.navigationTitle("Routines").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Routine", systemImage: "plus") { showingNew = true }.frame(minWidth: 44, minHeight: 44) } }
     .sheet(isPresented: $showingNew) { RoutineEditorView(model: model) }.sheet(item: $editing) { RoutineEditorView(model: model, row: $0) }
-    .confirmationDialog("Delete \(deleteTarget?.routine.title ?? "routine")?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }), titleVisibility: .visible) { Button("Delete", role: .destructive) { if let target = deleteTarget { model.delete(id: target.id) }; deleteTarget = nil }; Button("Cancel", role: .cancel) { deleteTarget = nil } }
+    .confirmationDialog("Delete \(deleteTarget?.routine.title ?? "routine")?", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }), titleVisibility: .visible) { Button("Delete", role: .destructive) { if let target = deleteTarget, model.delete(id: target.id) { deleteTarget = nil } }; Button("Cancel", role: .cancel) { deleteTarget = nil } }
     .task { model.reload() }.refreshable { model.reload() }
     } }
     private func row(_ row: RoutineRowState) -> some View { VStack(alignment: .leading, spacing: 8) {

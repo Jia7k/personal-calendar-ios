@@ -495,6 +495,12 @@ final class FeatureViewModelTests: XCTestCase {
         let calls = repository.completionCalls.count; subject.retryFailedAction(); XCTAssertEqual(repository.completionCalls.count, calls)
     }
 
+    func testRoutineDeleteFailureRetainsExactOperationThenRetriesOnce() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.deleteError = TestError.failed; XCTAssertFalse(subject.delete(id: routine.id)); XCTAssertTrue(subject.active.contains { $0.id == routine.id }); XCTAssertEqual(subject.failedActionOperation, .delete(routine.id)); XCTAssertTrue(repository.deleteCalls.isEmpty)
+        repository.deleteError = nil; subject.retryFailedAction(); XCTAssertEqual(repository.deleteCalls, [routine.id]); XCTAssertFalse(subject.active.contains { $0.id == routine.id }); XCTAssertNil(subject.failedActionOperation)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
