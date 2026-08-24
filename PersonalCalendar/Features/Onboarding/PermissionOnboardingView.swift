@@ -40,7 +40,9 @@ final class PermissionOnboardingModel {
     var title: String { page.title }
     var pageIndex: Int { page.rawValue }
     var stepDescription: String { "Step \(pageIndex + 1) of \(Page.allCases.count)" }
-    var actionsEnabled: Bool { isInitialRefreshComplete && !isAdvancing && !isFinished }
+    var actionsEnabled: Bool {
+        isInitialRefreshComplete && !permissions.isRefreshing && !isAdvancing && !isFinished
+    }
     var access: AccessState {
         switch page {
         case .calendar: permissions.calendarAccess

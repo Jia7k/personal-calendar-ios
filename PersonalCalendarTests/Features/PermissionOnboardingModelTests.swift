@@ -34,6 +34,55 @@ final class PermissionOnboardingModelTests: XCTestCase {
         XCTAssertTrue(subject.actionsEnabled)
     }
 
+    func testLaterRefreshGatesActionsUntilTerminalSnapshotPublishes() async {
+        let calendar = FakeCalendarService(access: .notDetermined)
+        let reminders = FakeRemindersService(access: .notDetermined)
+        let notifications = FakeNotificationAuthorizer(access: .notDetermined)
+        let permissions = PermissionCoordinator(calendar: calendar, reminders: reminders, notifications: notifications)
+        let subject = PermissionOnboardingModel(permissions: permissions, onFinish: {})
+        await subject.start()
+
+        calendar.accessState = .denied
+        reminders.accessState = .restricted
+        notifications.setAccessState(.denied)
+        notifications.suspendNextRead = true
+        let refresh = Task { await permissions.refresh() }
+        for _ in 0..<10 where !notifications.isReadSuspended {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(permissions.isRefreshing)
+        XCTAssertTrue(notifications.isReadSuspended)
+        XCTAssertFalse(subject.actionsEnabled)
+        subject.notNow()
+        await subject.primaryAction()
+        XCTAssertEqual(subject.title, "Calendar")
+        XCTAssertEqual(calendar.requestCount, 0)
+        XCTAssertEqual(reminders.requestCount, 0)
+        XCTAssertEqual(notifications.requestCount, 0)
+
+        notifications.resumeRead()
+        await refresh.value
+
+        XCTAssertTrue(subject.actionsEnabled)
+        XCTAssertEqual(subject.primaryTitle, "Continue")
+        XCTAssertFalse(subject.showsNotNow)
+        await subject.primaryAction()
+        XCTAssertEqual(subject.title, "Reminders")
+        XCTAssertEqual(calendar.requestCount, 0)
+        XCTAssertEqual(reminders.requestCount, 0)
+        XCTAssertEqual(notifications.requestCount, 0)
+
+        await waitUntilActionsEnable(subject)
+        XCTAssertEqual(subject.primaryTitle, "Continue")
+        XCTAssertFalse(subject.showsNotNow)
+        await subject.primaryAction()
+        XCTAssertEqual(subject.title, "Notifications")
+        XCTAssertEqual(calendar.requestCount, 0)
+        XCTAssertEqual(reminders.requestCount, 0)
+        XCTAssertEqual(notifications.requestCount, 0)
+    }
+
     func testAllowStaysOnCurrentPageWhileMatchingRequestIsSuspended() async {
         let calendar = FakeCalendarService(access: .notDetermined, requestedAccess: .granted)
         calendar.suspendNextRequest = true
