@@ -5,48 +5,51 @@ import SwiftData
 struct AppEnvironment {
     let calendar: any CalendarServicing
     let reminders: any RemindersServicing
-    let notifications: any NotificationAuthorizing
-    let permissionCoordinator: PermissionCoordinator
-    let modelContainer: ModelContainer
-    let routineRepository: any RoutineRepository
+    let routines: any RoutineRepository
+    let notificationAuthorization: any NotificationAuthorizing
+    let permissions: PermissionCoordinator
+    let agendaComposer: AgendaComposer
+    let settings: AppSettingsStore
 
-    static let bootstrap = AppEnvironment()
-
-    init() {
+    static func live(container: ModelContainer) -> AppEnvironment {
         let store = EKEventStore()
-        let modelContainer = Self.makeModelContainer()
-        self.init(
-            calendar: EventKitCalendarService(store: store),
-            reminders: EventKitRemindersService(store: store),
-            notifications: SystemNotificationAuthorizer(),
-            modelContainer: modelContainer
-        )
-    }
-
-    init(
-        calendar: any CalendarServicing,
-        reminders: any RemindersServicing,
-        notifications: any NotificationAuthorizing,
-        modelContainer: ModelContainer? = nil
-    ) {
-        self.calendar = calendar
-        self.reminders = reminders
-        self.notifications = notifications
-        let modelContainer = modelContainer ?? Self.makeModelContainer()
-        self.modelContainer = modelContainer
-        routineRepository = SwiftDataRoutineRepository(context: modelContainer.mainContext)
-        permissionCoordinator = PermissionCoordinator(
+        let calendar = EventKitCalendarService(store: store)
+        let reminders = EventKitRemindersService(store: store)
+        let notifications = SystemNotificationAuthorizer()
+        let permissions = PermissionCoordinator(
             calendar: calendar,
             reminders: reminders,
             notifications: notifications
         )
+        return .init(
+            calendar: calendar,
+            reminders: reminders,
+            routines: SwiftDataRoutineRepository(context: container.mainContext),
+            notificationAuthorization: notifications,
+            permissions: permissions,
+            agendaComposer: AgendaComposer(),
+            settings: AppSettingsStore()
+        )
     }
 
-    private static func makeModelContainer() -> ModelContainer {
-        do {
-            return try ModelContainer(for: RoutineRecord.self, RoutineCompletionRecord.self)
-        } catch {
-            fatalError("Unable to initialize local routine storage: \(error)")
-        }
+    static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
+        let calendarAccess: AccessState = arguments.contains("-calendar-denied") ? .denied : .granted
+        let calendar = DemoCalendarService(access: calendarAccess)
+        let reminders = DemoRemindersService(access: .granted)
+        let notifications = DemoNotificationAuthorizer(access: .granted)
+        let permissions = PermissionCoordinator(
+            calendar: calendar,
+            reminders: reminders,
+            notifications: notifications
+        )
+        return .init(
+            calendar: calendar,
+            reminders: reminders,
+            routines: DemoRoutineRepository(),
+            notificationAuthorization: notifications,
+            permissions: permissions,
+            agendaComposer: AgendaComposer(),
+            settings: AppSettingsStore(defaults: .ephemeral)
+        )
     }
 }
