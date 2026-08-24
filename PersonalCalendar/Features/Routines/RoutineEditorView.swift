@@ -11,5 +11,5 @@ struct RoutineEditorView: View {
         if let error = model.errorMessage { Section { Text(error).foregroundStyle(.red); Button("Retry") { save() }.frame(minHeight: 44) } }
     }.navigationTitle(row == nil ? "New Routine" : "Edit Routine").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.frame(minHeight: 44) }; ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.frame(minHeight: 44) } } } }
     private func toggle(_ day: Int) { if days.contains(day) { days.remove(day) } else { days.insert(day) } }
-    private func save() { let c = Calendar.current.dateComponents([.hour, .minute], from: reminder); let draft = RoutineDraft(title: title, weekdays: days, window: window, reminderHour: usesReminder ? c.hour : nil, reminderMinute: usesReminder ? c.minute : nil); let success = row.map { model.update(id: $0.id, draft: draft) } ?? model.create(draft); if success { dismiss() } }
+    private func save() { let c = model.reminderComponents(for: reminder); let draft = RoutineDraft(title: title, weekdays: days, window: window, reminderHour: usesReminder ? c.hour : nil, reminderMinute: usesReminder ? c.minute : nil); let success = row.map { model.update(id: $0.id, draft: draft) } ?? model.create(draft); if success { dismiss() } }
 }

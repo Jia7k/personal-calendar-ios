@@ -95,8 +95,9 @@ final class DemoRemindersService: RemindersServicing {
         colorHex: "#CB6B4F",
         allowsContentModifications: true
     )
+    private var shouldFailNextCreate: Bool
 
-    init(access: AccessState) { accessState = access }
+    init(access: AccessState, failFirstCreate: Bool = false) { accessState = access; shouldFailNextCreate = failFirstCreate }
 
     func requestFullAccess() async -> AccessState {
         accessState = .granted
@@ -111,6 +112,7 @@ final class DemoRemindersService: RemindersServicing {
     }
 
     func createReminder(_ draft: ReminderDraft) throws -> String {
+        if shouldFailNextCreate { shouldFailNextCreate = false; throw DemoCreateError.failed }
         let id = "demo-task-\(values.count + 1)"
         values.append(
             .init(

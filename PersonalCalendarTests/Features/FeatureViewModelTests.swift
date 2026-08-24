@@ -267,6 +267,74 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(repository.completedDaysCallCount, 1)
     }
 
+    func testTasksHonorsSelectionAndDoesNotRevealDeselectedStaleCacheAfterFailure() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let shown = ReminderSnapshot(id: "shown", title: "Shown", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "shown", listTitle: "Shown", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let hidden = ReminderSnapshot(id: "hidden", title: "Hidden", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "hidden", listTitle: "Hidden", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let settings = AppSettingsStore(defaults: .ephemeral); settings.selectedReminderListIDs = ["shown", "hidden"]
+        let service = FakeRemindersService(access: .granted, reminders: [shown, hidden])
+        let subject = TasksViewModel(service: service, settings: settings, calendar: calendar, now: { now })
+        await subject.load(); settings.selectedReminderListIDs = ["shown"]; service.fetchError = TestError.failed; await subject.load()
+        XCTAssertEqual(subject.today.map(\.id), ["shown"])
+        XCTAssertEqual(service.fetchListIDs.last, ["shown"])
+        service.fetchError = nil; await subject.load()
+        XCTAssertNil(subject.errorMessage)
+    }
+
+    func testTasksDeniedAndRecurringSnapshotRemainEmptyOrOneRow() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let recurring = ReminderSnapshot(id: "opaque", title: "One supplied occurrence", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: true)
+        let denied = TasksViewModel(service: FakeRemindersService(access: .denied, reminders: [recurring]), settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        await denied.load(); XCTAssertTrue(denied.today.isEmpty); XCTAssertNotNil(denied.accessExplanation)
+        let allowed = TasksViewModel(service: FakeRemindersService(access: .granted, reminders: [recurring]), settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        await allowed.load(); XCTAssertEqual(allowed.today.map(\.id), ["opaque"])
+    }
+
+    func testTaskCreateUsesWritableFallbackRetainsEditedRetryAndDoesNotDuplicateAfterRefreshFailure() async {
+        let writable = ReminderListDescriptor(id: "write", title: "Writable", colorHex: "#000000", allowsContentModifications: true)
+        let readonly = ReminderListDescriptor(id: "read", title: "Read", colorHex: "#000000", allowsContentModifications: false)
+        let settings = AppSettingsStore(defaults: .ephemeral); settings.defaultReminderListID = "read"
+        let service = FakeRemindersService(access: .granted, descriptors: [readonly, writable]); service.createError = TestError.failed
+        let subject = TasksViewModel(service: service, settings: settings, calendar: calendar)
+        let first = ReminderDraft(title: "  First  ", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)
+        let failed = await subject.create(first); XCTAssertFalse(failed); XCTAssertEqual(subject.draftOnFailure?.title, "First")
+        service.createError = nil
+        let edited = ReminderDraft(title: "Edited", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)
+        service.fetchErrorAfterCreate = TestError.failed
+        let saved = await subject.create(edited); XCTAssertTrue(saved); XCTAssertEqual(service.createdDrafts.map(\.title), ["Edited"]); XCTAssertEqual(service.createdDrafts.first?.listID, "write")
+        XCTAssertEqual(service.createdDrafts.count, 1); XCTAssertNotNil(subject.errorMessage)
+    }
+
+    func testTaskCompletionUsesOpaqueIDAndPreservesConfirmedChangeAcrossRefreshFailure() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let item = ReminderSnapshot(id: "opaque|raw|id", title: "Task", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        await subject.load(); service.fetchErrorAfterCompletion = TestError.failed; await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertEqual(service.completedCalls, [.init(id: "opaque|raw|id", completed: true)]); XCTAssertTrue(subject.today.isEmpty)
+        service.fetchErrorAfterCompletion = nil; await subject.setCompleted(id: item.id, completed: false)
+        XCTAssertEqual(subject.today.map(\.id), [item.id])
+    }
+
+    func testTaskReadOnlyAndFailedCompletionPreserveRows() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let immutable = ReminderSnapshot(id: "immutable", title: "Immutable", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: false, hasRecurrence: false)
+        let service = FakeRemindersService(access: .granted, reminders: [immutable]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        await subject.load(); await subject.setCompleted(id: immutable.id, completed: true); XCTAssertTrue(service.completedCalls.isEmpty)
+        let mutable = ReminderSnapshot(id: "mutable", title: "Mutable", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        service.reminders = [mutable]; await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: mutable.id, completed: true)
+        XCTAssertEqual(subject.today.map(\.id), ["mutable"]); XCTAssertTrue(service.completedCalls.isEmpty)
+    }
+
+    func testRoutineCompletionGatesNewCompletionsButAllowsUndo() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let weekday = calendar.component(.weekday, from: now)
+        let paused = RoutineSnapshot(id: UUID(), title: "Paused", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: true, isArchived: false)
+        let unscheduled = RoutineSnapshot(id: UUID(), title: "Unscheduled", weekdays: [weekday == 1 ? 2 : 1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [paused, unscheduled]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now })
+        subject.reload(); await subject.setCompleted(id: paused.id, completed: true); await subject.setCompleted(id: unscheduled.id, completed: true); XCTAssertTrue(repository.completionCalls.isEmpty)
+        try? repository.setCompleted(routineID: paused.id, day: LocalDay(date: now, calendar: calendar), completed: true); subject.reload(); await subject.setCompleted(id: paused.id, completed: false)
+        XCTAssertEqual(repository.completionCalls.last?.completed, false)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

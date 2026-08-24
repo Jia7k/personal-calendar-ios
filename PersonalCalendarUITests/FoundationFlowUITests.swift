@@ -121,4 +121,13 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["1 day streak"].exists)
         XCTAssertTrue(app.otherElements["14-day history"].exists)
     }
+
+    func testEditedTaskRetryAfterDemoFailOnceCreatesOnlyEditedTask() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-task-save-fails-once"]; app.launch()
+        app.tabBars.buttons["Tasks"].tap(); app.buttons["New Task"].tap()
+        let title = app.textFields["Task title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("First")
+        app.buttons["Save"].tap(); XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 3))
+        title.tap(); for _ in 0..<5 { title.typeText(XCUIKeyboardKey.delete.rawValue) }; title.typeText("Edited")
+        app.buttons["Retry"].tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
+    }
 }

@@ -78,10 +78,12 @@ final class TasksViewModel {
 
     private func publish() {
         let todayDay = LocalDay(date: now(), calendar: calendar)
-        let incomplete = confirmed.filter { !$0.isCompleted }
+        let selected = settings.selectedReminderListIDs
+        let visible = confirmed.filter { selected.isEmpty || selected.contains($0.listID) }
+        let incomplete = visible.filter { !$0.isCompleted }
         today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) <= todayDay } ?? false }.sorted(by: sort)
         upcoming = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? true }.sorted(by: sort)
-        completed = confirmed.filter(\.isCompleted).sorted(by: sort)
+        completed = visible.filter(\.isCompleted).sorted(by: sort)
     }
 
     private func sort(_ lhs: ReminderSnapshot, _ rhs: ReminderSnapshot) -> Bool {

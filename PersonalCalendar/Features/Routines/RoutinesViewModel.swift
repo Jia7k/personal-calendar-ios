@@ -19,6 +19,7 @@ final class RoutinesViewModel {
     var currentDay: LocalDay { LocalDay(date: now(), calendar: calendar) }
     var weekdayOrder: [Int] { (0..<7).map { ((calendar.firstWeekday - 1 + $0) % 7) + 1 } }
     func weekdayName(_ weekday: Int) -> String { calendar.weekdaySymbols[weekday - 1] }
+    func reminderComponents(for date: Date) -> DateComponents { calendar.dateComponents([.hour, .minute], from: date) }
 
     func reload() {
         isLoading = true; defer { isLoading = false }

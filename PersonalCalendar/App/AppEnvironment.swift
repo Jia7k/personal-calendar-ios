@@ -35,7 +35,7 @@ struct AppEnvironment {
     static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
         let calendarAccess: AccessState = arguments.contains("-calendar-denied") ? .denied : .granted
         let calendar = DemoCalendarService(access: calendarAccess, failFirstCreate: arguments.contains("-event-save-fails-once"))
-        let reminders = DemoRemindersService(access: .granted)
+        let reminders = DemoRemindersService(access: .granted, failFirstCreate: arguments.contains("-task-save-fails-once"))
         let notifications = DemoNotificationAuthorizer(access: .granted)
         let permissions = PermissionCoordinator(
             calendar: calendar,
