@@ -183,6 +183,7 @@ final class FakeRemindersService: RemindersServicing {
     var suspendFetchAfterUndo = false
     var suspendNextFetch = false
     var allowMissingCompletion = false
+    var omitCompletedAfterMutation = false
     private var fetchContinuation: CheckedContinuation<Void, Never>?
     private(set) var isFetchSuspended = false
     private var requestContinuation: CheckedContinuation<Void, Never>?
@@ -258,6 +259,7 @@ final class FakeRemindersService: RemindersServicing {
             let old = reminders[index]
             reminders[index] = .init(id: old.id, title: old.title, notes: old.notes, dueDate: old.dueDate, dueHasTime: old.dueHasTime, priority: old.priority, listID: old.listID, listTitle: old.listTitle, isCompleted: completed, allowsModification: old.allowsModification, hasRecurrence: old.hasRecurrence)
         }
+        if completed && omitCompletedAfterMutation { reminders.removeAll { $0.id == id } }
     }
 }
 

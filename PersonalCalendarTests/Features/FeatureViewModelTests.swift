@@ -341,17 +341,93 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertNil(subject.latestTaskUndo)
     }
 
-    func testAuthoritativeMissingTaskClearsUndoAndPreventsWrite() async {
-        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
-        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "opaque|raw", title: "Task", due: now, hasTime: true)])
-        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
-        await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
-        service.reminders = []; await subject.load(); service.allowMissingCompletion = true; service.fetchErrorAfterCompletion = TestError.failed
-        await subject.undoLastTaskCompletion()
-        XCTAssertTrue(subject.agenda.scheduled.isEmpty)
-        XCTAssertNil(subject.latestTaskUndo)
-        XCTAssertEqual(service.completedCalls, [.init(id: "opaque|raw", completed: true)])
-        XCTAssertNil(subject.remindersError)
+    func testOmittedCompletedTaskRetainsCapturedUndoAndRestoresSnapshotWhenUndoRefreshFails() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+
+        XCTAssertEqual(fixture.subject.latestTaskUndo?.snapshot, fixture.snapshot)
+        XCTAssertTrue(fixture.subject.agenda.scheduled.isEmpty)
+        fixture.service.fetchErrorAfterCompletion = TestError.failed
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true), .init(id: "opaque|captured", completed: false)])
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Captured"])
+        XCTAssertEqual(fixture.subject.agenda.scheduled.first?.origin, .reminder(id: "opaque|captured"))
+        XCTAssertEqual(fixture.subject.agenda.scheduled.first?.allowsModification, true)
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertNotNil(fixture.subject.remindersError)
+    }
+
+    func testOmittedCompletedTaskUndoClearsWithoutWriteAfterDenial() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load(); await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+        fixture.service.accessState = .denied
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+    }
+
+    func testOmittedCompletedTaskUndoClearsWithoutWriteAfterDeselection() async {
+        let fixture = makeOmittedCompletedUndoFixture(includeAlternateList: true)
+        await fixture.subject.load(); await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Captured" }!, completed: true)
+        fixture.settings.replaceSelectedReminderListIDs(["alternate"], availableIDs: ["captured-list", "alternate"])
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+    }
+
+    func testOmittedCompletedTaskUndoClearsWithoutWriteWhenSourceDisappears() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load(); await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+        fixture.service.descriptors = []
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+    }
+
+    func testOmittedCompletedTaskUndoClearsWithoutWriteWhenListBecomesReadOnly() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load(); await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+        fixture.service.descriptors = [ReminderListDescriptor(id: "captured-list", title: "Captured List", colorHex: "#000000", allowsContentModifications: false)]
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+    }
+
+    func testAuthoritativeReadOnlySameIDClearsCapturedUndoWithoutWrite() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load(); await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+        fixture.service.omitCompletedAfterMutation = false
+        fixture.service.reminders = [ReminderSnapshot(id: fixture.snapshot.id, title: fixture.snapshot.title, notes: fixture.snapshot.notes, dueDate: fixture.snapshot.dueDate, dueHasTime: fixture.snapshot.dueHasTime, priority: fixture.snapshot.priority, listID: fixture.snapshot.listID, listTitle: fixture.snapshot.listTitle, isCompleted: true, allowsModification: false, hasRecurrence: fixture.snapshot.hasRecurrence)]
+        await fixture.subject.load()
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+    }
+
+    func testAuthoritativeAlreadyRestoredSameIDClearsCapturedUndoWithoutWrite() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load(); await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+        fixture.service.omitCompletedAfterMutation = false
+        fixture.service.reminders = [fixture.snapshot]
+        await fixture.subject.load()
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Captured"])
     }
 
     func testOlderUndoRefreshDoesNotClearNewCompletionUndo() async {
@@ -1029,6 +1105,25 @@ final class FeatureViewModelTests: XCTestCase {
         let service = FakeRemindersService(access: .granted, reminders: [a, b], descriptors: descriptors)
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: settings, calendarProvider: { self.calendar }, now: { now })
         return (subject, service, settings)
+    }
+
+    private func makeOmittedCompletedUndoFixture(includeAlternateList: Bool = false) -> (subject: TodayViewModel, service: FakeRemindersService, settings: AppSettingsStore, snapshot: ReminderSnapshot) {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let snapshot = ReminderSnapshot(id: "opaque|captured", title: "Captured", notes: "Exact notes", dueDate: now, dueHasTime: true, priority: 9, listID: "captured-list", listTitle: "Captured List", isCompleted: false, allowsModification: true, hasRecurrence: true)
+        var values = [snapshot]
+        var descriptors = [ReminderListDescriptor(id: "captured-list", title: "Captured List", colorHex: "#000000", allowsContentModifications: true)]
+        if includeAlternateList {
+            values.append(ReminderSnapshot(id: "alternate", title: "Alternate", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "alternate", listTitle: "Alternate", isCompleted: false, allowsModification: true, hasRecurrence: false))
+            descriptors.append(ReminderListDescriptor(id: "alternate", title: "Alternate", colorHex: "#111111", allowsContentModifications: true))
+        }
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        let availableIDs = Set(descriptors.map(\.id))
+        settings.replaceSelectedReminderListIDs(availableIDs, availableIDs: availableIDs)
+        let service = FakeRemindersService(access: .granted, reminders: values, descriptors: descriptors)
+        service.omitCompletedAfterMutation = true
+        service.allowMissingCompletion = true
+        let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: settings, calendarProvider: { self.calendar }, now: { now })
+        return (subject, service, settings, snapshot)
     }
 
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {

@@ -15,6 +15,7 @@ final class TodayViewModel {
     private struct ReminderContext: Equatable {
         let access: AccessState
         let descriptorIDs: Set<String>
+        let writableDescriptorIDs: Set<String>
         let selectedIDs: Set<String>
         let selectionIsExplicit: Bool
 
@@ -155,7 +156,7 @@ final class TodayViewModel {
         reconcileReminderState()
         guard var undo = latestTaskUndo,
               !undo.isPending,
-              writableSelectedReminder(id: undo.rawID)?.listID == undo.snapshot.listID
+              capturedUndoIsEligible(undo)
         else { return }
         let undoGeneration = undo.generation
         invalidateOlderReminderWork()
@@ -256,13 +257,15 @@ final class TodayViewModel {
     }
 
     private func reminderContext() -> ReminderContext {
-        let descriptorIDs = Set(reminders.lists().map(\.id))
+        let descriptors = reminders.lists()
+        let descriptorIDs = Set(descriptors.map(\.id))
         let selectedIDs = descriptorIDs.isEmpty
             ? settings.selectedReminderListIDs
             : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
         return ReminderContext(
             access: reminders.accessState,
             descriptorIDs: descriptorIDs,
+            writableDescriptorIDs: Set(descriptors.filter(\.allowsContentModifications).map(\.id)),
             selectedIDs: selectedIDs,
             selectionIsExplicit: settings.reminderSelectionIsExplicit
         )
@@ -283,12 +286,8 @@ final class TodayViewModel {
             ? availableIDs
             : settings.visibleReminderListIDs(availableIDs: availableIDs)
         cachedReminders = cachedReminders.filter { selectedIDs.contains($0.listID) }
-        if let undo = latestTaskUndo {
-            let remainsWritable = undo.snapshot.allowsModification
-                && selectedIDs.contains(undo.snapshot.listID)
-                && availableIDs.contains(undo.snapshot.listID)
-                && cachedReminders.contains { $0.id == undo.rawID && $0.listID == undo.snapshot.listID && $0.allowsModification }
-            if !remainsWritable { latestTaskUndo = nil }
+        if let undo = latestTaskUndo, !capturedUndoIsEligible(undo, context: context) {
+            latestTaskUndo = nil
         }
         compose(day: localDay, calendar: calendarProvider())
     }
@@ -311,6 +310,35 @@ final class TodayViewModel {
             return nil
         }
         return value
+    }
+
+    private func capturedUndoIsEligible(_ undo: TaskUndoState, context: ReminderContext? = nil) -> Bool {
+        let context = context ?? reminderContext()
+        guard context.access == .granted, undo.snapshot.allowsModification else { return false }
+        let availableIDs: Set<String>
+        let writableIDs: Set<String>
+        let selectedIDs: Set<String>
+        if context.descriptorIDs.isEmpty {
+            availableIDs = Set(cachedReminders.map(\.listID))
+            writableIDs = Set(cachedReminders.filter(\.allowsModification).map(\.listID))
+            selectedIDs = context.selectionIsExplicit
+                ? settings.visibleReminderListIDs(availableIDs: availableIDs)
+                : availableIDs
+        } else {
+            availableIDs = context.descriptorIDs
+            writableIDs = context.writableDescriptorIDs
+            selectedIDs = context.selectedIDs
+        }
+        guard availableIDs.contains(undo.snapshot.listID),
+              writableIDs.contains(undo.snapshot.listID),
+              selectedIDs.contains(undo.snapshot.listID)
+        else { return false }
+        guard let authoritative = cachedReminders.first(where: { $0.id == undo.rawID }) else {
+            return true
+        }
+        return authoritative.listID == undo.snapshot.listID
+            && authoritative.allowsModification
+            && (authoritative.isCompleted || undo.isPending)
     }
 
     private func invalidateOlderReminderWork() {
