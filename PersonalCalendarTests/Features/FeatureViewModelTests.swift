@@ -836,6 +836,14 @@ final class FeatureViewModelTests: XCTestCase {
         service.completionError = nil; service.fetchError = TestError.failed; await subject.load(); XCTAssertTrue(subject.upcoming.contains { $0.id == "a" }); XCTAssertEqual(subject.failedMutationOperation, expected); XCTAssertEqual(subject.mutationErrorMessage, error); XCTAssertTrue(service.completedCalls.isEmpty)
     }
 
+    func testTaskDirectCompletionAfterAccessRevocationMakesNoWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.accessState = .denied; await subject.setCompleted(id: "a", completed: true); XCTAssertTrue(service.completedCalls.isEmpty); XCTAssertNil(subject.failedMutationOperation); XCTAssertNil(subject.mutationErrorMessage)
+    }
+
+    func testTaskRetryAfterAccessRevocationClearsRecoveryWithoutWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true); service.completionError = nil; service.accessState = .denied; await subject.retryFailedMutation(); XCTAssertTrue(service.completedCalls.isEmpty); XCTAssertNil(subject.failedMutationOperation); XCTAssertNil(subject.mutationErrorMessage)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

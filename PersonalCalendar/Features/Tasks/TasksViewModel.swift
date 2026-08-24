@@ -80,6 +80,7 @@ final class TasksViewModel {
 
     func setCompleted(id: String, completed state: Bool) async {
         reconcileMutationRecovery(authoritativeFetch: false)
+        guard service.accessState == .granted else { clearMutationRecovery(id: id); return }
         guard let item = confirmed.first(where: { $0.id == id }), item.allowsModification, isSelected(item), !mutatingIDs.contains(id) else { clearMutationRecovery(id: id); return }
         mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         do {
@@ -98,6 +99,7 @@ final class TasksViewModel {
     func retryFailedMutation() async {
         guard let operation = failedMutationOperation else { return }
         reconcileMutationRecovery(authoritativeFetch: false)
+        guard service.accessState == .granted, failedMutationOperation == operation else { clearMutationRecovery(id: operation.id); return }
         guard let item = confirmed.first(where: { $0.id == operation.id }), item.allowsModification, isSelected(item), item.isCompleted != operation.completed else { clearMutationRecovery(id: operation.id); return }
         await setCompleted(id: operation.id, completed: operation.completed)
     }
