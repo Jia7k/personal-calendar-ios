@@ -12,11 +12,13 @@ final class DemoCalendarService: CalendarServicing {
     )
     private var shouldFailNextCreate: Bool
     private let multipleSources: Bool
+    private let includeReadOnlySource: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, multipleSources: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         self.multipleSources = multipleSources
+        self.includeReadOnlySource = includeReadOnlySource
         let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
         events = [
             .init(
@@ -43,7 +45,7 @@ final class DemoCalendarService: CalendarServicing {
 
     func calendars() -> [CalendarDescriptor] {
         guard accessState == .granted else { return [] }
-        return multipleSources ? [descriptor, .init(id: "demo-calendar-work", title: "Work", colorHex: "#4868A8", allowsContentModifications: true)] : [descriptor]
+        return descriptors
     }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
@@ -56,6 +58,13 @@ final class DemoCalendarService: CalendarServicing {
 
     func createEvent(_ draft: EventDraft) throws -> String {
         guard accessState == .granted else { throw DemoCreateError.failed }
+        let destination: CalendarDescriptor
+        if let calendarID = draft.calendarID {
+            guard let match = descriptors.first(where: { $0.id == calendarID }), match.allowsContentModifications else { throw DemoCreateError.failed }
+            destination = match
+        } else {
+            destination = descriptor
+        }
         if shouldFailNextCreate {
             shouldFailNextCreate = false
             throw DemoCreateError.failed
@@ -68,13 +77,20 @@ final class DemoCalendarService: CalendarServicing {
                 start: draft.start,
                 end: draft.end,
                 isAllDay: draft.isAllDay,
-                calendarID: descriptor.id,
-                calendarTitle: descriptor.title,
-                allowsModification: true,
+                calendarID: destination.id,
+                calendarTitle: destination.title,
+                allowsModification: destination.allowsContentModifications,
                 hasRecurrence: false
             )
         )
         return id
+    }
+
+    private var descriptors: [CalendarDescriptor] {
+        var values = [descriptor]
+        if multipleSources { values.append(.init(id: "demo-calendar-work", title: "Work", colorHex: "#4868A8", allowsContentModifications: true)) }
+        if includeReadOnlySource { values.append(.init(id: "demo-calendar-read-only", title: "Read Only", colorHex: "#777777", allowsContentModifications: false)) }
+        return values
     }
 }
 
@@ -105,15 +121,22 @@ final class DemoRemindersService: RemindersServicing {
         allowsContentModifications: true
     )
     private var shouldFailNextCreate: Bool
+    private let multipleSources: Bool
+    private let includeReadOnlySource: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false) { accessState = access; shouldFailNextCreate = failFirstCreate }
+    init(access: AccessState, failFirstCreate: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false) {
+        accessState = access
+        shouldFailNextCreate = failFirstCreate
+        self.multipleSources = multipleSources
+        self.includeReadOnlySource = includeReadOnlySource
+    }
 
     func requestFullAccess() async -> AccessState {
         if accessState == .notDetermined { accessState = .granted }
         return accessState
     }
 
-    func lists() -> [ReminderListDescriptor] { accessState == .granted ? [descriptor] : [] }
+    func lists() -> [ReminderListDescriptor] { accessState == .granted ? descriptors : [] }
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
         guard accessState == .granted else { return [] }
@@ -122,6 +145,13 @@ final class DemoRemindersService: RemindersServicing {
 
     func createReminder(_ draft: ReminderDraft) throws -> String {
         guard accessState == .granted else { throw DemoCreateError.failed }
+        let destination: ReminderListDescriptor
+        if let listID = draft.listID {
+            guard let match = descriptors.first(where: { $0.id == listID }), match.allowsContentModifications else { throw DemoCreateError.failed }
+            destination = match
+        } else {
+            destination = descriptor
+        }
         if shouldFailNextCreate { shouldFailNextCreate = false; throw DemoCreateError.failed }
         let id = "demo-task-\(values.count + 1)"
         values.append(
@@ -132,14 +162,21 @@ final class DemoRemindersService: RemindersServicing {
                 dueDate: draft.dueDate,
                 dueHasTime: draft.dueHasTime,
                 priority: draft.priority,
-                listID: descriptor.id,
-                listTitle: descriptor.title,
+                listID: destination.id,
+                listTitle: destination.title,
                 isCompleted: false,
                 allowsModification: true,
                 hasRecurrence: false
             )
         )
         return id
+    }
+
+    private var descriptors: [ReminderListDescriptor] {
+        var descriptors = [descriptor]
+        if multipleSources { descriptors.append(.init(id: "demo-list-alternate", title: "Alternate", colorHex: "#4868A8", allowsContentModifications: true)) }
+        if includeReadOnlySource { descriptors.append(.init(id: "demo-list-read-only", title: "Read Only", colorHex: "#777777", allowsContentModifications: false)) }
+        return descriptors
     }
 
     func setCompleted(id: String, completed: Bool) throws {

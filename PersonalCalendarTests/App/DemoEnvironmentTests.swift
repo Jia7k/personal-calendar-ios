@@ -43,6 +43,12 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertEqual(try subject.fetchEvents(in: interval, calendarIDs: ["demo-calendar"]).map(\.title), ["Coffee"])
     }
 
+    func testMultiSourceDemoEnvironmentIncludesAlternateReminderList() {
+        let environment = AppEnvironment.demo(container: makeContainer(), arguments: ["-demo-multiple-sources"])
+
+        XCTAssertEqual(environment.reminders.lists().map(\.id), ["demo-list", "demo-list-alternate"])
+    }
+
     func testDeniedAndRestrictedDemoRequestsAndMutationsDoNotGrantOrChangeContent() async throws {
         for access in [AccessState.denied, .restricted] {
             let calendar = DemoCalendarService(access: access)
@@ -68,6 +74,21 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertEqual(id, "demo-event-2")
         XCTAssertEqual(fetched.map(\.id), ["demo-event-2"])
         XCTAssertEqual(fetched.first?.title, "Walk")
+        XCTAssertEqual(fetched.first?.calendarID, "demo-calendar")
+        XCTAssertEqual(fetched.first?.calendarTitle, "Personal")
+    }
+
+    func testDemoEventCreationUsesExactWritableDestinationAndRejectsInvalidIDs() throws {
+        let subject = DemoCalendarService(access: .granted, multipleSources: true, includeReadOnlySource: true)
+        let start = Date(timeIntervalSince1970: 20_000)
+
+        let id = try subject.createEvent(.init(title: "Work", start: start, end: start.addingTimeInterval(600), isAllDay: false, calendarID: "demo-calendar-work"))
+
+        let fetched = try subject.fetchEvents(in: DateInterval(start: start.addingTimeInterval(-1), end: start.addingTimeInterval(601)), calendarIDs: ["demo-calendar-work"])
+        XCTAssertEqual(fetched.first(where: { $0.id == id })?.calendarID, "demo-calendar-work")
+        XCTAssertEqual(fetched.first(where: { $0.id == id })?.calendarTitle, "Work")
+        XCTAssertThrowsError(try subject.createEvent(.init(title: "Missing", start: start, end: start.addingTimeInterval(60), isAllDay: false, calendarID: "missing")))
+        XCTAssertThrowsError(try subject.createEvent(.init(title: "Read only", start: start, end: start.addingTimeInterval(60), isAllDay: false, calendarID: "demo-calendar-read-only")))
     }
 
     func testDemoReminderCreationAndCompletionPersistInFetchedReminders() async throws {
@@ -79,6 +100,20 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertEqual(fetched.map(\.id), ["demo-task", "demo-task-2"])
         XCTAssertEqual(fetched.first(where: { $0.id == id })?.title, "Call")
         XCTAssertEqual(fetched.first(where: { $0.id == id })?.isCompleted, true)
+        XCTAssertEqual(fetched.first(where: { $0.id == id })?.listID, "demo-list")
+        XCTAssertEqual(fetched.first(where: { $0.id == id })?.listTitle, "Tasks")
+    }
+
+    func testDemoReminderCreationUsesExactWritableDestinationAndRejectsInvalidIDs() async throws {
+        let subject = DemoRemindersService(access: .granted, multipleSources: true, includeReadOnlySource: true)
+
+        let id = try subject.createReminder(.init(title: "Alternate", notes: nil, dueDate: nil, priority: 1, listID: "demo-list-alternate"))
+
+        let fetched = try await subject.fetchReminders(listIDs: ["demo-list-alternate"])
+        XCTAssertEqual(fetched.first(where: { $0.id == id })?.listID, "demo-list-alternate")
+        XCTAssertEqual(fetched.first(where: { $0.id == id })?.listTitle, "Alternate")
+        XCTAssertThrowsError(try subject.createReminder(.init(title: "Missing", notes: nil, dueDate: nil, priority: 1, listID: "missing")))
+        XCTAssertThrowsError(try subject.createReminder(.init(title: "Read only", notes: nil, dueDate: nil, priority: 1, listID: "demo-list-read-only")))
     }
 
     func testDemoRoutineMutationsPersist() throws {
