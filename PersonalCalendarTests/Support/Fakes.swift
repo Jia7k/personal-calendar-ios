@@ -132,6 +132,7 @@ final class FakeRemindersService: RemindersServicing {
     var fetchError: Error?
     var createdDrafts: [ReminderDraft] = []
     var completedCalls: [CompletionCall] = []
+    var completionError: Error?
 
     init(
         access: AccessState,
@@ -167,7 +168,12 @@ final class FakeRemindersService: RemindersServicing {
     }
 
     func setCompleted(id: String, completed: Bool) throws {
+        if let completionError { throw completionError }
         completedCalls.append(.init(id: id, completed: completed))
+        if let index = reminders.firstIndex(where: { $0.id == id }) {
+            let old = reminders[index]
+            reminders[index] = .init(id: old.id, title: old.title, notes: old.notes, dueDate: old.dueDate, dueHasTime: old.dueHasTime, priority: old.priority, listID: old.listID, listTitle: old.listTitle, isCompleted: completed, allowsModification: old.allowsModification, hasRecurrence: old.hasRecurrence)
+        }
     }
 }
 

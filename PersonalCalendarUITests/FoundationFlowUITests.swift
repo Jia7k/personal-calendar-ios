@@ -62,4 +62,13 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Dentist Updated"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Dentist"].exists)
     }
+
+    func testTodayTabShowsDemoAgenda() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(app.staticTexts["Schedule"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Coffee"].exists || app.staticTexts["Buy milk"].exists)
+    }
 }

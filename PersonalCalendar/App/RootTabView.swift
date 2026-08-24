@@ -13,7 +13,7 @@ struct RootTabView: View {
             CalendarHomeView(environment: environment)
                 .tabItem { Label("Calendar", systemImage: "calendar") }
                 .tag(RootTab.calendar)
-            NavigationStack { Text("Today") }
+            TodayView(environment: environment)
                 .tabItem { Label("Today", systemImage: "sun.max") }
                 .tag(RootTab.today)
             NavigationStack { Text("Tasks") }

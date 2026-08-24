@@ -8,6 +8,12 @@ enum AgendaPlacement: Equatable, Sendable {
     case allDay, timed(Date), window(RoutineWindow), unscheduled
 }
 
+enum AgendaItemOrigin: Equatable, Sendable {
+    case event(id: String)
+    case reminder(id: String)
+    case routine(id: UUID, day: LocalDay)
+}
+
 struct AgendaItem: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
@@ -17,6 +23,13 @@ struct AgendaItem: Identifiable, Equatable, Sendable {
     let priority: Int
     let isCompleted: Bool
     let allowsModification: Bool
+    let origin: AgendaItemOrigin
+
+    init(id: String, title: String, source: AgendaSource, placement: AgendaPlacement, sortDate: Date?, priority: Int, isCompleted: Bool, allowsModification: Bool, origin: AgendaItemOrigin? = nil) {
+        self.id = id; self.title = title; self.source = source; self.placement = placement; self.sortDate = sortDate
+        self.priority = priority; self.isCompleted = isCompleted; self.allowsModification = allowsModification
+        self.origin = origin ?? .event(id: id)
+    }
 }
 
 extension AgendaItem {
@@ -37,6 +50,7 @@ extension AgendaItem {
             priority: reminder.priority,
             isCompleted: reminder.isCompleted,
             allowsModification: reminder.allowsModification
+            , origin: .reminder(id: reminder.id)
         )
     }
 
@@ -50,6 +64,7 @@ extension AgendaItem {
             priority: 0,
             isCompleted: false,
             allowsModification: event.allowsModification
+            , origin: .event(id: event.id)
         )
     }
 
@@ -67,6 +82,7 @@ extension AgendaItem {
             priority: 0,
             isCompleted: completed,
             allowsModification: true
+            , origin: .routine(id: routine.id, day: day)
         )
     }
 
