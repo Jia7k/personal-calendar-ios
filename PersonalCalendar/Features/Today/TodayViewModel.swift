@@ -72,7 +72,7 @@ final class TodayViewModel {
         showsRemindersPermissionCard = reminders.accessState != .granted
         if calendar.accessState == .granted {
             do {
-                cachedEvents = try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: settings.selectedCalendarIDs)
+                cachedEvents = try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: settings.visibleCalendarIDs(availableIDs: Set(calendar.calendars().map(\.id))))
                 calendarError = nil
             } catch {
                 calendarError = "Calendar events could not be refreshed. Pull to try again."
@@ -83,7 +83,7 @@ final class TodayViewModel {
         }
         if reminders.accessState == .granted {
             do {
-                cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
+                cachedReminders = try await reminders.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id))))
                 remindersError = nil
             } catch {
                 remindersError = "Tasks could not be refreshed. Pull to try again."
@@ -121,7 +121,7 @@ final class TodayViewModel {
             }
             compose(day: localDay, calendar: calendarProvider())
             do {
-                cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
+                cachedReminders = try await reminders.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id))))
                 remindersError = nil
             } catch {
                 remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
@@ -148,7 +148,7 @@ final class TodayViewModel {
             if !cachedReminders.contains(where: { $0.id == undo.rawID }) { cachedReminders.append(restoredSnapshot) }
             compose(day: localDay, calendar: calendarProvider())
             do {
-                cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
+                cachedReminders = try await reminders.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id))))
                 remindersError = nil
             } catch {
                 remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
@@ -190,8 +190,8 @@ final class TodayViewModel {
     }
 
     private func compose(day: LocalDay, calendar: Calendar) {
-        let events = cachedEvents.filter { settings.selectedCalendarIDs.isEmpty || settings.selectedCalendarIDs.contains($0.calendarID) }
-        let reminders = cachedReminders.filter { settings.selectedReminderListIDs.isEmpty || settings.selectedReminderListIDs.contains($0.listID) }
+        let events = cachedEvents.filter { settings.visibleCalendarIDs(availableIDs: Set(self.calendar.calendars().map(\.id))).contains($0.calendarID) }
+        let reminders = cachedReminders.filter { settings.visibleReminderListIDs(availableIDs: Set(self.reminders.lists().map(\.id))).contains($0.listID) }
         let completed = Set(cachedRoutines.filter { cachedRoutineDays[$0.id]?.contains(day) == true }.map(\.id))
         agenda = composer.compose(day: day, events: events, reminders: reminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: true, calendar: calendar)
     }

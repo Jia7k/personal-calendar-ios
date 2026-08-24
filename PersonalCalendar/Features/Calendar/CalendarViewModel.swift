@@ -52,7 +52,7 @@ final class CalendarViewModel {
         let interval = DateInterval(start: cells.first!.day.startDate(in: systemCalendar), end: systemCalendar.date(byAdding: .day, value: 1, to: cells.last!.day.startDate(in: systemCalendar))!)
 
         if calendarService.accessState == .granted {
-            do { cachedEvents = try calendarService.fetchEvents(in: interval, calendarIDs: settings.selectedCalendarIDs) }
+            do { cachedEvents = try calendarService.fetchEvents(in: interval, calendarIDs: settings.visibleCalendarIDs(availableIDs: Set(calendarService.calendars().map(\.id)))) }
             catch { encounteredFailure = true }
         } else {
             cachedEvents = []
@@ -60,7 +60,7 @@ final class CalendarViewModel {
         }
 
         if remindersService.accessState == .granted {
-            do { cachedReminders = try await remindersService.fetchReminders(listIDs: settings.selectedReminderListIDs) }
+            do { cachedReminders = try await remindersService.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(remindersService.lists().map(\.id)))) }
             catch { encounteredFailure = true }
         } else {
             cachedReminders = []

@@ -33,10 +33,12 @@ struct AppEnvironment {
     }
 
     static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
-        let calendarAccess: AccessState = arguments.contains("-calendar-denied") ? .denied : .granted
+        let calendarAccess: AccessState = arguments.contains("-calendar-restricted") ? .restricted : arguments.contains("-calendar-denied") ? .denied : .granted
         let calendar = DemoCalendarService(access: calendarAccess, failFirstCreate: arguments.contains("-event-save-fails-once"))
-        let reminders = DemoRemindersService(access: .granted, failFirstCreate: arguments.contains("-task-save-fails-once"))
-        let notifications = DemoNotificationAuthorizer(access: .granted)
+        let reminderAccess: AccessState = arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
+        let reminders = DemoRemindersService(access: reminderAccess, failFirstCreate: arguments.contains("-task-save-fails-once"))
+        let notificationAccess: AccessState = arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
+        let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let permissions = PermissionCoordinator(
             calendar: calendar,
             reminders: reminders,
@@ -49,7 +51,7 @@ struct AppEnvironment {
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(),
-            settings: AppSettingsStore(defaults: .ephemeral)
+            settings: { let settings = AppSettingsStore(defaults: .ephemeral); settings.didCompleteOnboarding = !arguments.contains("-show-onboarding"); return settings }()
         )
     }
 }

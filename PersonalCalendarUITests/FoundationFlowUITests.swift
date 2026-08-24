@@ -2,6 +2,18 @@ import XCTest
 
 @MainActor
 final class FoundationFlowUITests: XCTestCase {
+    func testSettingsExplainsDeniedCalendarWithoutBlockingRoutines() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-denied"]
+        app.launch()
+
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.staticTexts["Calendar access is off"].waitForExistence(timeout: 2))
+        app.buttons["Done"].tap()
+        app.tabBars.buttons["Routines"].tap()
+        XCTAssertTrue(app.navigationBars["Routines"].exists)
+    }
+
     func testLaunchShowsFourPrimaryTabs() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing"]

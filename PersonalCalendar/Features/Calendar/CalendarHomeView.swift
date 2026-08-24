@@ -5,10 +5,12 @@ struct CalendarHomeView: View {
     @State private var viewModel: CalendarViewModel
     @State private var showingNewEvent = false
     private let environment: AppEnvironment
+    private let openSettings: @MainActor () -> Void
     private var calendar: Calendar { .current }
 
-    init(environment: AppEnvironment) {
+    init(environment: AppEnvironment, openSettings: @escaping @MainActor () -> Void = {}) {
         self.environment = environment
+        self.openSettings = openSettings
         let systemCalendar = Calendar.current
         _viewModel = State(initialValue: CalendarViewModel(today: LocalDay(date: .now, calendar: systemCalendar), calendarService: environment.calendar, remindersService: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings, systemCalendar: systemCalendar))
     }
@@ -26,7 +28,7 @@ struct CalendarHomeView: View {
             }
             .navigationTitle("Calendar")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape") {}.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
+                ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
                 ToolbarItem(placement: .topBarTrailing) { Button("New Event", systemImage: "plus") { showingNewEvent = true }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             }
             .task { await viewModel.load() }
