@@ -281,13 +281,15 @@ extension ReminderSnapshot {
 final class FakeNotificationAuthorizer: NotificationAuthorizing {
     private var state: AccessState
     private let requested: AccessState
-    private var readContinuation: CheckedContinuation<Void, Never>?
+    private var readContinuations: [CheckedContinuation<Void, Never>] = []
     private var requestContinuation: CheckedContinuation<Void, Never>?
-    private var suspendNextRead: Bool
+    var suspendNextRead: Bool
     var suspendNextRequest = false
+    private(set) var readCount = 0
+    private(set) var completedReadCount = 0
     private(set) var requestCount = 0
-    private(set) var isReadSuspended = false
     private(set) var isRequestSuspended = false
+    var isReadSuspended: Bool { !readContinuations.isEmpty }
 
     init(access: AccessState, requestedAccess: AccessState? = nil, suspendRead: Bool = false) {
         state = access
@@ -297,12 +299,12 @@ final class FakeNotificationAuthorizer: NotificationAuthorizing {
 
     var accessState: AccessState {
         get async {
+            readCount += 1
             if suspendNextRead {
                 suspendNextRead = false
-                isReadSuspended = true
-                await withCheckedContinuation { readContinuation = $0 }
-                isReadSuspended = false
+                await withCheckedContinuation { readContinuations.append($0) }
             }
+            completedReadCount += 1
             return state
         }
     }
@@ -318,6 +320,10 @@ final class FakeNotificationAuthorizer: NotificationAuthorizing {
         state = requested
         return state
     }
-    func resumeRead() { readContinuation?.resume(); readContinuation = nil }
+    func resumeRead() {
+        guard !readContinuations.isEmpty else { return }
+        readContinuations.removeFirst().resume()
+    }
     func resumeSuspendedRequest() { requestContinuation?.resume(); requestContinuation = nil }
+    func setAccessState(_ state: AccessState) { self.state = state }
 }

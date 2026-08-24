@@ -11,14 +11,25 @@ protocol NotificationAuthorizing: AnyObject {
 @MainActor
 @Observable
 final class PermissionCoordinator: PermissionRefreshing {
+    private struct RefreshSnapshot {
+        let calendar: AccessState
+        let reminders: AccessState
+        let notifications: AccessState
+        let calendarGeneration: Int
+        let remindersGeneration: Int
+        let notificationsGeneration: Int
+    }
+
     private(set) var calendarAccess: AccessState
     private(set) var remindersAccess: AccessState
     private(set) var notificationAccess: AccessState
     private(set) var isRefreshing = true
     private(set) var pendingSources: Set<String> = []
     private var sourceGenerations: [String: Int] = [:]
-    private var refreshGeneration = 0
-    private var activeRefreshGeneration: Int?
+    private var requestedRefreshGeneration = 0
+    private var completedRefreshGeneration = 0
+    private var isRefreshSequenceRunning = false
+    private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     func isPending(_ source: String) -> Bool { pendingSources.contains(source) }
 
@@ -40,31 +51,62 @@ final class PermissionCoordinator: PermissionRefreshing {
     }
 
     func refresh() async {
-        let calendarGeneration = nextGeneration(for: "calendar")
-        let remindersGeneration = nextGeneration(for: "reminders")
-        let notificationsGeneration = nextGeneration(for: "notifications")
-        refreshGeneration += 1
-        let currentRefreshGeneration = refreshGeneration
-        activeRefreshGeneration = currentRefreshGeneration
+        requestedRefreshGeneration &+= 1
+        while completedRefreshGeneration != requestedRefreshGeneration {
+            if isRefreshSequenceRunning {
+                await withCheckedContinuation { refreshWaiters.append($0) }
+            } else {
+                await runRefreshSequence()
+            }
+        }
+    }
+
+    private func runRefreshSequence() async {
+        isRefreshSequenceRunning = true
         isRefreshing = true
+        while completedRefreshGeneration != requestedRefreshGeneration {
+            let generation = requestedRefreshGeneration
+            let snapshot = await readRefreshSnapshot()
+            if generation == requestedRefreshGeneration {
+                publish(snapshot)
+            }
+            completedRefreshGeneration = generation
+        }
+        isRefreshSequenceRunning = false
+        isRefreshing = false
+        let waiters = refreshWaiters
+        refreshWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+
+    private func readRefreshSnapshot() async -> RefreshSnapshot {
+        let calendarGeneration = sourceGenerations["calendar", default: 0]
+        let remindersGeneration = sourceGenerations["reminders", default: 0]
+        let notificationsGeneration = sourceGenerations["notifications", default: 0]
         let calendarState = calendar.accessState
         let reminderState = reminders.accessState
         let notificationState = await notifications.accessState
-        defer {
-            if activeRefreshGeneration == currentRefreshGeneration {
-                activeRefreshGeneration = nil
-                isRefreshing = false
-            }
+
+        return RefreshSnapshot(
+            calendar: calendarState,
+            reminders: reminderState,
+            notifications: notificationState,
+            calendarGeneration: calendarGeneration,
+            remindersGeneration: remindersGeneration,
+            notificationsGeneration: notificationsGeneration
+        )
+    }
+
+    private func publish(_ snapshot: RefreshSnapshot) {
+        if sourceCanAcceptRefresh("calendar", generation: snapshot.calendarGeneration) {
+            calendarAccess = snapshot.calendar
         }
-        guard
-            activeRefreshGeneration == currentRefreshGeneration,
-            sourceGenerations["calendar"] == calendarGeneration,
-            sourceGenerations["reminders"] == remindersGeneration,
-            sourceGenerations["notifications"] == notificationsGeneration
-        else { return }
-        calendarAccess = calendarState
-        remindersAccess = reminderState
-        notificationAccess = notificationState
+        if sourceCanAcceptRefresh("reminders", generation: snapshot.remindersGeneration) {
+            remindersAccess = snapshot.reminders
+        }
+        if sourceCanAcceptRefresh("notifications", generation: snapshot.notificationsGeneration) {
+            notificationAccess = snapshot.notifications
+        }
     }
 
     func requestCalendar() async {
@@ -74,6 +116,7 @@ final class PermissionCoordinator: PermissionRefreshing {
         let state = await calendar.requestFullAccess()
         guard sourceGenerations["calendar"] == generation else { return }
         calendarAccess = state
+        _ = nextGeneration(for: "calendar")
     }
 
     func requestReminders() async {
@@ -83,6 +126,7 @@ final class PermissionCoordinator: PermissionRefreshing {
         let state = await reminders.requestFullAccess()
         guard sourceGenerations["reminders"] == generation else { return }
         remindersAccess = state
+        _ = nextGeneration(for: "reminders")
     }
 
     func requestNotifications() async {
@@ -92,6 +136,11 @@ final class PermissionCoordinator: PermissionRefreshing {
         let state = await notifications.requestAccess()
         guard sourceGenerations["notifications"] == generation else { return }
         notificationAccess = state
+        _ = nextGeneration(for: "notifications")
+    }
+
+    private func sourceCanAcceptRefresh(_ source: String, generation: Int) -> Bool {
+        sourceGenerations[source, default: 0] == generation && !pendingSources.contains(source)
     }
 
     private func nextGeneration(for source: String) -> Int {

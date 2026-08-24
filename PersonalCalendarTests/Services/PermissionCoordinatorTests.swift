@@ -110,39 +110,59 @@ final class PermissionCoordinatorTests: XCTestCase {
         XCTAssertFalse(subject.isPending("notifications"))
     }
 
-    func testSuspendedRefreshCannotOverwriteNewerCalendarRequest() async {
+    func testRequestStartedDuringRefreshPreservesCalendarAndPublishesOtherSources() async {
         let calendar = FakeCalendarService(access: .notDetermined, requestedAccess: .granted)
-        let reminders = FakeRemindersService(access: .notDetermined)
-        let notifications = FakeNotificationAuthorizer(access: .notDetermined, suspendRead: true)
+        calendar.suspendNextRequest = true
+        let reminders = FakeRemindersService(access: .restricted)
+        let notifications = FakeNotificationAuthorizer(access: .denied, suspendRead: true)
         let subject = PermissionCoordinator(calendar: calendar, reminders: reminders, notifications: notifications)
 
         let refresh = Task { await subject.refresh() }
         await Task.yield()
         XCTAssertTrue(notifications.isReadSuspended)
-        await subject.requestCalendar()
+        let request = Task { await subject.requestCalendar() }
+        await Task.yield()
+        XCTAssertTrue(calendar.isRequestSuspended)
+        XCTAssertTrue(subject.isPending("calendar"))
         notifications.resumeRead()
         await refresh.value
 
-        XCTAssertEqual(subject.calendarAccess, .granted)
+        XCTAssertEqual(subject.calendarAccess, .notDetermined)
+        XCTAssertEqual(subject.remindersAccess, .restricted)
+        XCTAssertEqual(subject.notificationAccess, .denied)
         XCTAssertFalse(subject.isRefreshing)
+        XCTAssertTrue(subject.isPending("calendar"))
+        calendar.resumeSuspendedRequest()
+        await request.value
+        XCTAssertEqual(subject.calendarAccess, .granted)
+        XCTAssertFalse(subject.isPending("calendar"))
     }
 
-    func testSuspendedRequestCannotOverwriteNewerRefresh() async {
+    func testRefreshDuringSuspendedRequestKeepsPromptAuthoritativeAndPublishesOtherSources() async {
         let calendar = FakeCalendarService(access: .notDetermined, requestedAccess: .granted)
         calendar.suspendNextRequest = true
-        let reminders = FakeRemindersService(access: .notDetermined)
-        let notifications = FakeNotificationAuthorizer(access: .notDetermined)
+        let reminders = FakeRemindersService(access: .restricted)
+        let notifications = FakeNotificationAuthorizer(access: .denied, suspendRead: true)
         let subject = PermissionCoordinator(calendar: calendar, reminders: reminders, notifications: notifications)
 
         let request = Task { await subject.requestCalendar() }
         await Task.yield()
         XCTAssertTrue(calendar.isRequestSuspended)
-        calendar.accessState = .denied
-        await subject.refresh()
+        let refresh = Task { await subject.refresh() }
+        await Task.yield()
+        XCTAssertTrue(notifications.isReadSuspended)
         calendar.resumeSuspendedRequest()
         await request.value
 
-        XCTAssertEqual(subject.calendarAccess, .denied)
+        XCTAssertEqual(subject.calendarAccess, .granted)
+        XCTAssertFalse(subject.isPending("calendar"))
+        XCTAssertTrue(subject.isRefreshing)
+        notifications.resumeRead()
+        await refresh.value
+
+        XCTAssertEqual(subject.calendarAccess, .granted)
+        XCTAssertEqual(subject.remindersAccess, .restricted)
+        XCTAssertEqual(subject.notificationAccess, .denied)
         XCTAssertFalse(subject.isRefreshing)
         XCTAssertFalse(subject.isPending("calendar"))
     }
