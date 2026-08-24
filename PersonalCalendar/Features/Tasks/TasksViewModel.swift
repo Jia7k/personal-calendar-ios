@@ -46,8 +46,8 @@ final class TasksViewModel {
     }
 
     func load() async {
-        guard service.accessState == .granted else { confirmed = []; publish(); refreshErrorMessage = nil; return }
         loadGeneration += 1; let generation = loadGeneration
+        guard service.accessState == .granted else { confirmed = []; publish(); refreshErrorMessage = nil; isLoading = false; return }
         isLoading = true; defer { if generation == loadGeneration { isLoading = false } }
         do {
             let fetched = try await service.fetchReminders(listIDs: settings.selectedReminderListIDs)
@@ -63,6 +63,7 @@ final class TasksViewModel {
 
     func create(_ draft: ReminderDraft) async -> Bool {
         guard !isSaving else { return false }
+        guard service.accessState == .granted else { createErrorMessage = "Allow Reminders access before creating a task."; return false }
         guard isValid(draft), let listID = resolvedListID(for: draft) else { createErrorMessage = "Enter a title and choose a writable reminder list."; return false }
         isSaving = true; defer { isSaving = false }
         var saved = draft; saved.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines); saved.listID = listID

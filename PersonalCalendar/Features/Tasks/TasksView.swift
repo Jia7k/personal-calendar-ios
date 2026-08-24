@@ -15,7 +15,7 @@ struct TasksView: View {
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
             }
             .navigationTitle("Tasks")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Task", systemImage: "plus") { showingNewTask = true }.frame(minWidth: 44, minHeight: 44) } }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Task", systemImage: "plus") { showingNewTask = true }.disabled(model.accessExplanation != nil).frame(minWidth: 44, minHeight: 44) } }
             .sheet(isPresented: $showingNewTask) { NewTaskSheet(model: model) }
             .task { await model.load() }
             .refreshable { await model.load() }

@@ -412,6 +412,13 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertTrue(explicit); XCTAssertTrue(fallback); XCTAssertEqual(service.createdDrafts.map(\.listID), ["a", "b"])
     }
 
+    func testDeniedTaskLoadInvalidatesSuspendedGrantedFetch() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "task", title: "Task", due: now, hasTime: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        service.suspendNextFetch = true; let old = Task { await subject.load() }; for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        service.accessState = .denied; await subject.load(); XCTAssertTrue(subject.today.isEmpty); XCTAssertNotNil(subject.accessExplanation); service.resumeSuspendedFetch(); await old.value
+        XCTAssertTrue(subject.today.isEmpty); XCTAssertNil(subject.refreshErrorMessage)
+    }
+
     func testRoutineSecondHistoryFailureKeepsPriorRowsAndCompletedCacheAtomic() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let weekday = calendar.component(.weekday, from: now)
         let first = RoutineSnapshot(id: UUID(), title: "First", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
