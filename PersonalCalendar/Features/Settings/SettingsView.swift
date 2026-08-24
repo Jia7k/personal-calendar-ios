@@ -6,7 +6,6 @@ struct SettingsView: View {
     let openSystemSettings: @MainActor () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var loading = true
-    @State private var pending: String?
     init(environment: AppEnvironment, openSystemSettings: @escaping @MainActor () -> Void = { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }) { self.environment = environment; self.openSystemSettings = openSystemSettings }
     var body: some View {
         NavigationStack { List {
@@ -36,7 +35,7 @@ struct SettingsView: View {
             case .granted: PermissionCard(title: "\(source) access is on", explanation: "This source is available.", actionTitle: nil, action: nil)
             case .restricted: PermissionCard(title: "\(source) access is restricted", explanation: "This access is controlled by your device or account.", actionTitle: nil, action: nil)
             case .denied: PermissionCard(title: "\(source) access is off", explanation: "Allow access in System Settings.", actionTitle: "Open System Settings", action: openSystemSettings)
-            case .notDetermined: PermissionCard(title: "Allow \(source)", explanation: "You can choose this later.", actionTitle: "Allow", action: { pending = source; Task { await request(); pending = nil } }).disabled(loading || pending != nil)
+            case .notDetermined: PermissionCard(title: "Allow \(source)", explanation: "You can choose this later.", actionTitle: "Allow", action: { Task { await request() } }).disabled(loading || environment.permissions.isPending(source.lowercased()))
             }
         }
     }

@@ -18,6 +18,8 @@ final class PermissionCoordinator {
     private(set) var pendingSources: Set<String> = []
     private var generation = 0
 
+    func isPending(_ source: String) -> Bool { pendingSources.contains(source) }
+
     private let calendar: any CalendarServicing
     private let reminders: any RemindersServicing
     private let notifications: any NotificationAuthorizing
@@ -50,18 +52,21 @@ final class PermissionCoordinator {
 
     func requestCalendar() async {
         guard calendarAccess == .notDetermined, !pendingSources.contains("calendar") else { return }
+        generation += 1
         pendingSources.insert("calendar"); defer { pendingSources.remove("calendar") }
         calendarAccess = await calendar.requestFullAccess()
     }
 
     func requestReminders() async {
         guard remindersAccess == .notDetermined, !pendingSources.contains("reminders") else { return }
+        generation += 1
         pendingSources.insert("reminders"); defer { pendingSources.remove("reminders") }
         remindersAccess = await reminders.requestFullAccess()
     }
 
     func requestNotifications() async {
         guard notificationAccess == .notDetermined, !pendingSources.contains("notifications") else { return }
+        generation += 1
         pendingSources.insert("notifications"); defer { pendingSources.remove("notifications") }
         notificationAccess = await notifications.requestAccess()
     }

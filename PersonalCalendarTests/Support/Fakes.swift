@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class FakeCalendarService: CalendarServicing {
     var accessState: AccessState
+    private(set) var requestCount = 0
     var requestedAccess: AccessState
     var events: [CalendarEventSnapshot]
     var descriptors: [CalendarDescriptor]
@@ -28,6 +29,7 @@ final class FakeCalendarService: CalendarServicing {
     }
 
     func requestFullAccess() async -> AccessState {
+        requestCount += 1
         accessState = requestedAccess
         return accessState
     }
@@ -152,6 +154,7 @@ final class FakeRoutineRepository: RoutineRepository {
 @MainActor
 final class FakeRemindersService: RemindersServicing {
     var accessState: AccessState
+    private(set) var requestCount = 0
     var requestedAccess: AccessState
     var reminders: [ReminderSnapshot]
     var descriptors: [ReminderListDescriptor]
@@ -184,6 +187,7 @@ final class FakeRemindersService: RemindersServicing {
     }
 
     func requestFullAccess() async -> AccessState {
+        requestCount += 1
         accessState = requestedAccess
         return accessState
     }
@@ -251,18 +255,22 @@ extension ReminderSnapshot {
 final class FakeNotificationAuthorizer: NotificationAuthorizing {
     private var state: AccessState
     private let requested: AccessState
+    private var readContinuation: CheckedContinuation<Void, Never>?
+    private let suspendRead: Bool
 
-    init(access: AccessState, requestedAccess: AccessState? = nil) {
+    init(access: AccessState, requestedAccess: AccessState? = nil, suspendRead: Bool = false) {
         state = access
         requested = requestedAccess ?? access
+        self.suspendRead = suspendRead
     }
 
     var accessState: AccessState {
-        get async { state }
+        get async { if suspendRead { await withCheckedContinuation { readContinuation = $0 } }; return state }
     }
 
     func requestAccess() async -> AccessState {
         state = requested
         return state
     }
+    func resumeRead() { readContinuation?.resume(); readContinuation = nil }
 }

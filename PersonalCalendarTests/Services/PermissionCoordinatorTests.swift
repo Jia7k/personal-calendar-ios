@@ -3,6 +3,34 @@ import XCTest
 
 @MainActor
 final class PermissionCoordinatorTests: XCTestCase {
+    func testDuplicateRequestOnlyCallsMatchingSourceOnce() async {
+        let calendar = FakeCalendarService(access: .notDetermined, requestedAccess: .granted)
+        let reminders = FakeRemindersService(access: .notDetermined, requestedAccess: .granted)
+        let notifications = FakeNotificationAuthorizer(access: .granted)
+        let subject = PermissionCoordinator(calendar: calendar, reminders: reminders, notifications: notifications)
+        await subject.refresh()
+        async let first: Void = subject.requestCalendar()
+        async let second: Void = subject.requestCalendar()
+        _ = await (first, second)
+        XCTAssertEqual(calendar.requestCount, 1)
+        await subject.requestReminders()
+        XCTAssertEqual(reminders.requestCount, 1)
+    }
+
+    func testRefreshDoesNotPublishPartialStateWhileNotificationIsSuspended() async {
+        let calendar = FakeCalendarService(access: .denied)
+        let reminders = FakeRemindersService(access: .restricted)
+        let notifications = FakeNotificationAuthorizer(access: .granted, suspendRead: true)
+        let subject = PermissionCoordinator(calendar: calendar, reminders: reminders, notifications: notifications)
+        let task = Task { await subject.refresh() }
+        await Task.yield()
+        XCTAssertTrue(subject.isRefreshing)
+        XCTAssertEqual(subject.calendarAccess, .denied)
+        XCTAssertEqual(subject.remindersAccess, .restricted)
+        notifications.resumeRead()
+        await task.value
+        XCTAssertEqual(subject.notificationAccess, .granted)
+    }
     func testDeniedCalendarDoesNotBlockGrantedReminders() async {
         let calendar = FakeCalendarService(access: .denied)
         let reminders = FakeRemindersService(access: .notDetermined, requestedAccess: .granted)
