@@ -60,8 +60,9 @@ final class CalendarViewModel {
 
         if calendarService.accessState == .granted {
             do {
-                let ids = settings.visibleCalendarIDs(availableIDs: Set(calendarService.calendars().map(\.id)))
-                nextEvents = ids.isEmpty ? [] : try calendarService.fetchEvents(in: interval, calendarIDs: ids)
+                let descriptorIDs = Set(calendarService.calendars().map(\.id))
+                let ids = descriptorIDs.isEmpty ? settings.selectedCalendarIDs : settings.visibleCalendarIDs(availableIDs: descriptorIDs)
+                nextEvents = settings.calendarSelectionIsExplicit && ids.isEmpty ? [] : try calendarService.fetchEvents(in: interval, calendarIDs: ids)
                 if settings.calendarSelectionIsExplicit { nextEvents = nextEvents.filter { ids.contains($0.calendarID) } }
             }
             catch { encounteredFailure = true }
@@ -72,8 +73,9 @@ final class CalendarViewModel {
 
         if remindersService.accessState == .granted {
             do {
-                let ids = settings.visibleReminderListIDs(availableIDs: Set(remindersService.lists().map(\.id)))
-                nextReminders = ids.isEmpty ? [] : try await remindersService.fetchReminders(listIDs: ids)
+                let descriptorIDs = Set(remindersService.lists().map(\.id))
+                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
+                nextReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await remindersService.fetchReminders(listIDs: ids)
                 if settings.reminderSelectionIsExplicit { nextReminders = nextReminders.filter { ids.contains($0.listID) } }
             }
             catch { encounteredFailure = true }

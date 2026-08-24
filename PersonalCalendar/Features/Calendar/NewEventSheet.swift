@@ -54,7 +54,7 @@ struct NewEventSheet: View {
         }
     }
 
-    private var writableCalendars: [CalendarDescriptor] { calendarService.calendars().filter(\.allowsContentModifications) }
+    private var writableCalendars: [CalendarDescriptor] { SourceDescriptorOrdering.calendars(calendarService.calendars().filter(\.allowsContentModifications)) }
     private var draft: EventDraft { EventDraft(title: title, start: start, end: end, isAllDay: isAllDay, calendarID: calendarID) }
     private var isValid: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && calendarID != nil && end > start }
     private var validationMessage: String {

@@ -83,8 +83,9 @@ final class TodayViewModel {
         let nextRemindersCard = reminders.accessState != .granted
         if calendar.accessState == .granted {
             do {
-                let ids = settings.visibleCalendarIDs(availableIDs: Set(calendar.calendars().map(\.id)))
-                nextEvents = ids.isEmpty ? [] : try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: ids)
+                let descriptorIDs = Set(calendar.calendars().map(\.id))
+                let ids = descriptorIDs.isEmpty ? settings.selectedCalendarIDs : settings.visibleCalendarIDs(availableIDs: descriptorIDs)
+                nextEvents = settings.calendarSelectionIsExplicit && ids.isEmpty ? [] : try calendar.fetchEvents(in: DateInterval(start: start, end: end), calendarIDs: ids)
             } catch {
                 nextCalendarError = "Calendar events could not be refreshed. Pull to try again."
             }
@@ -93,8 +94,9 @@ final class TodayViewModel {
         }
         if reminders.accessState == .granted {
             do {
-                let ids = settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id)))
-                nextReminders = ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
+                let descriptorIDs = Set(reminders.lists().map(\.id))
+                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
+                nextReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
             } catch {
                 nextRemindersError = "Tasks could not be refreshed. Pull to try again."
             }
@@ -138,7 +140,9 @@ final class TodayViewModel {
             }
             compose(day: localDay, calendar: calendarProvider())
             do {
-                cachedReminders = try await reminders.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id))))
+                let descriptorIDs = Set(reminders.lists().map(\.id))
+                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
+                cachedReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
                 remindersError = nil
             } catch {
                 remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
@@ -165,7 +169,11 @@ final class TodayViewModel {
             if !cachedReminders.contains(where: { $0.id == undo.rawID }) { cachedReminders.append(restoredSnapshot) }
             compose(day: localDay, calendar: calendarProvider())
             do {
-                cachedReminders = try await reminders.fetchReminders(listIDs: settings.visibleReminderListIDs(availableIDs: Set(reminders.lists().map(\.id))))
+                let descriptorIDs = Set(reminders.lists().map(\.id))
+                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
+                let refreshed = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await reminders.fetchReminders(listIDs: ids)
+                guard latestTaskUndo?.generation == generation else { return }
+                cachedReminders = refreshed
                 remindersError = nil
             } catch {
                 remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."

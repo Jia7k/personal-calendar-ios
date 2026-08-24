@@ -9,6 +9,7 @@ final class FakeCalendarService: CalendarServicing {
     var events: [CalendarEventSnapshot]
     var descriptors: [CalendarDescriptor]
     var createdDrafts: [EventDraft] = []
+    private(set) var fetchCalendarIDs: [Set<String>] = []
     var fetchError: Error?
     var createError: Error?
     var suspendNextRequest = false
@@ -48,6 +49,7 @@ final class FakeCalendarService: CalendarServicing {
     func calendars() -> [CalendarDescriptor] { descriptors }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
+        fetchCalendarIDs.append(calendarIDs)
         if let fetchError { throw fetchError }
         return events.filter { calendarIDs.isEmpty || calendarIDs.contains($0.calendarID) }
     }

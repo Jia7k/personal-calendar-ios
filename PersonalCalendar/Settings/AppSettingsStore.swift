@@ -1,6 +1,18 @@
 import Foundation
 import Observation
 
+enum SourceDescriptorOrdering {
+    static func calendars(_ values: [CalendarDescriptor]) -> [CalendarDescriptor] { values.sorted(by: areInAscendingOrder) }
+    static func reminderLists(_ values: [ReminderListDescriptor]) -> [ReminderListDescriptor] { values.sorted(by: areInAscendingOrder) }
+
+    private static func areInAscendingOrder(id leftID: String, title leftTitle: String, id rightID: String, title rightTitle: String) -> Bool {
+        let titleOrder = leftTitle.localizedCaseInsensitiveCompare(rightTitle)
+        return titleOrder == .orderedSame ? leftID < rightID : titleOrder == .orderedAscending
+    }
+    private static func areInAscendingOrder(_ left: CalendarDescriptor, _ right: CalendarDescriptor) -> Bool { areInAscendingOrder(id: left.id, title: left.title, id: right.id, title: right.title) }
+    private static func areInAscendingOrder(_ left: ReminderListDescriptor, _ right: ReminderListDescriptor) -> Bool { areInAscendingOrder(id: left.id, title: left.title, id: right.id, title: right.title) }
+}
+
 @MainActor
 @Observable
 final class AppSettingsStore {
@@ -15,51 +27,73 @@ final class AppSettingsStore {
     }
 
     private let defaults: UserDefaults
-
-    var selectedCalendarIDs: Set<String> {
-        didSet { defaults.set(selectedCalendarIDs.sorted(), forKey: Key.selectedCalendars); calendarSelectionIsExplicit = true }
-    }
-
-    var selectedReminderListIDs: Set<String> {
-        didSet { defaults.set(selectedReminderListIDs.sorted(), forKey: Key.selectedLists); reminderSelectionIsExplicit = true }
-    }
-
-    var defaultCalendarID: String? {
-        didSet { defaults.set(defaultCalendarID, forKey: Key.defaultCalendar) }
-    }
-
-    var defaultReminderListID: String? {
-        didSet { defaults.set(defaultReminderListID, forKey: Key.defaultList) }
-    }
+    private(set) var selectedCalendarIDs: Set<String>
+    private(set) var selectedReminderListIDs: Set<String>
+    private(set) var defaultCalendarID: String?
+    private(set) var defaultReminderListID: String?
     var didCompleteOnboarding: Bool { didSet { defaults.set(didCompleteOnboarding, forKey: Key.onboarding) } }
-    private(set) var calendarSelectionIsExplicit: Bool { didSet { defaults.set(calendarSelectionIsExplicit, forKey: Key.calendarsExplicit) } }
-    private(set) var reminderSelectionIsExplicit: Bool { didSet { defaults.set(reminderSelectionIsExplicit, forKey: Key.listsExplicit) } }
+    private(set) var calendarSelectionIsExplicit: Bool
+    private(set) var reminderSelectionIsExplicit: Bool
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        let storedCalendars = Set(defaults.stringArray(forKey: Key.selectedCalendars) ?? [])
-        let storedLists = Set(defaults.stringArray(forKey: Key.selectedLists) ?? [])
-        selectedCalendarIDs = storedCalendars
-        selectedReminderListIDs = storedLists
+        let storedCalendarIDs = Set(defaults.stringArray(forKey: Key.selectedCalendars) ?? [])
+        let storedReminderListIDs = Set(defaults.stringArray(forKey: Key.selectedLists) ?? [])
+        selectedCalendarIDs = storedCalendarIDs
+        selectedReminderListIDs = storedReminderListIDs
         defaultCalendarID = defaults.string(forKey: Key.defaultCalendar)
         defaultReminderListID = defaults.string(forKey: Key.defaultList)
         didCompleteOnboarding = defaults.bool(forKey: Key.onboarding)
-        // Older non-empty selections are intentional; an absent marker with an empty set remains implicit-all.
-        let inferredCalendarExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendars.isEmpty
-        let inferredListExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedLists.isEmpty
-        calendarSelectionIsExplicit = inferredCalendarExplicit
-        reminderSelectionIsExplicit = inferredListExplicit
-        // Persist migration so a future empty persisted set is never mistaken for implicit-all.
-        defaults.set(inferredCalendarExplicit, forKey: Key.calendarsExplicit)
-        defaults.set(inferredListExplicit, forKey: Key.listsExplicit)
+        calendarSelectionIsExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendarIDs.isEmpty
+        reminderSelectionIsExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedReminderListIDs.isEmpty
+        persistSelectionMarkers()
     }
 
-    func toggleCalendar(id: String, availableIDs: Set<String>) { toggle(id: id, selection: &selectedCalendarIDs, explicit: &calendarSelectionIsExplicit, availableIDs: availableIDs) }
-    func toggleReminderList(id: String, availableIDs: Set<String>) { toggle(id: id, selection: &selectedReminderListIDs, explicit: &reminderSelectionIsExplicit, availableIDs: availableIDs) }
+    func toggleCalendar(id: String, availableIDs: Set<String>) {
+        toggle(id: id, selection: &selectedCalendarIDs, explicit: &calendarSelectionIsExplicit, availableIDs: availableIDs)
+        persistCalendarSelection()
+    }
+
+    func toggleReminderList(id: String, availableIDs: Set<String>) {
+        toggle(id: id, selection: &selectedReminderListIDs, explicit: &reminderSelectionIsExplicit, availableIDs: availableIDs)
+        persistReminderSelection()
+    }
+
+    func replaceSelectedCalendarIDs(_ ids: Set<String>, availableIDs: Set<String>) {
+        replace(ids, selection: &selectedCalendarIDs, explicit: &calendarSelectionIsExplicit, availableIDs: availableIDs)
+        persistCalendarSelection()
+    }
+
+    func replaceSelectedReminderListIDs(_ ids: Set<String>, availableIDs: Set<String>) {
+        replace(ids, selection: &selectedReminderListIDs, explicit: &reminderSelectionIsExplicit, availableIDs: availableIDs)
+        persistReminderSelection()
+    }
+
     func visibleCalendarIDs(availableIDs: Set<String>) -> Set<String> { calendarSelectionIsExplicit ? selectedCalendarIDs.intersection(availableIDs) : availableIDs }
     func visibleReminderListIDs(availableIDs: Set<String>) -> Set<String> { reminderSelectionIsExplicit ? selectedReminderListIDs.intersection(availableIDs) : availableIDs }
-    func setSelectedCalendarsForTesting(_ ids: Set<String>, explicit: Bool) { selectedCalendarIDs = ids; calendarSelectionIsExplicit = explicit }
-    func setSelectedReminderListsForTesting(_ ids: Set<String>, explicit: Bool) { selectedReminderListIDs = ids; reminderSelectionIsExplicit = explicit }
+
+    func setDefaultCalendarID(_ id: String?, descriptors: [CalendarDescriptor], access: AccessState) {
+        guard access == .granted else { return }
+        defaultCalendarID = id.flatMap { candidate in descriptors.contains { $0.id == candidate && $0.allowsContentModifications } ? candidate : nil }
+        defaults.set(defaultCalendarID, forKey: Key.defaultCalendar)
+    }
+
+    func setDefaultReminderListID(_ id: String?, descriptors: [ReminderListDescriptor], access: AccessState) {
+        guard access == .granted else { return }
+        defaultReminderListID = id.flatMap { candidate in descriptors.contains { $0.id == candidate && $0.allowsContentModifications } ? candidate : nil }
+        defaults.set(defaultReminderListID, forKey: Key.defaultList)
+    }
+
+    func validateDefaults(calendarAccess: AccessState, calendars: [CalendarDescriptor], remindersAccess: AccessState, lists: [ReminderListDescriptor]) {
+        if calendarAccess == .granted, defaultCalendarID.map({ id in !calendars.contains { $0.id == id && $0.allowsContentModifications } }) == true {
+            defaultCalendarID = nil
+            defaults.removeObject(forKey: Key.defaultCalendar)
+        }
+        if remindersAccess == .granted, defaultReminderListID.map({ id in !lists.contains { $0.id == id && $0.allowsContentModifications } }) == true {
+            defaultReminderListID = nil
+            defaults.removeObject(forKey: Key.defaultList)
+        }
+    }
 
     private func toggle(id: String, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) {
         guard availableIDs.contains(id) else { return }
@@ -67,12 +101,36 @@ final class AppSettingsStore {
         if selection.contains(id) {
             guard selection.intersection(availableIDs).count > 1 else { return }
             selection.remove(id)
-        } else { selection.insert(id) }
+        } else {
+            selection.insert(id)
+        }
+    }
+
+    private func replace(_ ids: Set<String>, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) {
+        guard !availableIDs.isEmpty else {
+            selection = ids
+            explicit = true
+            return
+        }
+        let replacement = ids.intersection(availableIDs)
+        selection = replacement.isEmpty ? availableIDs : replacement
+        explicit = true
+    }
+
+    private func persistCalendarSelection() {
+        defaults.set(selectedCalendarIDs.sorted(), forKey: Key.selectedCalendars)
+        defaults.set(calendarSelectionIsExplicit, forKey: Key.calendarsExplicit)
+    }
+    private func persistReminderSelection() {
+        defaults.set(selectedReminderListIDs.sorted(), forKey: Key.selectedLists)
+        defaults.set(reminderSelectionIsExplicit, forKey: Key.listsExplicit)
+    }
+    private func persistSelectionMarkers() {
+        defaults.set(calendarSelectionIsExplicit, forKey: Key.calendarsExplicit)
+        defaults.set(reminderSelectionIsExplicit, forKey: Key.listsExplicit)
     }
 }
 
 extension UserDefaults {
-    static var ephemeral: UserDefaults {
-        UserDefaults(suiteName: "PersonalCalendar.\(UUID().uuidString)")!
-    }
+    static var ephemeral: UserDefaults { UserDefaults(suiteName: "PersonalCalendar.\(UUID().uuidString)")! }
 }

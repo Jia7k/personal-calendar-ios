@@ -15,12 +15,31 @@ final class CalendarViewModelTests: XCTestCase {
         let event = CalendarEventSnapshot(id: "included", title: "Included", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "included", calendarTitle: "Included", allowsModification: true, hasRecurrence: false)
         let ignored = CalendarEventSnapshot(id: "ignored", title: "Ignored", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "ignored", calendarTitle: "Ignored", allowsModification: true, hasRecurrence: false)
         let settings = AppSettingsStore(defaults: .ephemeral)
-        settings.selectedCalendarIDs = ["included"]
+        settings.replaceSelectedCalendarIDs(["included"], availableIDs: ["included"])
         let model = makeModel(calendarService: FakeCalendarService(access: .granted, events: [event, ignored]), settings: settings)
 
         await model.load()
 
         XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Included"])
+    }
+
+    func testExplicitStaleSourcesShowNoneAndNeverCallEmptyMeansAllServiceBoundary() async {
+        let defaults = UserDefaults.ephemeral
+        defaults.set(["gone"], forKey: "selectedCalendarIDs")
+        defaults.set(true, forKey: "selectedCalendarIDsAreExplicit")
+        defaults.set(["gone-list"], forKey: "selectedReminderListIDs")
+        defaults.set(true, forKey: "selectedReminderListIDsAreExplicit")
+        let settings = AppSettingsStore(defaults: defaults)
+        let start = today.startDate(in: calendar).addingTimeInterval(3_600)
+        let calendarService = FakeCalendarService(access: .granted, events: [.init(id: "event", title: "Event", start: start, end: start.addingTimeInterval(60), isAllDay: false, calendarID: "current", calendarTitle: "Current", allowsModification: true, hasRecurrence: false)], descriptors: [.init(id: "current", title: "Current", colorHex: "#000", allowsContentModifications: true)])
+        let reminders = FakeRemindersService(access: .granted, reminders: [.init(id: "task", title: "Task", notes: nil, dueDate: start, dueHasTime: true, priority: 1, listID: "current-list", listTitle: "Current", isCompleted: false, allowsModification: true, hasRecurrence: false)], descriptors: [.init(id: "current-list", title: "Current", colorHex: "#000", allowsContentModifications: true)])
+        let model = makeModel(calendarService: calendarService, reminders: reminders, settings: settings)
+
+        await model.load()
+
+        XCTAssertTrue(model.agenda.scheduled.isEmpty)
+        XCTAssertTrue(calendarService.fetchCalendarIDs.isEmpty)
+        XCTAssertTrue(reminders.fetchListIDs.isEmpty)
     }
 
     func testDeniedCalendarKeepsOtherSourcesAndReportsPermission() async {
@@ -81,14 +100,14 @@ final class CalendarViewModelTests: XCTestCase {
         let old = ReminderSnapshot(id: "old", title: "Old", notes: nil, dueDate: due, dueHasTime: true, priority: 1, listID: "old", listTitle: "Old", isCompleted: false, allowsModification: true, hasRecurrence: false)
         let fresh = ReminderSnapshot(id: "fresh", title: "Fresh", notes: nil, dueDate: due, dueHasTime: true, priority: 1, listID: "fresh", listTitle: "Fresh", isCompleted: false, allowsModification: true, hasRecurrence: false)
         let settings = AppSettingsStore(defaults: .ephemeral)
-        settings.setSelectedReminderListsForTesting(["old", "fresh"], explicit: true)
+        settings.replaceSelectedReminderListIDs(["old", "fresh"], availableIDs: ["old", "fresh"])
         let reminders = FakeRemindersService(access: .granted, reminders: [old, fresh])
         let model = makeModel(reminders: reminders, settings: settings)
 
         reminders.suspendNextFetch = true
         let older = Task { await model.load() }
         for _ in 0..<30 where !reminders.isFetchSuspended { await Task.yield() }
-        settings.setSelectedReminderListsForTesting(["fresh"], explicit: true)
+        settings.replaceSelectedReminderListIDs(["fresh"], availableIDs: ["fresh"])
         await model.load()
         reminders.resumeSuspendedFetch()
         await older.value
