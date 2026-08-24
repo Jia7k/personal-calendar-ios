@@ -55,8 +55,9 @@ final class RoutinesViewModel {
         do { try repository.update(id: id, draft: clean); replace(existing, with: rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived), completed: confirmedCompletedDays[id] ?? [])); clearEditorFailure(); reload(savedMutation: true); return true } catch { failEditor(.update(id), draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
     }
     func setCompleted(id: UUID, completed state: Bool) async {
-        guard let row = row(id), (row.isCompletedToday || (!row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)))), !mutatingIDs.contains(id) else { return }
-        mutate(id, patch: { row in self.completedRow(row, completed: state) }) { try repository.setCompleted(routineID: id, day: currentDay, completed: state) }
+        let day = currentDay
+        guard let row = row(id), (row.isCompletedToday || (!row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: day)))), !mutatingIDs.contains(id) else { return }
+        mutate(id, operation: .completion(id, day, state), patch: { row in self.completedRow(row, day: day, completed: state) }) { try repository.setCompleted(routineID: id, day: day, completed: state) }
     }
     func setPaused(id: UUID, paused: Bool) { mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
     func setArchived(id: UUID, archived: Bool) { mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
@@ -67,7 +68,8 @@ final class RoutinesViewModel {
         switch operation {
         case let .pause(id, value): setPaused(id: id, paused: value)
         case let .archive(id, value): setArchived(id: id, archived: value)
-        case .completion, .delete: failedActionOperation = operation
+        case let .completion(id, day, value): retryCompletion(id: id, day: day, completed: value)
+        case .delete: failedActionOperation = operation
         }
     }
 
@@ -93,7 +95,8 @@ final class RoutinesViewModel {
     private func replace(_ old: RoutineRowState, with new: RoutineRowState) { active.removeAll { $0.id == old.id }; archived.removeAll { $0.id == old.id }; insert(new) }
     private func replace(_ old: RoutineRowState, routine: RoutineSnapshot) { replace(old, with: .init(routine: routine, isCompletedToday: old.isCompletedToday, streak: old.streak, history: old.history)) }
     private func with(_ row: RoutineRowState, paused: Bool? = nil, archived: Bool? = nil) -> RoutineRowState { .init(routine: .init(id: row.id, title: row.routine.title, weekdays: row.routine.weekdays, window: row.routine.window, reminderHour: row.routine.reminderHour, reminderMinute: row.routine.reminderMinute, isPaused: paused ?? row.routine.isPaused, isArchived: archived ?? row.routine.isArchived), isCompletedToday: row.isCompletedToday, streak: row.streak, history: row.history) }
-    private func completedRow(_ row: RoutineRowState, completed: Bool) -> RoutineRowState { var days = confirmedCompletedDays[row.id] ?? []; if completed { days.insert(currentDay) } else { days.remove(currentDay) }; confirmedCompletedDays[row.id] = days; return rowState(for: row.routine, completed: days) }
+    private func retryCompletion(id: UUID, day: LocalDay, completed: Bool) { mutate(id, operation: .completion(id, day, completed), patch: { row in self.completedRow(row, day: day, completed: completed) }) { try repository.setCompleted(routineID: id, day: day, completed: completed) } }
+    private func completedRow(_ row: RoutineRowState, day: LocalDay, completed: Bool) -> RoutineRowState { var days = confirmedCompletedDays[row.id] ?? []; if completed { days.insert(day) } else { days.remove(day) }; confirmedCompletedDays[row.id] = days; return rowState(for: row.routine, completed: days) }
     private func rowState(for routine: RoutineSnapshot) -> RoutineRowState { let today = currentDay; let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: false) }; return .init(routine: routine, isCompletedToday: false, streak: 0, history: history) }
     private func localDay(offset: Int, from day: LocalDay) -> LocalDay { LocalDay(date: calendar.date(byAdding: .day, value: offset, to: day.startDate(in: calendar))!, calendar: calendar) }
     private func weekday(for day: LocalDay) -> Int { calendar.component(.weekday, from: day.startDate(in: calendar)) }
