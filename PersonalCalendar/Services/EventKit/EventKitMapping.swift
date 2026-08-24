@@ -39,25 +39,23 @@ extension CalendarEventSnapshot {
     }
 }
 
-extension ReminderSnapshot {
+extension ReminderOccurrenceInput {
     init(reminder: EKReminder) {
         let list = reminder.calendar
         let dueComponents = reminder.dueDateComponents
 
-        self = ReminderSnapshotMapper.snapshot(
-            from: ReminderOccurrenceInput(
-                id: reminder.calendarItemIdentifier,
-                title: reminder.title ?? "",
-                notes: reminder.notes,
-                dueDate: dueComponents?.date,
-                dueHasTime: dueComponents?.hour != nil,
-                priority: reminder.priority,
-                listID: list?.calendarIdentifier ?? "",
-                listTitle: list?.title ?? "",
-                isCompleted: reminder.isCompleted,
-                allowsModification: list?.allowsContentModifications ?? false,
-                hasRecurrence: reminder.hasRecurrenceRules
-            )
+        self.init(
+            id: reminder.calendarItemIdentifier,
+            title: reminder.title ?? "",
+            notes: reminder.notes,
+            dueDate: dueComponents?.date,
+            dueHasTime: dueComponents?.hour != nil,
+            priority: reminder.priority,
+            listID: list?.calendarIdentifier ?? "",
+            listTitle: list?.title ?? "",
+            isCompleted: reminder.isCompleted,
+            allowsModification: list?.allowsContentModifications ?? false,
+            hasRecurrence: reminder.hasRecurrenceRules
         )
     }
 }

@@ -56,7 +56,8 @@ final class EventKitRemindersService: RemindersServicing {
                         continuation.resume(throwing: ReminderFetchError.missingResult)
                         return
                     }
-                    continuation.resume(returning: reminders.map(ReminderSnapshot.init(reminder:)))
+                    let occurrences = reminders.map(ReminderOccurrenceInput.init(reminder:))
+                    continuation.resume(returning: ReminderSnapshotMapper.snapshots(from: occurrences))
                 }
             }
         }
