@@ -112,6 +112,7 @@ final class FoundationFlowUITests: XCTestCase {
         title.tap(); title.typeText("Call Alex")
         app.buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["Call Alex"].waitForExistence(timeout: 3))
+        waitForDisappearance(app.navigationBars["New Task"])
 
         app.tabBars.buttons["Routines"].tap()
         let complete = app.buttons["Mark Read complete"]
@@ -136,23 +137,40 @@ final class FoundationFlowUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["-ui-testing"]; app.launch()
         app.tabBars.buttons["Routines"].tap()
         XCTAssertTrue(app.staticTexts["Read"].waitForExistence(timeout: 3))
-        app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 3)); app.buttons["Cancel"].tap()
+        tapRoutineAction("delete", in: app); XCTAssertTrue(app.navigationBars["Confirm delete"].waitForExistence(timeout: 3)); XCTAssertFalse(app.navigationBars["Edit Routine"].exists); XCTAssertTrue(app.buttons["Cancel Delete"].waitForExistence(timeout: 3)); app.buttons["Cancel Delete"].tap(); XCTAssertFalse(app.navigationBars["Edit Routine"].waitForExistence(timeout: 1))
         XCTAssertTrue(app.staticTexts["Read"].exists)
-        app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); app.buttons["Delete"].tap()
+        tapRoutineAction("delete", in: app); XCTAssertTrue(app.navigationBars["Confirm delete"].waitForExistence(timeout: 3)); confirmationDelete(in: app).tap()
         XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1))
     }
 
     func testRoutineDeleteRetryRequiresSecondConfirmation() {
         let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-routine-delete-fails-once"]; app.launch(); app.tabBars.buttons["Routines"].tap()
-        app.buttons["Delete"].tap(); app.buttons["Delete"].tap(); XCTAssertTrue(app.staticTexts["Read"].exists)
-        XCTAssertTrue(app.buttons["Retry Delete"].waitForExistence(timeout: 3)); app.buttons["Retry Delete"].tap(); XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3)); XCTAssertTrue(app.staticTexts["Read"].exists)
-        app.buttons["Delete"].tap(); XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1))
+        tapRoutineAction("delete", in: app); XCTAssertTrue(app.navigationBars["Confirm delete"].waitForExistence(timeout: 3)); confirmationDelete(in: app).tap()
+        XCTAssertTrue(app.staticTexts["Your routine was not deleted. Try again."].waitForExistence(timeout: 3)); XCTAssertTrue(confirmationDelete(in: app).exists); XCTAssertTrue(confirmationDelete(in: app).isHittable)
+        app.buttons["Cancel Delete"].tap(); XCTAssertTrue(app.staticTexts["Read"].exists); XCTAssertTrue(app.buttons["Retry Delete"].waitForExistence(timeout: 3)); app.buttons["Retry Delete"].tap()
+        XCTAssertTrue(app.navigationBars["Confirm delete"].waitForExistence(timeout: 3)); XCTAssertTrue(confirmationDelete(in: app).exists); XCTAssertTrue(confirmationDelete(in: app).isHittable); confirmationDelete(in: app).tap(); XCTAssertFalse(app.staticTexts["Read"].waitForExistence(timeout: 1)); XCTAssertFalse(app.navigationBars["Confirm delete"].exists)
     }
 
     func testRoutinesRemainOperableAtAccessibilityXXXL() {
         let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]; app.launch()
         app.tabBars.buttons["Routines"].tap(); XCTAssertTrue(app.staticTexts["Read"].waitForExistence(timeout: 3)); XCTAssertTrue(app.otherElements["14-day history"].exists)
-        for button in ["Edit", "Pause", "Archive", "Delete"] { let target = app.buttons[button]; if !target.isHittable { app.swipeUp() }; XCTAssertTrue(target.exists) }
-        app.buttons["Delete"].tap(); XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 3)); app.buttons["Cancel"].tap(); XCTAssertTrue(app.staticTexts["Read"].exists)
+        for action in ["edit", "pause", "archive", "delete"] { XCTAssertTrue(routineAction(action, in: app).waitForExistence(timeout: 3)); if !routineAction(action, in: app).isHittable { app.swipeUp() }; XCTAssertTrue(routineAction(action, in: app).isHittable) }
+        tapRoutineAction("delete", in: app); XCTAssertTrue(app.navigationBars["Confirm delete"].waitForExistence(timeout: 3)); XCTAssertTrue(app.buttons["Cancel Delete"].waitForExistence(timeout: 3)); XCTAssertTrue(app.buttons["Cancel Delete"].isHittable); XCTAssertTrue(confirmationDelete(in: app).exists); XCTAssertTrue(confirmationDelete(in: app).isHittable); app.buttons["Cancel Delete"].tap()
     }
+
+    private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 3) {
+        let expectation = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
+        wait(for: [expectation], timeout: timeout)
+    }
+
+    private func routineAction(_ action: String, in app: XCUIApplication) -> XCUIElement { app.buttons["routine-\(action)-00000000-0000-0000-0000-000000000001"] }
+    private func tapRoutineAction(_ action: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let target = routineAction(action, in: app)
+        for _ in 0..<4 {
+            if target.exists && target.isHittable { target.tap(); return }
+            app.swipeUp()
+        }
+        XCTFail("Routine \(action) action was not hittable", file: file, line: line)
+    }
+    private func confirmationDelete(in app: XCUIApplication) -> XCUIElement { app.buttons["Confirm Delete"] }
 }

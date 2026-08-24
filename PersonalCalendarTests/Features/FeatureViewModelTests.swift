@@ -499,7 +499,22 @@ final class FeatureViewModelTests: XCTestCase {
     func testRoutineReloadBuildsExactFourteenDayNonDailyHistory() {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [2, 3], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
         let repository = FakeRoutineRepository(routines: [routine]); let completed: Set<LocalDay> = [.init(year: 2026, month: 8, day: 17), .init(year: 2026, month: 8, day: 18), .init(year: 2026, month: 8, day: 24)]; repository.seedCompletedDays(completed, routineID: routine.id); repository.listCallCount = 0; repository.completedDaysCallCounts = [:]
-        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); let expected: [RoutineHistoryDay] = (11...24).map { day in .init(day: .init(year: 2026, month: 8, day: day), isScheduled: [17, 18, 24].contains(day), isCompleted: [17, 18, 24].contains(day)) }
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); let expected: [RoutineHistoryDay] = [
+            .init(day: .init(year: 2026, month: 8, day: 11), isScheduled: true, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 12), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 13), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 14), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 15), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 16), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 17), isScheduled: true, isCompleted: true),
+            .init(day: .init(year: 2026, month: 8, day: 18), isScheduled: true, isCompleted: true),
+            .init(day: .init(year: 2026, month: 8, day: 19), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 20), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 21), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 22), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 23), isScheduled: false, isCompleted: false),
+            .init(day: .init(year: 2026, month: 8, day: 24), isScheduled: true, isCompleted: true)
+        ]
         XCTAssertEqual(subject.active[0].history, expected); XCTAssertTrue(subject.active[0].isCompletedToday); XCTAssertEqual(subject.active[0].streak, 3); XCTAssertEqual(repository.listCallCount, 1); XCTAssertEqual(repository.completedDaysCallCounts[routine.id], 1)
     }
 
@@ -564,7 +579,8 @@ final class FeatureViewModelTests: XCTestCase {
     func testRoutineDeleteFailureRetainsExactOperationThenRetriesOnce() {
         let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
         repository.deleteError = TestError.failed; XCTAssertFalse(subject.delete(id: routine.id)); XCTAssertTrue(subject.active.contains { $0.id == routine.id }); XCTAssertEqual(subject.failedActionOperation, .delete(routine.id)); XCTAssertTrue(repository.deleteCalls.isEmpty)
-        repository.deleteError = nil; subject.retryFailedAction(); XCTAssertEqual(repository.deleteCalls, [routine.id]); XCTAssertFalse(subject.active.contains { $0.id == routine.id }); XCTAssertNil(subject.failedActionOperation)
+        repository.deleteError = nil; subject.retryFailedAction(); XCTAssertTrue(repository.deleteCalls.isEmpty); XCTAssertTrue(subject.active.contains { $0.id == routine.id }); XCTAssertEqual(subject.deleteRetryTarget?.id, routine.id)
+        XCTAssertTrue(subject.delete(id: routine.id)); XCTAssertEqual(repository.deleteCalls, [routine.id]); XCTAssertFalse(subject.active.contains { $0.id == routine.id }); XCTAssertNil(subject.failedActionOperation)
     }
 
     func testRoutineArchiveFailureRetriesExactOperation() {
