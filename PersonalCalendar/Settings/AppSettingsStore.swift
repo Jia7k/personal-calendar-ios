@@ -60,12 +60,12 @@ final class AppSettingsStore {
     }
 
     func replaceSelectedCalendarIDs(_ ids: Set<String>, availableIDs: Set<String>) {
-        replace(ids, selection: &selectedCalendarIDs, explicit: &calendarSelectionIsExplicit, availableIDs: availableIDs)
+        guard replace(ids, selection: &selectedCalendarIDs, explicit: &calendarSelectionIsExplicit, availableIDs: availableIDs) else { return }
         persistCalendarSelection()
     }
 
     func replaceSelectedReminderListIDs(_ ids: Set<String>, availableIDs: Set<String>) {
-        replace(ids, selection: &selectedReminderListIDs, explicit: &reminderSelectionIsExplicit, availableIDs: availableIDs)
+        guard replace(ids, selection: &selectedReminderListIDs, explicit: &reminderSelectionIsExplicit, availableIDs: availableIDs) else { return }
         persistReminderSelection()
     }
 
@@ -106,15 +106,12 @@ final class AppSettingsStore {
         }
     }
 
-    private func replace(_ ids: Set<String>, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) {
-        guard !availableIDs.isEmpty else {
-            selection = ids
-            explicit = true
-            return
-        }
+    private func replace(_ ids: Set<String>, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) -> Bool {
         let replacement = ids.intersection(availableIDs)
-        selection = replacement.isEmpty ? availableIDs : replacement
+        guard !replacement.isEmpty else { return false }
+        selection = replacement
         explicit = true
+        return true
     }
 
     private func persistCalendarSelection() {

@@ -1,6 +1,20 @@
 import SwiftUI
 import UIKit
 
+enum SettingsDefaultPickerValue {
+    static func calendar(selectedID: String?, writableCalendars: [CalendarDescriptor]) -> String {
+        guard !writableCalendars.isEmpty else { return "No writable calendar available" }
+        guard let selectedID else { return "None" }
+        return writableCalendars.first(where: { $0.id == selectedID })?.title ?? "Unavailable calendar"
+    }
+
+    static func reminderList(selectedID: String?, writableLists: [ReminderListDescriptor]) -> String {
+        guard !writableLists.isEmpty else { return "No writable reminder list available" }
+        guard let selectedID else { return "None" }
+        return writableLists.first(where: { $0.id == selectedID })?.title ?? "Unavailable reminder list"
+    }
+}
+
 struct SettingsView: View {
     let environment: AppEnvironment
     let openSystemSettings: @MainActor () -> Void
@@ -26,11 +40,11 @@ struct SettingsView: View {
         Section("Defaults") {
             Picker("Calendar", selection: Binding(get: { calendars.contains { $0.id == environment.settings.defaultCalendarID } ? environment.settings.defaultCalendarID : nil }, set: { environment.settings.setDefaultCalendarID($0, descriptors: environment.calendar.calendars(), access: environment.calendar.accessState) })) { Text("None").tag(String?.none); ForEach(calendars) { Text($0.title).tag(Optional($0.id)) } }
                 .disabled(calendars.isEmpty)
-                .accessibilityValue(calendars.isEmpty ? "No writable calendar available" : (environment.settings.defaultCalendarID ?? "None"))
+                .accessibilityValue(SettingsDefaultPickerValue.calendar(selectedID: environment.settings.defaultCalendarID, writableCalendars: calendars))
             if calendars.isEmpty { Text("No writable calendar is available, so new events cannot be saved here.").foregroundStyle(.secondary) }
             Picker("Reminder list", selection: Binding(get: { lists.contains { $0.id == environment.settings.defaultReminderListID } ? environment.settings.defaultReminderListID : nil }, set: { environment.settings.setDefaultReminderListID($0, descriptors: environment.reminders.lists(), access: environment.reminders.accessState) })) { Text("None").tag(String?.none); ForEach(lists) { Text($0.title).tag(Optional($0.id)) } }
                 .disabled(lists.isEmpty)
-                .accessibilityValue(lists.isEmpty ? "No writable reminder list available" : (environment.settings.defaultReminderListID ?? "None"))
+                .accessibilityValue(SettingsDefaultPickerValue.reminderList(selectedID: environment.settings.defaultReminderListID, writableLists: lists))
             if lists.isEmpty { Text("No writable reminder list is available, so new tasks cannot be saved here.").foregroundStyle(.secondary) }
         }
     }

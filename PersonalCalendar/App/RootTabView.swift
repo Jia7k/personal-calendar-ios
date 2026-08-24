@@ -10,7 +10,14 @@ struct RootTabView: View {
     @Environment(\.scenePhase) private var scenePhase
     init(environment: AppEnvironment) {
         self.environment = environment
-        _lifecycle = State(initialValue: RootLifecycleController(permissions: environment.permissions))
+        _lifecycle = State(initialValue: RootLifecycleController(permissions: environment.permissions, validateDefaults: {
+            environment.settings.validateDefaults(
+                calendarAccess: environment.calendar.accessState,
+                calendars: environment.calendar.calendars(),
+                remindersAccess: environment.reminders.accessState,
+                lists: environment.reminders.lists()
+            )
+        }))
     }
     var body: some View {
         Group {

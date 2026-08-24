@@ -46,6 +46,58 @@ final class AppSettingsStoreTests: XCTestCase {
         XCTAssertEqual(subject.visibleCalendarIDs(availableIDs: ["home", "work", "new"]), ["home", "work"])
     }
 
+    func testEmptyCalendarReplacementPreservesExplicitSubsetAndPersistence() {
+        let defaults = makeDefaults()
+        let subject = AppSettingsStore(defaults: defaults)
+        subject.replaceSelectedCalendarIDs(["home"], availableIDs: ["home", "work"])
+
+        subject.replaceSelectedCalendarIDs([], availableIDs: ["home", "work"])
+
+        XCTAssertEqual(subject.selectedCalendarIDs, ["home"])
+        XCTAssertTrue(subject.calendarSelectionIsExplicit)
+        XCTAssertEqual(defaults.stringArray(forKey: "selectedCalendarIDs"), ["home"])
+        XCTAssertEqual(defaults.object(forKey: "selectedCalendarIDsAreExplicit") as? Bool, true)
+    }
+
+    func testStaleOnlyCalendarReplacementPreservesExplicitSubsetAndPersistence() {
+        let defaults = makeDefaults()
+        let subject = AppSettingsStore(defaults: defaults)
+        subject.replaceSelectedCalendarIDs(["home"], availableIDs: ["home", "work"])
+
+        subject.replaceSelectedCalendarIDs(["gone"], availableIDs: ["home", "work"])
+
+        XCTAssertEqual(subject.selectedCalendarIDs, ["home"])
+        XCTAssertTrue(subject.calendarSelectionIsExplicit)
+        XCTAssertEqual(defaults.stringArray(forKey: "selectedCalendarIDs"), ["home"])
+        XCTAssertEqual(defaults.object(forKey: "selectedCalendarIDsAreExplicit") as? Bool, true)
+    }
+
+    func testEmptyReminderReplacementPreservesExplicitSubsetAndPersistence() {
+        let defaults = makeDefaults()
+        let subject = AppSettingsStore(defaults: defaults)
+        subject.replaceSelectedReminderListIDs(["inbox"], availableIDs: ["inbox", "work"])
+
+        subject.replaceSelectedReminderListIDs([], availableIDs: ["inbox", "work"])
+
+        XCTAssertEqual(subject.selectedReminderListIDs, ["inbox"])
+        XCTAssertTrue(subject.reminderSelectionIsExplicit)
+        XCTAssertEqual(defaults.stringArray(forKey: "selectedReminderListIDs"), ["inbox"])
+        XCTAssertEqual(defaults.object(forKey: "selectedReminderListIDsAreExplicit") as? Bool, true)
+    }
+
+    func testStaleOnlyReminderReplacementPreservesExplicitSubsetAndPersistence() {
+        let defaults = makeDefaults()
+        let subject = AppSettingsStore(defaults: defaults)
+        subject.replaceSelectedReminderListIDs(["inbox"], availableIDs: ["inbox", "work"])
+
+        subject.replaceSelectedReminderListIDs(["gone"], availableIDs: ["inbox", "work"])
+
+        XCTAssertEqual(subject.selectedReminderListIDs, ["inbox"])
+        XCTAssertTrue(subject.reminderSelectionIsExplicit)
+        XCTAssertEqual(defaults.stringArray(forKey: "selectedReminderListIDs"), ["inbox"])
+        XCTAssertEqual(defaults.object(forKey: "selectedReminderListIDsAreExplicit") as? Bool, true)
+    }
+
     func testStaleSelectionDoesNotCountAsCurrentSourceAndExplicitEmptyStaysExplicitAfterReload() {
         let defaults = makeDefaults()
         defaults.set(["stale"], forKey: "selectedCalendarIDs")
@@ -116,6 +168,27 @@ final class AppSettingsStoreTests: XCTestCase {
         XCTAssertEqual(subject.defaultCalendarID, "z")
         XCTAssertEqual(SourceDescriptorOrdering.calendars([home, homeLower]).map(\.id), ["a", "z"])
         XCTAssertEqual(SourceDescriptorOrdering.calendars([homeLower, home]).map(\.id), ["a", "z"])
+    }
+
+    func testCalendarPickerAccessibilityValueUsesSelectedTitleInsteadOfIdentifier() {
+        let values = [calendar(id: "opaque-id", title: "Home", writable: true)]
+
+        XCTAssertEqual(SettingsDefaultPickerValue.calendar(selectedID: "opaque-id", writableCalendars: values), "Home")
+    }
+
+    func testReminderPickerAccessibilityValueUsesSelectedTitleInsteadOfIdentifier() {
+        let values = [ReminderListDescriptor(id: "opaque-id", title: "Family", colorHex: "#000000", allowsContentModifications: true)]
+
+        XCTAssertEqual(SettingsDefaultPickerValue.reminderList(selectedID: "opaque-id", writableLists: values), "Family")
+    }
+
+    func testDefaultPickerAccessibilityValueDescribesNoneAndUnavailableStates() {
+        let values = [calendar(id: "home", title: "Home", writable: true)]
+
+        XCTAssertEqual(SettingsDefaultPickerValue.calendar(selectedID: nil, writableCalendars: values), "None")
+        XCTAssertEqual(SettingsDefaultPickerValue.calendar(selectedID: "missing", writableCalendars: values), "Unavailable calendar")
+        XCTAssertEqual(SettingsDefaultPickerValue.calendar(selectedID: nil, writableCalendars: []), "No writable calendar available")
+        XCTAssertEqual(SettingsDefaultPickerValue.reminderList(selectedID: nil, writableLists: []), "No writable reminder list available")
     }
 
     private func makeDefaults() -> UserDefaults {
