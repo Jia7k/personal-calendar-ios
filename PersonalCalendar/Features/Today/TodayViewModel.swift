@@ -145,7 +145,6 @@ final class TodayViewModel {
             }
             if !cachedReminders.contains(where: { $0.id == undo.rawID }) { cachedReminders.append(restoredSnapshot) }
             compose(day: localDay, calendar: calendarProvider())
-            latestTaskUndo = nil
             do {
                 cachedReminders = try await reminders.fetchReminders(listIDs: settings.selectedReminderListIDs)
                 remindersError = nil
@@ -153,6 +152,7 @@ final class TodayViewModel {
                 remindersError = "Task changes were saved, but tasks could not be refreshed. Pull to try again."
             }
             compose(day: localDay, calendar: calendarProvider())
+            latestTaskUndo = nil
         } catch {
             undo.isPending = false
             latestTaskUndo = undo

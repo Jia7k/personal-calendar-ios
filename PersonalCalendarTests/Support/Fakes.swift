@@ -136,6 +136,9 @@ final class FakeRemindersService: RemindersServicing {
     var completedCalls: [CompletionCall] = []
     var completionError: Error?
     var fetchErrorAfterCompletion: Error?
+    var suspendFetchAfterUndo = false
+    private var fetchContinuation: CheckedContinuation<Void, Never>?
+    private(set) var isFetchSuspended = false
 
     init(
         access: AccessState,
@@ -159,12 +162,19 @@ final class FakeRemindersService: RemindersServicing {
     func lists() -> [ReminderListDescriptor] { descriptors }
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
+        if suspendFetchAfterUndo, completedCalls.last?.completed == false {
+            isFetchSuspended = true
+            await withCheckedContinuation { continuation in fetchContinuation = continuation }
+            isFetchSuspended = false
+        }
         if let fetchErrorAfterCompletion, !completedCalls.isEmpty { throw fetchErrorAfterCompletion }
         if let fetchError {
             throw fetchError
         }
         return reminders.filter { listIDs.isEmpty || listIDs.contains($0.listID) }
     }
+
+    func resumeSuspendedFetch() { fetchContinuation?.resume(); fetchContinuation = nil }
 
     func createReminder(_ draft: ReminderDraft) throws -> String {
         createdDrafts.append(draft)
