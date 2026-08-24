@@ -100,12 +100,23 @@ final class AgendaComposerTests: XCTestCase {
     func testUsesDeterministicSourceTitleAndIDTieOrdering() throws {
         let result = compose(
             events: [event(id: "event-b", title: "Same", startHour: 9, endHour: 10), event(id: "event-a", title: "Same", startHour: 9, endHour: 10)],
-            reminders: [reminder(id: "task", title: "Same", dueHour: 9, priority: 1), reminder(id: "high", title: "Later alphabetically", dueHour: nil, priority: 9, dueDate: date(hour: 0)), reminder(id: "low", title: "Earlier alphabetically", dueHour: nil, priority: 1, dueDate: date(hour: 0))],
+            reminders: [reminder(id: "task", title: "Same", dueHour: 9, priority: 1), reminder(id: "low", title: "Later alphabetically", dueHour: nil, priority: 9, dueDate: date(hour: 0)), reminder(id: "high", title: "Earlier alphabetically", dueHour: nil, priority: 1, dueDate: date(hour: 0))],
             routines: [routine(id: "00000000-0000-0000-0000-000000000020", title: "Same", window: .morning), routine(id: "00000000-0000-0000-0000-000000000021", title: "Zulu", window: .anytime), routine(id: "00000000-0000-0000-0000-000000000022", title: "Alpha", window: .anytime)]
         )
 
         XCTAssertEqual(result.scheduled.map(\.id), ["event|event-a", "event|event-b", "routine|00000000-0000-0000-0000-000000000020|2026-8-24", "task|task"])
-        XCTAssertEqual(result.priority.map(\.title), ["Later alphabetically", "Earlier alphabetically", "Alpha", "Zulu"])
+        XCTAssertEqual(result.priority.map(\.title), ["Earlier alphabetically", "Later alphabetically", "Alpha", "Zulu"])
+    }
+
+    func testEventKitPriorityOrderingPlacesHighBeforeMediumLowAndNoneLast() throws {
+        let result = compose(reminders: [
+            reminder(id: "none", title: "None", dueHour: nil, priority: 0, dueDate: date(hour: 0)),
+            reminder(id: "low", title: "Low", dueHour: nil, priority: 9, dueDate: date(hour: 0)),
+            reminder(id: "medium", title: "Medium", dueHour: nil, priority: 5, dueDate: date(hour: 0)),
+            reminder(id: "high", title: "High", dueHour: nil, priority: 1, dueDate: date(hour: 0))
+        ])
+
+        XCTAssertEqual(result.priority.map(\.title), ["High", "Medium", "Low", "None"])
     }
 
     private let day = LocalDay(year: 2026, month: 8, day: 24)

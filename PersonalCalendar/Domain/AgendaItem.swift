@@ -97,6 +97,8 @@ extension AgendaItem {
     }
 
     static func prioritySort(_ lhs: AgendaItem, _ rhs: AgendaItem) -> Bool {
-        lhs.priority == rhs.priority ? stableSort(lhs, rhs) : lhs.priority > rhs.priority
+        func rank(_ priority: Int) -> Int { priority == 0 ? .max : priority }
+        let left = rank(lhs.priority); let right = rank(rhs.priority)
+        return left == right ? stableSort(lhs, rhs) : left < right
     }
 }

@@ -5,6 +5,7 @@ struct RoutineHistoryDay: Identifiable, Equatable, Sendable { let day: LocalDay;
 struct RoutineRowState: Identifiable, Equatable, Sendable { let routine: RoutineSnapshot; let isCompletedToday: Bool; let streak: Int; let history: [RoutineHistoryDay]; let representedDay: LocalDay; var id: UUID { routine.id } }
 enum RoutineEditorOperation: Equatable { case create, update(UUID) }
 enum RoutineActionOperation: Equatable { case pause(UUID, Bool), archive(UUID, Bool), completion(UUID, LocalDay, Bool), delete(UUID) }
+struct RoutineActionRecovery: Equatable { let operation: RoutineActionOperation; let message: String; let token: Int }
 
 @MainActor
 @Observable
@@ -13,16 +14,21 @@ final class RoutinesViewModel {
     private(set) var archived: [RoutineRowState] = []
     private(set) var refreshErrorMessage: String?
     private(set) var editorErrorMessage: String?
-    private(set) var actionErrorMessage: String?
+    private(set) var actionRecovery: RoutineActionRecovery?
+    var actionErrorMessage: String? { actionRecovery?.message }
     var errorMessage: String? { actionErrorMessage ?? editorErrorMessage ?? refreshErrorMessage }
     private(set) var draftOnFailure: RoutineDraft?
     private(set) var failedEditorOperation: RoutineEditorOperation?
-    private(set) var failedActionOperation: RoutineActionOperation?
-    private(set) var deleteRetryTarget: RoutineRowState?
+    var failedActionOperation: RoutineActionOperation? { actionRecovery?.operation }
+    var deleteRetryTarget: RoutineRowState? {
+        guard case let .delete(id)? = actionRecovery?.operation else { return nil }
+        return row(id)
+    }
     private(set) var isLoading = false
     private(set) var mutatingIDs: Set<UUID> = []
     private let repository: any RoutineRepository; private let calendar: Calendar; private let now: () -> Date
     private var confirmedCompletedDays: [UUID: Set<LocalDay>] = [:]
+    private var actionToken = 0
 
     init(repository: any RoutineRepository, calendar: Calendar = .current, now: @escaping () -> Date = { .now }) { self.repository = repository; self.calendar = calendar; self.now = now }
     var currentDay: LocalDay { LocalDay(date: now(), calendar: calendar) }
@@ -73,10 +79,21 @@ final class RoutinesViewModel {
     }
     func setPaused(id: UUID, paused: Bool) { mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
     func setArchived(id: UUID, archived: Bool) { mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
-    @discardableResult func delete(id: UUID) -> Bool { guard !mutatingIDs.contains(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); failedActionOperation = nil; actionErrorMessage = nil; deleteRetryTarget = nil; active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true); return true } catch { failedActionOperation = .delete(id); deleteRetryTarget = row(id); actionErrorMessage = "Your routine was not deleted. Try again."; return false } }
+    @discardableResult func delete(id: UUID) -> Bool {
+        guard !mutatingIDs.contains(id), row(id) != nil else { return false }
+        mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
+        let operation = RoutineActionOperation.delete(id)
+        do {
+            try repository.delete(id: id)
+            clearActionRecovery(matching: operation)
+            active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil
+            reload(savedMutation: true)
+            return true
+        } catch { failAction(operation, message: "Your routine was not deleted. Try again."); return false }
+    }
     func retryFailedAction() {
-        guard let operation = failedActionOperation else { return }
-        failedActionOperation = nil
+        guard let recovery = actionRecovery else { return }
+        let operation = recovery.operation
         switch operation {
         case let .pause(id, value): setPaused(id: id, paused: value)
         case let .archive(id, value): setArchived(id: id, archived: value)
@@ -92,7 +109,7 @@ final class RoutinesViewModel {
     private func mutate(_ id: UUID, operation: RoutineActionOperation? = nil, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) {
         guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         guard let old = row(id) else { return }
-        do { try action(); failedActionOperation = nil; actionErrorMessage = nil; replace(old, with: patch(old)); reload(savedMutation: true) } catch { failedActionOperation = operation; actionErrorMessage = "Your routine was not changed. Try again." }
+        do { try action(); if let operation { clearActionRecovery(matching: operation) }; replace(old, with: patch(old)); reload(savedMutation: true) } catch { if let operation { failAction(operation, message: "Your routine was not changed. Try again.") } }
     }
     private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay) -> RoutineRowState {
         let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: completed.contains(day)) }
@@ -100,8 +117,12 @@ final class RoutinesViewModel {
     }
     private func row(_ id: UUID) -> RoutineRowState? { (active + archived).first { $0.id == id } }
     func canRetryEditor(_ operation: RoutineEditorOperation) -> Bool { failedEditorOperation == operation }
+    func failedDraft(for operation: RoutineEditorOperation) -> RoutineDraft? { canRetryEditor(operation) ? draftOnFailure : nil }
     private func failEditor(_ operation: RoutineEditorOperation, draft: RoutineDraft, message: String) { failedEditorOperation = operation; draftOnFailure = draft; editorErrorMessage = message }
     private func clearEditorFailure() { failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
+    private func failAction(_ operation: RoutineActionOperation, message: String) { actionToken += 1; actionRecovery = .init(operation: operation, message: message, token: actionToken) }
+    private func clearActionRecovery(matching operation: RoutineActionOperation) { guard actionRecovery?.operation == operation else { return }; actionRecovery = nil }
+    func deleteErrorMessage(for id: UUID) -> String? { guard case let .delete(failedID)? = actionRecovery?.operation, failedID == id else { return nil }; return actionRecovery?.message }
     private func insert(_ row: RoutineRowState) { if row.routine.isArchived { archived.append(row) } else { active.append(row) } }
     private func replace(_ old: RoutineRowState, with new: RoutineRowState) { active.removeAll { $0.id == old.id }; archived.removeAll { $0.id == old.id }; insert(new) }
     private func replace(_ old: RoutineRowState, routine: RoutineSnapshot) { replace(old, with: .init(routine: routine, isCompletedToday: old.isCompletedToday, streak: old.streak, history: old.history, representedDay: old.representedDay)) }

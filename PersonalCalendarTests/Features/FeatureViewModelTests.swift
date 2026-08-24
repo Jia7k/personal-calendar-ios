@@ -654,6 +654,26 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(subject.editorErrorMessage, editor); XCTAssertEqual(subject.failedEditorOperation, .create); XCTAssertNil(subject.refreshErrorMessage); XCTAssertNil(subject.failedActionOperation)
     }
 
+    func testRoutineActionRecoveryAtomicallyReplacesDeleteWithNewPauseFailure() {
+        let first = RoutineSnapshot(id: UUID(), title: "Delete", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let second = RoutineSnapshot(id: UUID(), title: "Pause", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [first, second]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.deleteError = TestError.failed; XCTAssertFalse(subject.delete(id: first.id)); XCTAssertEqual(subject.failedActionOperation, .delete(first.id))
+        repository.pauseError = TestError.failed; subject.setPaused(id: second.id, paused: true)
+        XCTAssertEqual(subject.failedActionOperation, .pause(second.id, true)); XCTAssertNil(subject.deleteRetryTarget)
+        repository.pauseError = nil; subject.retryFailedAction()
+        XCTAssertEqual(repository.pauseCalls, [.init(id: second.id, value: true)]); XCTAssertTrue(repository.deleteCalls.isEmpty); XCTAssertNil(subject.failedActionOperation)
+    }
+
+    func testRoutineFailedEditorDraftIsScopedToMatchingOperation() {
+        let routine = RoutineSnapshot(id: UUID(), title: "Old", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        let failed = RoutineDraft(title: "New", weekdays: [2, 3], window: .evening, reminderHour: 23, reminderMinute: 59)
+        repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: routine.id, draft: failed))
+        XCTAssertEqual(subject.failedDraft(for: .update(routine.id)), failed)
+        XCTAssertNil(subject.failedDraft(for: .create))
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

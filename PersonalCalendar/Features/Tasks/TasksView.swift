@@ -28,6 +28,6 @@ struct TasksView: View {
                 .disabled(!task.allowsModification || model.mutatingIDs.contains(task.id)).frame(minWidth: 44, minHeight: 44)
                 .accessibilityLabel("Mark \(task.title) \(task.isCompleted ? "incomplete" : "complete")").accessibilityValue(task.isCompleted ? "Completed" : "Not completed").accessibilityHint(task.allowsModification ? "" : "This task is read-only.")
             VStack(alignment: .leading, spacing: 3) { Text(task.title).strikethrough(task.isCompleted); if let due = task.dueDate { Text(due, format: task.dueHasTime ? .dateTime.month().day().hour().minute() : .dateTime.month().day()).font(.footnote).foregroundStyle(.secondary) } else { Text("No due date").font(.footnote).foregroundStyle(.secondary) } }
-        }
+        }.buttonStyle(.borderless)
     }
 }
