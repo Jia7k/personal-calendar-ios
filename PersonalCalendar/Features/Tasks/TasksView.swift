@@ -25,8 +25,8 @@ struct TasksView: View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Button { Task { await model.setCompleted(id: task.id, completed: !task.isCompleted) } } label: { Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle").font(.title3) }
                 .disabled(!task.allowsModification || model.mutatingIDs.contains(task.id)).frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("Mark \(task.title) \(task.isCompleted ? "incomplete" : "complete")").accessibilityValue(task.isCompleted ? "Completed" : "Not completed")
-            VStack(alignment: .leading, spacing: 3) { Text(task.title).strikethrough(task.isCompleted); if let due = task.dueDate { Text(due, format: .dateTime.month().day().hour().minute()).font(.footnote).foregroundStyle(.secondary) } else { Text("No due date").font(.footnote).foregroundStyle(.secondary) } }
+                .accessibilityLabel("Mark \(task.title) \(task.isCompleted ? "incomplete" : "complete")").accessibilityValue(task.isCompleted ? "Completed" : "Not completed").accessibilityHint(task.allowsModification ? "" : "This task is read-only.")
+            VStack(alignment: .leading, spacing: 3) { Text(task.title).strikethrough(task.isCompleted); if let due = task.dueDate { Text(due, format: task.dueHasTime ? .dateTime.month().day().hour().minute() : .dateTime.month().day()).font(.footnote).foregroundStyle(.secondary) } else { Text("No due date").font(.footnote).foregroundStyle(.secondary) } }
         }
     }
 }

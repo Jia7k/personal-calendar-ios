@@ -10,6 +10,7 @@ final class TasksViewModel {
     private(set) var errorMessage: String?
     private(set) var draftOnFailure: ReminderDraft?
     private(set) var isLoading = false
+    private(set) var isSaving = false
     private(set) var mutatingIDs: Set<String> = []
 
     private let service: any RemindersServicing
@@ -17,6 +18,7 @@ final class TasksViewModel {
     private let calendar: Calendar
     private let now: () -> Date
     private var confirmed: [ReminderSnapshot] = []
+    private var loadGeneration = 0
 
     init(service: any RemindersServicing, settings: AppSettingsStore, calendar: Calendar = .current, now: @escaping () -> Date = { .now }) {
         self.service = service; self.settings = settings; self.calendar = calendar; self.now = now
@@ -40,9 +42,12 @@ final class TasksViewModel {
 
     func load() async {
         guard service.accessState == .granted else { confirmed = []; publish(); errorMessage = nil; return }
-        isLoading = true; defer { isLoading = false }
+        loadGeneration += 1; let generation = loadGeneration
+        isLoading = true; defer { if generation == loadGeneration { isLoading = false } }
         do {
-            confirmed = try await service.fetchReminders(listIDs: settings.selectedReminderListIDs)
+            let fetched = try await service.fetchReminders(listIDs: settings.selectedReminderListIDs)
+            guard generation == loadGeneration else { return }
+            confirmed = fetched
             errorMessage = nil; publish()
         } catch {
             errorMessage = "Your tasks could not be refreshed. Pull to try again."
@@ -51,7 +56,9 @@ final class TasksViewModel {
     }
 
     func create(_ draft: ReminderDraft) async -> Bool {
+        guard !isSaving else { return false }
         guard isValid(draft), let listID = resolvedListID(for: draft) else { errorMessage = "Enter a title and choose a writable reminder list."; return false }
+        isSaving = true; defer { isSaving = false }
         var saved = draft; saved.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines); saved.listID = listID
         if saved.dueDate == nil { saved.dueHasTime = false }
         do {
@@ -87,9 +94,13 @@ final class TasksViewModel {
     }
 
     private func sort(_ lhs: ReminderSnapshot, _ rhs: ReminderSnapshot) -> Bool {
-        switch (lhs.dueDate, rhs.dueDate) { case let (a?, b?): return a == b ? lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending : a < b; case (_?, nil): return true; case (nil, _?): return false; case (nil, nil): return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending }
+        switch (lhs.dueDate, rhs.dueDate) { case let (a?, b?): if a != b { return a < b }; case (_?, nil): return true; case (nil, _?): return false; case (nil, nil): break }
+        let titleOrder = lhs.title.localizedCaseInsensitiveCompare(rhs.title); return titleOrder == .orderedSame ? lhs.id < rhs.id : titleOrder == .orderedAscending
     }
-    private func resolvedListID(for draft: ReminderDraft) -> String? { if let chosen = draft.listID, writableLists.contains(where: { $0.id == chosen }) { return chosen }; return defaultWritableListID }
+    private func resolvedListID(for draft: ReminderDraft) -> String? {
+        if let chosen = draft.listID { return writableLists.contains(where: { $0.id == chosen }) ? chosen : nil }
+        return defaultWritableListID
+    }
     private func isValid(_ draft: ReminderDraft) -> Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (0...9).contains(draft.priority) && (draft.dueDate != nil || !draft.dueHasTime) }
     private func replacing(_ item: ReminderSnapshot, completed: Bool) -> ReminderSnapshot { .init(id: item.id, title: item.title, notes: item.notes, dueDate: item.dueDate, dueHasTime: item.dueHasTime, priority: item.priority, listID: item.listID, listTitle: item.listTitle, isCompleted: completed, allowsModification: item.allowsModification, hasRecurrence: item.hasRecurrence) }
 }

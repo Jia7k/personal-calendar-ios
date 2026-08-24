@@ -20,6 +20,8 @@ final class RoutinesViewModel {
     var weekdayOrder: [Int] { (0..<7).map { ((calendar.firstWeekday - 1 + $0) % 7) + 1 } }
     func weekdayName(_ weekday: Int) -> String { calendar.weekdaySymbols[weekday - 1] }
     func reminderComponents(for date: Date) -> DateComponents { calendar.dateComponents([.hour, .minute], from: date) }
+    func reminderDate(hour: Int?, minute: Int?) -> Date { calendar.date(bySettingHour: hour ?? 9, minute: minute ?? 0, second: 0, of: now()) ?? now() }
+    func canCompleteToday(_ row: RoutineRowState) -> Bool { !row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)) }
 
     func reload() {
         isLoading = true; defer { isLoading = false }

@@ -296,6 +296,8 @@ final class FeatureViewModelTests: XCTestCase {
         let settings = AppSettingsStore(defaults: .ephemeral); settings.defaultReminderListID = "read"
         let service = FakeRemindersService(access: .granted, descriptors: [readonly, writable]); service.createError = TestError.failed
         let subject = TasksViewModel(service: service, settings: settings, calendar: calendar)
+        let explicitReadOnly = ReminderDraft(title: "Explicit", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: "read")
+        let rejected = await subject.create(explicitReadOnly); XCTAssertFalse(rejected); XCTAssertTrue(service.createdDrafts.isEmpty)
         let first = ReminderDraft(title: "  First  ", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)
         let failed = await subject.create(first); XCTAssertFalse(failed); XCTAssertEqual(subject.draftOnFailure?.title, "First")
         service.createError = nil
@@ -303,6 +305,13 @@ final class FeatureViewModelTests: XCTestCase {
         service.fetchErrorAfterCreate = TestError.failed
         let saved = await subject.create(edited); XCTAssertTrue(saved); XCTAssertEqual(service.createdDrafts.map(\.title), ["Edited"]); XCTAssertEqual(service.createdDrafts.first?.listID, "write")
         XCTAssertEqual(service.createdDrafts.count, 1); XCTAssertNotNil(subject.errorMessage)
+    }
+
+    func testTaskCreateRejectsMissingListAndNoWritableDestination() async {
+        let readOnly = ReminderListDescriptor(id: "read", title: "Read", colorHex: "#000", allowsContentModifications: false)
+        let service = FakeRemindersService(access: .granted, descriptors: [readOnly]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
+        let missing = await subject.create(.init(title: "Task", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: "missing")); XCTAssertFalse(missing)
+        let none = await subject.create(.init(title: "Task", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)); XCTAssertFalse(none); XCTAssertTrue(service.createdDrafts.isEmpty)
     }
 
     func testTaskCompletionUsesOpaqueIDAndPreservesConfirmedChangeAcrossRefreshFailure() async {
