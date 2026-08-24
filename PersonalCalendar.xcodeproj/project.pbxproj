@@ -323,6 +323,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = local.personalcalendar.iphone;
+				PRODUCT_MODULE_NAME = PersonalCalendar;
 				PRODUCT_NAME = "My Calendar";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -363,6 +364,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = local.personalcalendar.iphone;
+				PRODUCT_MODULE_NAME = PersonalCalendar;
 				PRODUCT_NAME = "My Calendar";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;

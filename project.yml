@@ -18,6 +18,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.personalcalendar.iphone
         PRODUCT_NAME: "My Calendar"
+        PRODUCT_MODULE_NAME: PersonalCalendar
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: "My Calendar"
         INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Show and manage your calendar events in one personal schedule."
