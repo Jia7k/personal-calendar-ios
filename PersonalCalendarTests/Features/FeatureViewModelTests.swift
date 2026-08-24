@@ -454,6 +454,21 @@ final class FeatureViewModelTests: XCTestCase {
         let row = subject.active.first { $0.id == first.id }!; XCTAssertEqual(row.history.count, 14); XCTAssertEqual(row.history.last?.day, today); XCTAssertEqual(row.history.first?.day, LocalDay(date: calendar.date(byAdding: .day, value: -13, to: now)!, calendar: calendar)); XCTAssertTrue(row.isCompletedToday); XCTAssertEqual(row.streak, RoutineStreakCalculator().currentStreak(routine: first, completedDays: [today, yesterday], through: today, calendar: calendar))
     }
 
+    func testRoutineCreateAndUpdateRetainConfirmedRowsWhenRefreshFails() {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let old = RoutineSnapshot(id: UUID(), title: "Old", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [old]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.listError = TestError.failed
+        let created = RoutineDraft(title: "  New  ", weekdays: [2], window: .morning, reminderHour: 8, reminderMinute: 30); XCTAssertTrue(subject.create(created)); XCTAssertEqual(repository.createdDrafts, [.init(title: "New", weekdays: [2], window: .morning, reminderHour: 8, reminderMinute: 30)]); XCTAssertTrue(subject.active.contains { $0.routine.title == "New" }); XCTAssertNil(subject.failedEditorOperation); XCTAssertTrue(subject.errorMessage?.contains("saved") == true)
+        let changed = RoutineDraft(title: "Changed", weekdays: [3], window: .evening, reminderHour: 23, reminderMinute: 59); XCTAssertTrue(subject.update(id: old.id, draft: changed)); XCTAssertEqual(repository.updateCalls.last, .init(id: old.id, draft: changed)); XCTAssertEqual(subject.active.first(where: { $0.id == old.id })?.routine.reminderMinute, 59)
+        repository.listError = nil; subject.reload(); XCTAssertNil(subject.errorMessage); XCTAssertEqual(repository.createdDrafts.count, 1); XCTAssertEqual(repository.updateCalls.count, 1)
+    }
+
+    func testRoutineReminderTimeRoundTripsInInjectedTimezone() {
+        var tokyo = Calendar(identifier: .gregorian); tokyo.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        let now = tokyo.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let subject = RoutinesViewModel(repository: FakeRoutineRepository(), calendar: tokyo, now: { now })
+        let date = subject.reminderDate(hour: 23, minute: 59); let parts = subject.reminderComponents(for: date)
+        XCTAssertEqual(parts.hour, 23); XCTAssertEqual(parts.minute, 59)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
