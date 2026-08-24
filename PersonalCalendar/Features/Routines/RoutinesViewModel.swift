@@ -11,7 +11,10 @@ enum RoutineActionOperation: Equatable { case pause(UUID, Bool), archive(UUID, B
 final class RoutinesViewModel {
     private(set) var active: [RoutineRowState] = []
     private(set) var archived: [RoutineRowState] = []
-    private(set) var errorMessage: String?
+    private(set) var refreshErrorMessage: String?
+    private(set) var editorErrorMessage: String?
+    private(set) var actionErrorMessage: String?
+    var errorMessage: String? { actionErrorMessage ?? editorErrorMessage ?? refreshErrorMessage }
     private(set) var draftOnFailure: RoutineDraft?
     private(set) var failedEditorOperation: RoutineEditorOperation?
     private(set) var failedActionOperation: RoutineActionOperation?
@@ -41,8 +44,8 @@ final class RoutinesViewModel {
                 return rowState(for: routine, completed: completed, day: reloadDay)
             }
             confirmedCompletedDays = nextCompleted
-            active = staged.filter { !$0.routine.isArchived }; archived = staged.filter { $0.routine.isArchived }; errorMessage = nil
-        } catch { errorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
+            active = staged.filter { !$0.routine.isArchived }; archived = staged.filter { $0.routine.isArchived }; refreshErrorMessage = nil
+        } catch { refreshErrorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
     }
 
     func create(_ draft: RoutineDraft) -> Bool {
@@ -62,7 +65,7 @@ final class RoutinesViewModel {
     }
     func setPaused(id: UUID, paused: Bool) { mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
     func setArchived(id: UUID, archived: Bool) { mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
-    @discardableResult func delete(id: UUID) -> Bool { guard !mutatingIDs.contains(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); failedActionOperation = nil; deleteRetryTarget = nil; active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true); return true } catch { failedActionOperation = .delete(id); deleteRetryTarget = row(id); errorMessage = "Your routine was not deleted. Try again."; return false } }
+    @discardableResult func delete(id: UUID) -> Bool { guard !mutatingIDs.contains(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); failedActionOperation = nil; actionErrorMessage = nil; deleteRetryTarget = nil; active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true); return true } catch { failedActionOperation = .delete(id); deleteRetryTarget = row(id); actionErrorMessage = "Your routine was not deleted. Try again."; return false } }
     func retryFailedAction() {
         guard let operation = failedActionOperation else { return }
         failedActionOperation = nil
@@ -75,13 +78,13 @@ final class RoutinesViewModel {
     }
 
     private func mutateDraft(_ draft: RoutineDraft, action: (RoutineDraft) throws -> Void) -> Bool {
-        guard valid(draft) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
-        do { try action(normalized(draft)); draftOnFailure = nil; reload(); return true } catch { draftOnFailure = draft; errorMessage = "Your routine was not saved. Edit it and try again."; return false }
+        guard valid(draft) else { draftOnFailure = draft; editorErrorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
+        do { try action(normalized(draft)); draftOnFailure = nil; reload(); return true } catch { draftOnFailure = draft; editorErrorMessage = "Your routine was not saved. Edit it and try again."; return false }
     }
     private func mutate(_ id: UUID, operation: RoutineActionOperation? = nil, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) {
         guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         guard let old = row(id) else { return }
-        do { try action(); failedActionOperation = nil; replace(old, with: patch(old)); reload(savedMutation: true) } catch { failedActionOperation = operation; errorMessage = "Your routine was not changed. Try again." }
+        do { try action(); failedActionOperation = nil; actionErrorMessage = nil; replace(old, with: patch(old)); reload(savedMutation: true) } catch { failedActionOperation = operation; actionErrorMessage = "Your routine was not changed. Try again." }
     }
     private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay? = nil) -> RoutineRowState {
         let today = today ?? currentDay
@@ -90,8 +93,8 @@ final class RoutinesViewModel {
     }
     private func row(_ id: UUID) -> RoutineRowState? { (active + archived).first { $0.id == id } }
     func canRetryEditor(_ operation: RoutineEditorOperation) -> Bool { failedEditorOperation == operation }
-    private func failEditor(_ operation: RoutineEditorOperation, draft: RoutineDraft, message: String) { failedEditorOperation = operation; draftOnFailure = draft; errorMessage = message }
-    private func clearEditorFailure() { failedEditorOperation = nil; draftOnFailure = nil }
+    private func failEditor(_ operation: RoutineEditorOperation, draft: RoutineDraft, message: String) { failedEditorOperation = operation; draftOnFailure = draft; editorErrorMessage = message }
+    private func clearEditorFailure() { failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
     private func insert(_ row: RoutineRowState) { if row.routine.isArchived { archived.append(row) } else { active.append(row) } }
     private func replace(_ old: RoutineRowState, with new: RoutineRowState) { active.removeAll { $0.id == old.id }; archived.removeAll { $0.id == old.id }; insert(new) }
     private func replace(_ old: RoutineRowState, routine: RoutineSnapshot) { replace(old, with: .init(routine: routine, isCompletedToday: old.isCompletedToday, streak: old.streak, history: old.history)) }
