@@ -22,6 +22,46 @@ final class PermissionOnboardingModel {
             case .notifications: "bell"
             }
         }
+
+        var benefitDescription: String {
+            switch self {
+            case .calendar:
+                String(localized: "Show your schedule and events in one place.")
+            case .reminders:
+                String(localized: "Show and manage your tasks alongside your schedule.")
+            case .notifications:
+                String(localized: "Deliver local reminders and summaries.")
+            }
+        }
+
+        func statusDescription(for access: AccessState) -> String {
+            switch (self, access) {
+            case (.calendar, .notDetermined):
+                String(localized: "Calendar access has not been requested.")
+            case (.calendar, .granted):
+                String(localized: "Calendar access is allowed.")
+            case (.calendar, .denied):
+                String(localized: "Calendar access is denied. You can change it later in Settings.")
+            case (.calendar, .restricted):
+                String(localized: "Calendar access is restricted by device or account controls.")
+            case (.reminders, .notDetermined):
+                String(localized: "Reminders access has not been requested.")
+            case (.reminders, .granted):
+                String(localized: "Reminders access is allowed.")
+            case (.reminders, .denied):
+                String(localized: "Reminders access is denied. You can change it later in Settings.")
+            case (.reminders, .restricted):
+                String(localized: "Reminders access is restricted by device or account controls.")
+            case (.notifications, .notDetermined):
+                String(localized: "Notifications access has not been requested.")
+            case (.notifications, .granted):
+                String(localized: "Notifications access is allowed.")
+            case (.notifications, .denied):
+                String(localized: "Notifications access is denied. You can change it later in Settings.")
+            case (.notifications, .restricted):
+                String(localized: "Notifications access is restricted by device or account controls.")
+            }
+        }
     }
 
     private let permissions: PermissionCoordinator
@@ -40,6 +80,8 @@ final class PermissionOnboardingModel {
     var title: String { page.title }
     var pageIndex: Int { page.rawValue }
     var stepDescription: String { "Step \(pageIndex + 1) of \(Page.allCases.count)" }
+    var benefitDescription: String { page.benefitDescription }
+    var statusDescription: String { page.statusDescription(for: access) }
     var actionsEnabled: Bool {
         isInitialRefreshComplete && !permissions.isRefreshing && !isAdvancing && !isFinished
     }
@@ -126,9 +168,13 @@ struct PermissionOnboardingView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel(model.stepDescription)
                     .accessibilityIdentifier("onboarding-step")
-                Text("Choose whether to allow this personal source now. You can change it later in Settings.")
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    Text(model.benefitDescription)
+                        .multilineTextAlignment(.center)
+                    Text(model.statusDescription)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer(minLength: 24)
                 Button(model.primaryTitle) { Task { await model.primaryAction() } }
                     .buttonStyle(.borderedProminent)
