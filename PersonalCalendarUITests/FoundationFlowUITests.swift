@@ -2,6 +2,36 @@ import XCTest
 
 @MainActor
 final class FoundationFlowUITests: XCTestCase {
+    func testShowOnboardingOrdersPagesAndNotNowReachesTabs() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-show-onboarding", "-calendar-not-determined", "-reminders-not-determined", "-notifications-not-determined"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Calendar"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Step 1 of 3"].exists)
+        XCTAssertTrue(app.buttons["Not Now"].isHittable)
+        app.buttons["Not Now"].tap()
+        XCTAssertTrue(app.staticTexts["Reminders"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Step 2 of 3"].exists)
+        app.buttons["Not Now"].tap()
+        XCTAssertTrue(app.staticTexts["Notifications"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Step 3 of 3"].exists)
+        app.buttons["Not Now"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Calendar"].waitForExistence(timeout: 2))
+    }
+
+    func testShowOnboardingUsesContinueForTerminalAccess() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-show-onboarding", "-calendar-denied"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Calendar"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Continue"].exists)
+        XCTAssertFalse(app.buttons["Not Now"].exists)
+        app.buttons["Continue"].tap()
+        XCTAssertTrue(app.staticTexts["Reminders"].waitForExistence(timeout: 2))
+    }
+
     func testSettingsExplainsDeniedCalendarWithoutBlockingRoutines() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-calendar-denied"]

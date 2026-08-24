@@ -4,6 +4,11 @@ import XCTest
 
 @MainActor
 final class DemoEnvironmentTests: XCTestCase {
+    func testDemoSkipsOnboardingUnlessExplicitlyRequested() {
+        XCTAssertTrue(AppEnvironment.demo(container: makeContainer(), arguments: []).settings.didCompleteOnboarding)
+        XCTAssertFalse(AppEnvironment.demo(container: makeContainer(), arguments: ["-show-onboarding"]).settings.didCompleteOnboarding)
+    }
+
     func testCalendarDenialLeavesDemoRemindersAndRoutinesUsable() async throws {
         let environment = AppEnvironment.demo(container: makeContainer(), arguments: ["-calendar-denied"])
         let day = LocalDay(year: 2026, month: 8, day: 24)

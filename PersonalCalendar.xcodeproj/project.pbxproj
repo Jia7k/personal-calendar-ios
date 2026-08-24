@@ -22,6 +22,7 @@
 		30C3ED07397306B88444D731 /* RoutinesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 601C1B2C329102F7A07180BD /* RoutinesView.swift */; };
 		33AF2479A22CB20B095AB8BA /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */; };
 		394675A289A87CA98F83F833 /* RoutinesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9588BA0EA24F41535C7D3D /* RoutinesViewModel.swift */; };
+		394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */; };
 		3C2459691135592229D0C2EA /* AgendaRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7571750731AA225FF73E941D /* AgendaRow.swift */; };
 		3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */; };
 		3F603968C9CA4B33CE4E9E65 /* NewTaskSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D90265B4DBB0AFBC001F7D4 /* NewTaskSheet.swift */; };
@@ -99,6 +100,7 @@
 		46669A23593638D5CF76617F /* TasksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksViewModel.swift; sourceTree = "<group>"; };
 		4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		579876904A537535665E94EB /* LocalDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDayTests.swift; sourceTree = "<group>"; };
+		58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingModelTests.swift; sourceTree = "<group>"; };
 		5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinator.swift; sourceTree = "<group>"; };
 		5D0F4CAF444E648C867C92FD /* Fakes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fakes.swift; sourceTree = "<group>"; };
 		601C1B2C329102F7A07180BD /* RoutinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutinesView.swift; sourceTree = "<group>"; };
@@ -231,6 +233,7 @@
 				DB9A9562279429E312F626F7 /* CalendarViewModelTests.swift */,
 				C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */,
 				94F43A03F235594E97C87F1C /* MonthGridBuilderTests.swift */,
+				58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -627,6 +630,7 @@
 				92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */,
 				6A454A2CE1CF1706587C5D7F /* MonthGridBuilderTests.swift in Sources */,
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
+				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
 				874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */,
 				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,
 			);
