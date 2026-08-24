@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 struct RoutineHistoryDay: Identifiable, Equatable, Sendable { let day: LocalDay; let isScheduled: Bool; let isCompleted: Bool; var id: LocalDay { day } }
-struct RoutineRowState: Identifiable, Equatable, Sendable { let routine: RoutineSnapshot; let isCompletedToday: Bool; let streak: Int; let history: [RoutineHistoryDay]; let representedDay: LocalDay?; var id: UUID { routine.id }; init(routine: RoutineSnapshot, isCompletedToday: Bool, streak: Int, history: [RoutineHistoryDay], representedDay: LocalDay? = nil) { self.routine = routine; self.isCompletedToday = isCompletedToday; self.streak = streak; self.history = history; self.representedDay = representedDay } }
+struct RoutineRowState: Identifiable, Equatable, Sendable { let routine: RoutineSnapshot; let isCompletedToday: Bool; let streak: Int; let history: [RoutineHistoryDay]; let representedDay: LocalDay; var id: UUID { routine.id } }
 enum RoutineEditorOperation: Equatable { case create, update(UUID) }
 enum RoutineActionOperation: Equatable { case pause(UUID, Bool), archive(UUID, Bool), completion(UUID, LocalDay, Bool), delete(UUID) }
 
@@ -54,12 +54,12 @@ final class RoutinesViewModel {
     func create(_ draft: RoutineDraft) -> Bool {
         guard valid(draft) else { failEditor(.create, draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
         let clean = normalized(draft)
-        do { let id = try repository.create(clean); clearEditorFailure(); insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false))); reload(savedMutation: true); return true } catch { failEditor(.create, draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
+        do { let id = try repository.create(clean); clearEditorFailure(); insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false), completed: [], day: currentDay)); reload(savedMutation: true); return true } catch { failEditor(.create, draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
     }
     func update(id: UUID, draft: RoutineDraft) -> Bool {
         guard valid(draft), let existing = row(id) else { failEditor(.update(id), draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
         let clean = normalized(draft)
-        do { try repository.update(id: id, draft: clean); replace(existing, with: rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived), completed: confirmedCompletedDays[id] ?? [])); clearEditorFailure(); reload(savedMutation: true); return true } catch { failEditor(.update(id), draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
+        do { try repository.update(id: id, draft: clean); replace(existing, with: rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived), completed: confirmedCompletedDays[id] ?? [], day: existing.representedDay)); clearEditorFailure(); reload(savedMutation: true); return true } catch { failEditor(.update(id), draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
     }
     func setCompleted(id: UUID, completed state: Bool) async {
         let day = currentDay
@@ -89,8 +89,7 @@ final class RoutinesViewModel {
         guard let old = row(id) else { return }
         do { try action(); failedActionOperation = nil; actionErrorMessage = nil; replace(old, with: patch(old)); reload(savedMutation: true) } catch { failedActionOperation = operation; actionErrorMessage = "Your routine was not changed. Try again." }
     }
-    private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay? = nil) -> RoutineRowState {
-        let today = today ?? currentDay
+    private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay) -> RoutineRowState {
         let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: completed.contains(day)) }
         return .init(routine: routine, isCompletedToday: completed.contains(today), streak: RoutineStreakCalculator().currentStreak(routine: routine, completedDays: completed, through: today, calendar: calendar), history: history, representedDay: today)
     }
@@ -100,11 +99,10 @@ final class RoutinesViewModel {
     private func clearEditorFailure() { failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
     private func insert(_ row: RoutineRowState) { if row.routine.isArchived { archived.append(row) } else { active.append(row) } }
     private func replace(_ old: RoutineRowState, with new: RoutineRowState) { active.removeAll { $0.id == old.id }; archived.removeAll { $0.id == old.id }; insert(new) }
-    private func replace(_ old: RoutineRowState, routine: RoutineSnapshot) { replace(old, with: .init(routine: routine, isCompletedToday: old.isCompletedToday, streak: old.streak, history: old.history)) }
+    private func replace(_ old: RoutineRowState, routine: RoutineSnapshot) { replace(old, with: .init(routine: routine, isCompletedToday: old.isCompletedToday, streak: old.streak, history: old.history, representedDay: old.representedDay)) }
     private func with(_ row: RoutineRowState, paused: Bool? = nil, archived: Bool? = nil) -> RoutineRowState { .init(routine: .init(id: row.id, title: row.routine.title, weekdays: row.routine.weekdays, window: row.routine.window, reminderHour: row.routine.reminderHour, reminderMinute: row.routine.reminderMinute, isPaused: paused ?? row.routine.isPaused, isArchived: archived ?? row.routine.isArchived), isCompletedToday: row.isCompletedToday, streak: row.streak, history: row.history, representedDay: row.representedDay) }
     private func retryCompletion(id: UUID, day: LocalDay, completed: Bool) { mutate(id, operation: .completion(id, day, completed), patch: { row in self.completedRow(row, day: day, completed: completed) }) { try repository.setCompleted(routineID: id, day: day, completed: completed) } }
-    private func completedRow(_ row: RoutineRowState, day: LocalDay, completed: Bool) -> RoutineRowState { var days = confirmedCompletedDays[row.id] ?? []; if completed { days.insert(day) } else { days.remove(day) }; confirmedCompletedDays[row.id] = days; return rowState(for: row.routine, completed: days) }
-    private func rowState(for routine: RoutineSnapshot) -> RoutineRowState { let today = currentDay; let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: false) }; return .init(routine: routine, isCompletedToday: false, streak: 0, history: history) }
+    private func completedRow(_ row: RoutineRowState, day: LocalDay, completed: Bool) -> RoutineRowState { var days = confirmedCompletedDays[row.id] ?? []; if completed { days.insert(day) } else { days.remove(day) }; confirmedCompletedDays[row.id] = days; return rowState(for: row.routine, completed: days, day: row.representedDay) }
     private func localDay(offset: Int, from day: LocalDay) -> LocalDay { LocalDay(date: calendar.date(byAdding: .day, value: offset, to: day.startDate(in: calendar))!, calendar: calendar) }
     private func weekday(for day: LocalDay) -> Int { calendar.component(.weekday, from: day.startDate(in: calendar)) }
     private func valid(_ d: RoutineDraft) -> Bool { !d.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !d.weekdays.isEmpty && d.weekdays.allSatisfy { (1...7).contains($0) } && ((d.reminderHour == nil && d.reminderMinute == nil) || ((0...23).contains(d.reminderHour ?? -1) && (0...59).contains(d.reminderMinute ?? -1))) }
