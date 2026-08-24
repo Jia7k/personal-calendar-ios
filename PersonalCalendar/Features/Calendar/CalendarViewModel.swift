@@ -22,6 +22,7 @@ final class CalendarViewModel {
     private var cachedEvents: [CalendarEventSnapshot] = []
     private var cachedReminders: [ReminderSnapshot] = []
     private var cachedRoutines: [RoutineSnapshot] = []
+    private var cachedRoutineCompletions: [UUID: Set<LocalDay>] = [:]
     private let today: LocalDay
     private let calendarService: any CalendarServicing
     private let remindersService: any RemindersServicing
@@ -66,18 +67,20 @@ final class CalendarViewModel {
             deniedSourceMessages.append("Reminders access is unavailable. Tasks are hidden.")
         }
 
-        do { cachedRoutines = try routines.list(includeArchived: false) }
-        catch { encounteredFailure = true }
+        do {
+            let refreshed = try routines.list(includeArchived: false)
+            let completions = try Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
+            cachedRoutines = refreshed
+            cachedRoutineCompletions = completions
+        } catch { encounteredFailure = true }
 
-        do { try rebuildVisibleAgendas() }
-        catch { encounteredFailure = true }
+        rebuildVisibleAgendas()
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }
 
     func select(_ day: LocalDay) async {
         selectedDay = day
-        do { try rebuildVisibleAgendas() }
-        catch { errorMessage = "Your schedule could not be refreshed. Try again." }
+        agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
     }
 
     func setTray(_ state: TrayState) { trayState = state }
@@ -105,10 +108,10 @@ final class CalendarViewModel {
         }
     }
 
-    private func rebuildVisibleAgendas() throws {
+    private func rebuildVisibleAgendas() {
         let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
-        visibleAgendas = try Dictionary(uniqueKeysWithValues: days.map { day in
-            let completed = Set(try cachedRoutines.filter { try routines.isCompleted(routineID: $0.id, day: day) }.map(\.id))
+        visibleAgendas = Dictionary(uniqueKeysWithValues: days.map { day in
+            let completed = Set(cachedRoutines.filter { cachedRoutineCompletions[$0.id]?.contains(day) == true }.map(\.id))
             return (day, composer.compose(day: day, events: cachedEvents, reminders: cachedReminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: day == today, calendar: systemCalendar))
         })
         agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])

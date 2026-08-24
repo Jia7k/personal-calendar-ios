@@ -51,7 +51,10 @@ struct DayTrayView: View {
 
     static func nextEvent(in agenda: DayAgenda) -> AgendaItem? { agenda.scheduled.filter { $0.source == .event }.sorted(by: AgendaItem.stableSort).first }
     static func highestPriorityTask(in agenda: DayAgenda) -> AgendaItem? { (agenda.scheduled + agenda.priority).filter { $0.source == .task && !$0.isCompleted }.sorted(by: AgendaItem.prioritySort).first }
-    static func nextIncompleteRoutine(in agenda: DayAgenda) -> AgendaItem? { (agenda.scheduled + agenda.priority).filter { $0.source == .routine && !$0.isCompleted }.sorted(by: AgendaItem.stableSort).first }
+    static func nextIncompleteRoutine(in agenda: DayAgenda) -> AgendaItem? {
+        agenda.scheduled.first(where: { $0.source == .routine && !$0.isCompleted })
+            ?? agenda.priority.first(where: { $0.source == .routine && !$0.isCompleted })
+    }
 
     private func section(_ title: String, items: [AgendaItem]) -> some View {
         VStack(alignment: .leading, spacing: 6) {

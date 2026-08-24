@@ -75,6 +75,7 @@ final class FakeRoutineRepository: RoutineRepository {
     var routines: [RoutineSnapshot]
     var createdDrafts: [RoutineDraft] = []
     var completionCalls: [RoutineCompletionCall] = []
+    var completedDaysCallCount = 0
     private var completions: [UUID: Set<LocalDay>] = [:]
 
     init(routines: [RoutineSnapshot] = []) {
@@ -115,7 +116,8 @@ final class FakeRoutineRepository: RoutineRepository {
     }
 
     func completedDays(routineID: UUID) throws -> Set<LocalDay> {
-        completions[routineID, default: []]
+        completedDaysCallCount += 1
+        return completions[routineID, default: []]
     }
 }
 

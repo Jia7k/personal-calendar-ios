@@ -36,7 +36,7 @@ struct NewEventSheet: View {
                 if let saveErrorMessage {
                     Section("Could not save") {
                         Label(saveErrorMessage, systemImage: "exclamationmark.triangle")
-                        Button("Retry") { onRetry(failedDraft ?? draft) }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                        Button("Retry") { onRetry(draft) }.disabled(isSaving || !isValid).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                     }
                 }
                 if !isValid { Text(validationMessage).font(.footnote).foregroundStyle(.secondary) }

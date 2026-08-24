@@ -140,6 +140,24 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(DayTrayView.nextIncompleteRoutine(in: agenda)?.title, "Routine")
     }
 
+    func testRoutineSelectionPrefersScheduledRoutineOverAlphabeticallyEarlierAnytimeRoutine() {
+        let anytime = AgendaItem(id: "anytime", title: "A Anytime", source: .routine, placement: .window(.anytime), sortDate: nil, priority: 0, isCompleted: false, allowsModification: true)
+        let scheduled = AgendaItem(id: "scheduled", title: "Z Scheduled", source: .routine, placement: .window(.morning), sortDate: Date(timeIntervalSince1970: 10), priority: 0, isCompleted: false, allowsModification: true)
+        XCTAssertEqual(DayTrayView.nextIncompleteRoutine(in: .init(allDay: [], scheduled: [scheduled], priority: [anytime]))?.title, "Z Scheduled")
+    }
+
+    func testCompletionHistoryLoadsOncePerRoutineAndSelectionDoesNotRefetch() async {
+        let routines = FakeRoutineRepository(routines: [.sampleRoutine])
+        let model = makeModel(routines: routines)
+        await model.load()
+        let callsAfterLoad = routines.completedDaysCallCount
+
+        await model.select(LocalDay(year: 2026, month: 8, day: 25))
+
+        XCTAssertEqual(callsAfterLoad, 1)
+        XCTAssertEqual(routines.completedDaysCallCount, callsAfterLoad)
+    }
+
     private func makeModel(calendarService: FakeCalendarService = FakeCalendarService(access: .granted), reminders: FakeRemindersService = FakeRemindersService(access: .granted), routines: FakeRoutineRepository = FakeRoutineRepository(), settings: AppSettingsStore = AppSettingsStore(defaults: .ephemeral)) -> CalendarViewModel {
         CalendarViewModel(today: today, calendarService: calendarService, remindersService: reminders, routines: routines, composer: AgendaComposer(), settings: settings, systemCalendar: calendar)
     }
