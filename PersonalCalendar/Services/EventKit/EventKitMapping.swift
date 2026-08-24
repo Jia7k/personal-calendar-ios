@@ -44,18 +44,57 @@ extension ReminderSnapshot {
         let list = reminder.calendar
         let dueComponents = reminder.dueDateComponents
 
-        self.init(
-            id: reminder.calendarItemIdentifier,
-            title: reminder.title ?? "",
-            notes: reminder.notes,
-            dueDate: dueComponents?.date,
-            dueHasTime: dueComponents?.hour != nil,
-            priority: reminder.priority,
-            listID: list?.calendarIdentifier ?? "",
-            listTitle: list?.title ?? "",
-            isCompleted: reminder.isCompleted,
-            allowsModification: list?.allowsContentModifications ?? false,
-            hasRecurrence: reminder.hasRecurrenceRules
+        self = ReminderSnapshotMapper.snapshot(
+            from: ReminderOccurrenceInput(
+                id: reminder.calendarItemIdentifier,
+                title: reminder.title ?? "",
+                notes: reminder.notes,
+                dueDate: dueComponents?.date,
+                dueHasTime: dueComponents?.hour != nil,
+                priority: reminder.priority,
+                listID: list?.calendarIdentifier ?? "",
+                listTitle: list?.title ?? "",
+                isCompleted: reminder.isCompleted,
+                allowsModification: list?.allowsContentModifications ?? false,
+                hasRecurrence: reminder.hasRecurrenceRules
+            )
+        )
+    }
+}
+
+struct ReminderOccurrenceInput: Sendable {
+    let id: String
+    let title: String
+    let notes: String?
+    let dueDate: Date?
+    let dueHasTime: Bool
+    let priority: Int
+    let listID: String
+    let listTitle: String
+    let isCompleted: Bool
+    let allowsModification: Bool
+    let hasRecurrence: Bool
+}
+
+enum ReminderSnapshotMapper {
+    // Inputs correspond one-for-one with the occurrences EventKit supplied; this mapper never expands recurrence rules.
+    static func snapshots(from occurrences: [ReminderOccurrenceInput]) -> [ReminderSnapshot] {
+        occurrences.map(snapshot)
+    }
+
+    static func snapshot(from occurrence: ReminderOccurrenceInput) -> ReminderSnapshot {
+        ReminderSnapshot(
+            id: occurrence.id,
+            title: occurrence.title,
+            notes: occurrence.notes,
+            dueDate: occurrence.dueDate,
+            dueHasTime: occurrence.dueHasTime,
+            priority: occurrence.priority,
+            listID: occurrence.listID,
+            listTitle: occurrence.listTitle,
+            isCompleted: occurrence.isCompleted,
+            allowsModification: occurrence.allowsModification,
+            hasRecurrence: occurrence.hasRecurrence
         )
     }
 }

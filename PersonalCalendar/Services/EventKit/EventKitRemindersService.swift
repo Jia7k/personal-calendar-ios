@@ -83,13 +83,11 @@ final class EventKitRemindersService: RemindersServicing {
         reminder.priority = draft.priority
         reminder.calendar = destination
         if let dueDate = draft.dueDate {
-            let components: Set<Calendar.Component> = draft.dueHasTime
-                ? [.year, .month, .day, .hour, .minute]
-                : [.year, .month, .day]
-            var dueComponents = Calendar.current.dateComponents(components, from: dueDate)
-            dueComponents.calendar = .current
-            dueComponents.timeZone = .current
-            reminder.dueDateComponents = dueComponents
+            reminder.dueDateComponents = ReminderDueComponentBuilder.components(
+                for: dueDate,
+                dueHasTime: draft.dueHasTime,
+                preferredCalendar: .autoupdatingCurrent
+            )
         }
 
         try store.save(reminder, commit: true)
@@ -109,4 +107,22 @@ final class EventKitRemindersService: RemindersServicing {
 
 private enum ReminderFetchError: Error {
     case missingResult
+}
+
+enum ReminderDueComponentBuilder {
+    static func components(
+        for dueDate: Date,
+        dueHasTime: Bool,
+        preferredCalendar: Calendar
+    ) -> DateComponents {
+        var gregorianCalendar = Calendar(identifier: .gregorian)
+        gregorianCalendar.timeZone = preferredCalendar.timeZone
+        let requestedComponents: Set<Calendar.Component> = dueHasTime
+            ? [.year, .month, .day, .hour, .minute]
+            : [.year, .month, .day]
+        var components = gregorianCalendar.dateComponents(requestedComponents, from: dueDate)
+        components.calendar = gregorianCalendar
+        components.timeZone = preferredCalendar.timeZone
+        return components
+    }
 }

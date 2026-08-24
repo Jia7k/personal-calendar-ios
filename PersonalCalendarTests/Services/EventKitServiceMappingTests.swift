@@ -12,9 +12,9 @@ final class EventKitServiceMappingTests: XCTestCase {
         )
     }
 
-    // Break caught: treating recurrence metadata as future generated occurrences would misrepresent EventKit results.
-    func testRecurringReminderSnapshotRepresentsOnlySuppliedOccurrence() {
-        let snapshot = ReminderSnapshot(
+    // Break caught: a recurring EventKit occurrence would be expanded into unsupplied future snapshots.
+    func testMapsOneSuppliedRecurringOccurrenceToExactlyOneSnapshot() {
+        let occurrence = ReminderOccurrenceInput(
             id: "r1",
             title: "Pay bill",
             notes: nil,
@@ -28,8 +28,48 @@ final class EventKitServiceMappingTests: XCTestCase {
             hasRecurrence: true
         )
 
-        XCTAssertTrue(snapshot.hasRecurrence)
-        XCTAssertFalse(snapshot.isCompleted)
+        let snapshots = ReminderSnapshotMapper.snapshots(from: [occurrence])
+
+        XCTAssertEqual(snapshots.count, 1)
+        XCTAssertEqual(snapshots.first?.id, "r1")
+        XCTAssertTrue(snapshots.first?.hasRecurrence == true)
+    }
+
+    // Break caught: non-Gregorian device calendars could be assigned to EventKit and date-only reminders could gain a time.
+    func testDueComponentBuilderUsesGregorianCalendarAndPreservesDeviceTimeZone() {
+        let timeZone = try! XCTUnwrap(TimeZone(identifier: "Asia/Singapore"))
+        var buddhist = Calendar(identifier: .buddhist)
+        buddhist.timeZone = timeZone
+        let date = Date(timeIntervalSince1970: 1_704_067_506)
+
+        let timed = ReminderDueComponentBuilder.components(
+            for: date,
+            dueHasTime: true,
+            preferredCalendar: buddhist
+        )
+        let dateOnly = ReminderDueComponentBuilder.components(
+            for: date,
+            dueHasTime: false,
+            preferredCalendar: buddhist
+        )
+        var expectedGregorian = Calendar(identifier: .gregorian)
+        expectedGregorian.timeZone = timeZone
+        let expectedTimed = expectedGregorian.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+
+        XCTAssertEqual(timed.calendar?.identifier, .gregorian)
+        XCTAssertEqual(timed.timeZone, timeZone)
+        XCTAssertEqual(timed.year, expectedTimed.year)
+        XCTAssertEqual(timed.month, expectedTimed.month)
+        XCTAssertEqual(timed.day, expectedTimed.day)
+        XCTAssertEqual(timed.hour, expectedTimed.hour)
+        XCTAssertEqual(timed.minute, expectedTimed.minute)
+        XCTAssertEqual(dateOnly.calendar?.identifier, .gregorian)
+        XCTAssertEqual(dateOnly.timeZone, timeZone)
+        XCTAssertEqual(dateOnly.year, expectedTimed.year)
+        XCTAssertEqual(dateOnly.month, expectedTimed.month)
+        XCTAssertEqual(dateOnly.day, expectedTimed.day)
+        XCTAssertNil(dateOnly.hour)
+        XCTAssertNil(dateOnly.minute)
     }
 
     // Break caught: date-only reminders would be displayed with an invented clock time.
