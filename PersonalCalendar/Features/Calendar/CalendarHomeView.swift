@@ -72,7 +72,7 @@ struct CalendarHomeView: View {
     }
 
     private func setTray(_ state: TrayState) {
-        if reduceMotion { viewModel.setTray(state) }
+        if reduceMotion || environment.reduceMotionOverride { viewModel.setTray(state) }
         else { withAnimation(.easeInOut(duration: 0.2)) { viewModel.setTray(state) } }
     }
 }

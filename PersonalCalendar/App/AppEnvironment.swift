@@ -10,6 +10,7 @@ struct AppEnvironment {
     let permissions: PermissionCoordinator
     let agendaComposer: AgendaComposer
     let settings: AppSettingsStore
+    let reduceMotionOverride: Bool
 
     static func live(container: ModelContainer) -> AppEnvironment {
         let store = EKEventStore()
@@ -28,7 +29,8 @@ struct AppEnvironment {
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(),
-            settings: AppSettingsStore()
+            settings: AppSettingsStore(),
+            reduceMotionOverride: false
         )
     }
 
@@ -51,7 +53,8 @@ struct AppEnvironment {
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(),
-            settings: { let settings = AppSettingsStore(defaults: .ephemeral); settings.didCompleteOnboarding = !arguments.contains("-show-onboarding"); return settings }()
+            settings: { let settings = AppSettingsStore(defaults: .ephemeral); settings.didCompleteOnboarding = !arguments.contains("-show-onboarding"); return settings }(),
+            reduceMotionOverride: arguments.contains("-reduce-motion")
         )
     }
 }

@@ -4,6 +4,12 @@ import XCTest
 
 @MainActor
 final class DemoEnvironmentTests: XCTestCase {
+    func testReduceMotionOverrideRequiresExplicitDemoArgument() {
+        XCTAssertFalse(AppEnvironment.live(container: makeContainer()).reduceMotionOverride)
+        XCTAssertFalse(AppEnvironment.demo(container: makeContainer(), arguments: []).reduceMotionOverride)
+        XCTAssertTrue(AppEnvironment.demo(container: makeContainer(), arguments: ["-reduce-motion"]).reduceMotionOverride)
+    }
+
     func testDemoSkipsOnboardingUnlessExplicitlyRequested() {
         XCTAssertTrue(AppEnvironment.demo(container: makeContainer(), arguments: []).settings.didCompleteOnboarding)
         XCTAssertFalse(AppEnvironment.demo(container: makeContainer(), arguments: ["-show-onboarding"]).settings.didCompleteOnboarding)

@@ -60,7 +60,14 @@ final class FoundationFlowUITests: XCTestCase {
         app.launchArguments = ["-ui-testing"]
         app.launch()
 
-        XCTAssertTrue(app.buttons["calendar-day-today"].waitForExistence(timeout: 3))
+        let today = app.buttons["calendar-day-today"]
+        XCTAssertTrue(today.waitForExistence(timeout: 3))
+        XCTAssertFalse(today.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertNotEqual(today.label, "calendar-day-today")
+        let todayValue = today.value as? String ?? ""
+        XCTAssertTrue(todayValue.contains("Today"), "Expected Today in accessibility value: \(todayValue)")
+        XCTAssertTrue(todayValue.contains("Selected"), "Expected Selected in accessibility value: \(todayValue)")
+        XCTAssertNotNil(todayValue.range(of: #"\b\d+ items\b"#, options: .regularExpression), "Expected an item count in accessibility value: \(todayValue)")
         XCTAssertTrue(app.otherElements["month-grid"].exists)
         app.buttons["Expand day"].tap()
 
@@ -142,28 +149,56 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
     }
 
-    func testSettingsAndOnboardingRemainHittableAtAccessibilityXXXL() {
+    func testCalendarDegradedPathReachesHittableSettingsControlsAtAccessibilityXXXL() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-calendar-restricted", "-show-onboarding", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launchArguments = ["-ui-testing", "-calendar-denied", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Step 1 of 3"].waitForExistence(timeout: 3))
-        let primary = app.buttons["onboarding-primary"]
-        for _ in 0..<4 where !primary.isHittable { app.swipeUp() }
-        XCTAssertTrue(primary.isHittable)
-        primary.tap()
-        XCTAssertTrue(app.staticTexts["Reminders"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Calendar access is unavailable. Calendar events are hidden."].waitForExistence(timeout: 3))
+        let degradedSettings = app.buttons["calendar-permission-settings"]
+        XCTAssertTrue(degradedSettings.waitForExistence(timeout: 3))
+        scrollToHittable(degradedSettings, in: app)
+        degradedSettings.tap()
+
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.exists)
+        XCTAssertTrue(done.isHittable)
+        XCTAssertTrue(app.staticTexts["Calendar access is off"].waitForExistence(timeout: 3))
+        let systemSettings = app.buttons["Open System Settings"].firstMatch
+        XCTAssertTrue(systemSettings.waitForExistence(timeout: 3))
+        scrollToHittable(systemSettings, in: app)
     }
 
-    func testEssentialSurfacesLaunchInDarkModeWithReduceMotion() {
+    func testReduceMotionLaunchExpandsAndCollapsesCalendarTray() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-calendar-denied", "-reminders-denied", "-UITraitUserInterfaceStyle", "dark", "-UIAccessibilityReduceMotionEnabled", "YES"]
+        app.launchArguments = ["-ui-testing", "-reduce-motion"]
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.otherElements["month-grid"].waitForExistence(timeout: 3))
+        app.buttons["Expand day"].tap()
+        XCTAssertTrue(app.otherElements["selected-week-strip"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["month-grid"].exists)
+        app.buttons["Collapse day"].tap()
+        XCTAssertTrue(app.otherElements["month-grid"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.otherElements["selected-week-strip"].exists)
+    }
+
+    func testDarkModeDegradedPermissionSurfaceRemainsOperable() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-denied", "-reminders-denied", "-AppleInterfaceStyle", "Dark"]
+        app.launch()
+
         XCTAssertTrue(app.staticTexts["Calendar access is unavailable. Calendar events are hidden."].waitForExistence(timeout: 3))
-        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.staticTexts["Reminders access is unavailable. Tasks are hidden."].exists)
+        let degradedSettings = app.buttons["calendar-permission-settings"]
+        XCTAssertTrue(degradedSettings.waitForExistence(timeout: 3))
+        scrollToHittable(degradedSettings, in: app)
+        degradedSettings.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Calendar access is off"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Done"].isHittable)
     }
 
     func testAllDeniedKeepsCalendarTodayAndRoutinesOperable() {
@@ -171,11 +206,32 @@ final class FoundationFlowUITests: XCTestCase {
         app.launchArguments = ["-ui-testing", "-calendar-denied", "-reminders-denied", "-notifications-denied"]
         app.launch()
 
+        XCTAssertTrue(app.staticTexts["Calendar access is unavailable. Calendar events are hidden."].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Reminders access is unavailable. Tasks are hidden."].exists)
+        XCTAssertTrue(app.buttons["calendar-permission-settings"].exists)
+        XCTAssertTrue(app.buttons["reminders-permission-settings"].exists)
         XCTAssertTrue(app.staticTexts["Read"].waitForExistence(timeout: 3))
+
         app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(app.staticTexts["Calendar events are unavailable"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Tasks are unavailable"].exists)
+        XCTAssertTrue(app.buttons["today-calendar-permission-settings"].exists)
+        XCTAssertTrue(app.buttons["today-reminders-permission-settings"].exists)
         XCTAssertTrue(app.staticTexts["Read"].waitForExistence(timeout: 3))
+
         app.tabBars.buttons["Routines"].tap()
         XCTAssertTrue(app.navigationBars["Routines"].waitForExistence(timeout: 3))
+        let complete = app.buttons["Mark Read complete"]
+        let undo = app.buttons["Mark Read incomplete"]
+        if undo.exists {
+            undo.tap()
+            XCTAssertTrue(complete.waitForExistence(timeout: 3))
+        }
+        XCTAssertTrue(complete.waitForExistence(timeout: 3))
+        complete.tap()
+        let completed = app.buttons["Mark Read incomplete"]
+        XCTAssertTrue(completed.waitForExistence(timeout: 3))
+        XCTAssertEqual(completed.value as? String, "Completed")
     }
 
     func testSettingsSourceToggleRefreshesCalendarAndTodayWithoutHidingOtherSource() {
@@ -316,6 +372,11 @@ final class FoundationFlowUITests: XCTestCase {
     private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 3) {
         let expectation = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
         wait(for: [expectation], timeout: timeout)
+    }
+
+    private func scrollToHittable(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<6 where !element.isHittable { app.swipeUp() }
+        XCTAssertTrue(element.isHittable, "Expected \(element) to be reachable and hittable", file: file, line: line)
     }
 
     private func routineAction(_ action: String, in app: XCUIApplication) -> XCUIElement { app.buttons["routine-\(action)-00000000-0000-0000-0000-000000000001"] }
