@@ -93,7 +93,7 @@ final class FeatureViewModelTests: XCTestCase {
     func testTodayKeepsConfirmedMutationWhenPostSaveRefreshFails() async {
         let due = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
         let task = reminder(id: "task", title: "Task", due: due, hasTime: true)
-        let reminders = FakeRemindersService(access: .granted, reminders: [task])
+        let reminders = FakeRemindersService(access: .granted, reminders: [task], descriptors: [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: reminders, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { due })
         await subject.load()
         reminders.fetchErrorAfterCompletion = TestError.failed
@@ -290,7 +290,7 @@ final class FeatureViewModelTests: XCTestCase {
 
     func testTaskCompletionUndoUsesOpaqueIdentifierAndRestoresAgenda() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
-        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "opaque|raw", title: "Task", due: now, hasTime: true)])
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "opaque|raw", title: "Task", due: now, hasTime: true)], descriptors: [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
         await subject.load()
         await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
@@ -316,7 +316,7 @@ final class FeatureViewModelTests: XCTestCase {
 
     func testUndoWriteFailureKeepsUndoAndCompletedTaskAbsent() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
-        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)])
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)], descriptors: [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
         await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
         service.completionError = TestError.failed
@@ -328,7 +328,7 @@ final class FeatureViewModelTests: XCTestCase {
 
     func testUndoStaysPendingUntilSuspendedRefreshFinishes() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
-        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)])
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)], descriptors: [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
         await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
         service.suspendFetchAfterUndo = true
@@ -357,6 +357,30 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.subject.agenda.scheduled.first?.allowsModification, true)
         XCTAssertNil(fixture.subject.latestTaskUndo)
         XCTAssertNotNil(fixture.subject.remindersError)
+    }
+
+    func testSuccessfulUndoClearsMatchingPendingUndoWhenItsRefreshBecomesStale() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled[0], completed: true)
+        fixture.service.suspendFetchAfterUndo = true
+        let undo = Task { await fixture.subject.undoLastTaskCompletion() }
+        for _ in 0..<30 where !fixture.service.isFetchSuspended { await Task.yield() }
+
+        XCTAssertTrue(fixture.service.isFetchSuspended)
+        XCTAssertTrue(fixture.subject.latestTaskUndo?.isPending == true)
+        fixture.service.reminders = [fixture.snapshot]
+        await fixture.subject.load()
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Captured"])
+
+        fixture.service.resumeSuspendedFetch()
+        await undo.value
+
+        XCTAssertEqual(fixture.service.completedCalls.filter { !$0.completed }, [.init(id: "opaque|captured", completed: false)])
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Captured"])
+        XCTAssertFalse(fixture.subject.agenda.scheduled[0].isCompleted)
+        XCTAssertNil(fixture.subject.remindersError)
+        XCTAssertNil(fixture.subject.latestTaskUndo)
     }
 
     func testOmittedCompletedTaskUndoClearsWithoutWriteAfterDenial() async {
@@ -389,6 +413,21 @@ final class FeatureViewModelTests: XCTestCase {
         await fixture.subject.undoLastTaskCompletion()
 
         XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertNil(fixture.subject.latestTaskUndo)
+    }
+
+    func testOmittedCompletedTaskUndoClearsWithoutWriteWhenDescriptorDisappearsButSameListSiblingRemains() async {
+        let fixture = makeOmittedCompletedUndoFixture()
+        let sibling = ReminderSnapshot(id: "same-list-sibling", title: "Sibling", notes: nil, dueDate: fixture.snapshot.dueDate, dueHasTime: true, priority: 1, listID: "captured-list", listTitle: "Captured List", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        fixture.service.reminders.append(sibling)
+        await fixture.subject.load()
+        await fixture.subject.setTaskCompleted(fixture.subject.agenda.scheduled.first { $0.title == "Captured" }!, completed: true)
+        fixture.service.descriptors = []
+
+        await fixture.subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(fixture.service.completedCalls, [.init(id: "opaque|captured", completed: true)])
+        XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Sibling"])
         XCTAssertNil(fixture.subject.latestTaskUndo)
     }
 
@@ -432,7 +471,7 @@ final class FeatureViewModelTests: XCTestCase {
 
     func testOlderUndoRefreshDoesNotClearNewCompletionUndo() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
-        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)])
+        let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)], descriptors: [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
         await subject.load(); await subject.setTaskCompleted(subject.agenda.scheduled[0], completed: true)
         service.suspendFetchAfterUndo = true

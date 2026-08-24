@@ -172,8 +172,8 @@ final class TodayViewModel {
             }
             if !cachedReminders.contains(where: { $0.id == undo.rawID }) { cachedReminders.append(restoredSnapshot) }
             compose(day: localDay, calendar: calendarProvider())
-            let outcome = await refreshReminders(failureMessage: "Task changes were saved, but tasks could not be refreshed. Pull to try again.")
-            if outcome != .stale, latestTaskUndo?.generation == undoGeneration { latestTaskUndo = nil }
+            _ = await refreshReminders(failureMessage: "Task changes were saved, but tasks could not be refreshed. Pull to try again.")
+            if latestTaskUndo?.generation == undoGeneration { latestTaskUndo = nil }
         } catch {
             undo.isPending = false
             if latestTaskUndo?.generation == undoGeneration { latestTaskUndo = undo }
@@ -314,24 +314,11 @@ final class TodayViewModel {
 
     private func capturedUndoIsEligible(_ undo: TaskUndoState, context: ReminderContext? = nil) -> Bool {
         let context = context ?? reminderContext()
-        guard context.access == .granted, undo.snapshot.allowsModification else { return false }
-        let availableIDs: Set<String>
-        let writableIDs: Set<String>
-        let selectedIDs: Set<String>
-        if context.descriptorIDs.isEmpty {
-            availableIDs = Set(cachedReminders.map(\.listID))
-            writableIDs = Set(cachedReminders.filter(\.allowsModification).map(\.listID))
-            selectedIDs = context.selectionIsExplicit
-                ? settings.visibleReminderListIDs(availableIDs: availableIDs)
-                : availableIDs
-        } else {
-            availableIDs = context.descriptorIDs
-            writableIDs = context.writableDescriptorIDs
-            selectedIDs = context.selectedIDs
-        }
-        guard availableIDs.contains(undo.snapshot.listID),
-              writableIDs.contains(undo.snapshot.listID),
-              selectedIDs.contains(undo.snapshot.listID)
+        guard context.access == .granted,
+              undo.snapshot.allowsModification,
+              context.descriptorIDs.contains(undo.snapshot.listID),
+              context.writableDescriptorIDs.contains(undo.snapshot.listID),
+              context.selectedIDs.contains(undo.snapshot.listID)
         else { return false }
         guard let authoritative = cachedReminders.first(where: { $0.id == undo.rawID }) else {
             return true
