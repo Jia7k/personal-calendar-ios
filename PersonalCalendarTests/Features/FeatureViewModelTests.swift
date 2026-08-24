@@ -344,6 +344,17 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(repository.completionCalls.last?.completed, false)
     }
 
+    func testRoutineMutationsUpdateConfirmedRowsBeforeARefreshFailure() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [calendar.component(.weekday, from: now)], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [routine]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now })
+        subject.reload(); repository.completedDaysError = TestError.failed
+        subject.setPaused(id: routine.id, paused: true)
+        XCTAssertTrue(subject.active[0].routine.isPaused)
+        subject.setArchived(id: routine.id, archived: true)
+        XCTAssertTrue(subject.archived[0].routine.isArchived)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
