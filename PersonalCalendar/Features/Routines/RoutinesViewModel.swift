@@ -29,12 +29,13 @@ final class RoutinesViewModel {
     func reload(savedMutation: Bool = false) {
         isLoading = true; defer { isLoading = false }
         do {
+            let reloadDay = currentDay
             let snapshots = try repository.list(includeArchived: true)
             var nextCompleted: [UUID: Set<LocalDay>] = [:]
             let staged = try snapshots.map { routine -> RoutineRowState in
                 let completed = try repository.completedDays(routineID: routine.id)
                 nextCompleted[routine.id] = completed
-                return rowState(for: routine, completed: completed)
+                return rowState(for: routine, completed: completed, day: reloadDay)
             }
             confirmedCompletedDays = nextCompleted
             active = staged.filter { !$0.routine.isArchived }; archived = staged.filter { $0.routine.isArchived }; errorMessage = nil
@@ -68,8 +69,8 @@ final class RoutinesViewModel {
         guard let old = row(id) else { return }
         do { try action(); replace(old, with: patch(old)); reload(savedMutation: true) } catch { errorMessage = "Your routine was not changed. Try again." }
     }
-    private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>) -> RoutineRowState {
-        let today = currentDay
+    private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay? = nil) -> RoutineRowState {
+        let today = today ?? currentDay
         let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: completed.contains(day)) }
         return .init(routine: routine, isCompletedToday: completed.contains(today), streak: RoutineStreakCalculator().currentStreak(routine: routine, completedDays: completed, through: today, calendar: calendar), history: history)
     }

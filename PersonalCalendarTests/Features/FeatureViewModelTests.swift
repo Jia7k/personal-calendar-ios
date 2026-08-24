@@ -444,6 +444,16 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(repository.completionCalls.suffix(3).map(\.completed), [false, false, false])
     }
 
+    func testRoutineReloadUsesOneListOneHistoryPerRoutineAndBuildsConsecutiveHistory() {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let weekday = calendar.component(.weekday, from: now)
+        let first = RoutineSnapshot(id: UUID(), title: "Daily", weekdays: [1, 2, 3, 4, 5, 6, 7], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let second = RoutineSnapshot(id: UUID(), title: "Weekly", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [first, second]); let today = LocalDay(date: now, calendar: calendar); let yesterday = LocalDay(date: calendar.date(byAdding: .day, value: -1, to: now)!, calendar: calendar); try? repository.setCompleted(routineID: first.id, day: today, completed: true); try? repository.setCompleted(routineID: first.id, day: yesterday, completed: true)
+        repository.listCallCount = 0; repository.completedDaysCallCount = 0; repository.completedDaysCallCounts = [:]
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload()
+        XCTAssertEqual(repository.listCallCount, 1); XCTAssertEqual(repository.completedDaysCallCounts, [first.id: 1, second.id: 1])
+        let row = subject.active.first { $0.id == first.id }!; XCTAssertEqual(row.history.count, 14); XCTAssertEqual(row.history.last?.day, today); XCTAssertEqual(row.history.first?.day, LocalDay(date: calendar.date(byAdding: .day, value: -13, to: now)!, calendar: calendar)); XCTAssertTrue(row.isCompletedToday); XCTAssertEqual(row.streak, RoutineStreakCalculator().currentStreak(routine: first, completedDays: [today, yesterday], through: today, calendar: calendar))
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }

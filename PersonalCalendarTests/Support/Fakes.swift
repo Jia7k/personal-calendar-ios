@@ -76,6 +76,8 @@ final class FakeRoutineRepository: RoutineRepository {
     var createdDrafts: [RoutineDraft] = []
     var completionCalls: [RoutineCompletionCall] = []
     var completedDaysCallCount = 0
+    var listCallCount = 0
+    var completedDaysCallCounts: [UUID: Int] = [:]
     var completedDaysError: Error?
     var completedDaysErrors: [UUID: Error] = [:]
     var completionError: Error?
@@ -90,6 +92,7 @@ final class FakeRoutineRepository: RoutineRepository {
     }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
+        listCallCount += 1
         if let listError { throw listError }
         return includeArchived ? routines : routines.filter { !$0.isArchived }
     }
@@ -129,6 +132,7 @@ final class FakeRoutineRepository: RoutineRepository {
 
     func completedDays(routineID: UUID) throws -> Set<LocalDay> {
         completedDaysCallCount += 1
+        completedDaysCallCounts[routineID, default: 0] += 1
         if let error = completedDaysErrors[routineID] { throw error }
         if let completedDaysError { throw completedDaysError }
         return completions[routineID, default: []]
