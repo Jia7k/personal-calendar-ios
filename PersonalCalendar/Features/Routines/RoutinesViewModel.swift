@@ -5,6 +5,7 @@ struct RoutineHistoryDay: Identifiable, Equatable, Sendable { let day: LocalDay;
 struct RoutineRowState: Identifiable, Equatable, Sendable { let routine: RoutineSnapshot; let isCompletedToday: Bool; let streak: Int; let history: [RoutineHistoryDay]; let representedDay: LocalDay; var id: UUID { routine.id } }
 enum RoutineEditorOperation: Equatable { case create, update(UUID) }
 enum RoutineActionOperation: Equatable { case pause(UUID, Bool), archive(UUID, Bool), completion(UUID, LocalDay, Bool), delete(UUID) }
+extension RoutineActionOperation { var targetID: UUID { switch self { case let .pause(id, _), let .archive(id, _), let .completion(id, _, _), let .delete(id): id } } }
 struct RoutineActionRecovery: Equatable { let operation: RoutineActionOperation; let message: String; let token: Int }
 
 @MainActor
@@ -68,18 +69,20 @@ final class RoutinesViewModel {
             }
             confirmedCompletedDays = nextCompleted
             active = staged.filter { !$0.routine.isArchived }; archived = staged.filter { $0.routine.isArchived }; refreshErrorMessage = nil
+            if let recovery = actionRecovery, !snapshots.contains(where: { $0.id == recovery.operation.targetID }) { actionRecovery = nil }
+            if case let .update(id)? = failedEditorOperation, !snapshots.contains(where: { $0.id == id }) { failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
         } catch { refreshErrorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
     }
 
     func create(_ draft: RoutineDraft) -> Bool {
         guard valid(draft) else { failEditor(.create, draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
         let clean = normalized(draft)
-        do { let id = try repository.create(clean); clearEditorFailure(); insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false), completed: [], day: currentDay)); reload(savedMutation: true); return true } catch { failEditor(.create, draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
+        do { let id = try repository.create(clean); clearEditorFailure(matching: .create); insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false), completed: [], day: currentDay)); reload(savedMutation: true); return true } catch { failEditor(.create, draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
     }
     func update(id: UUID, draft: RoutineDraft) -> Bool {
         guard valid(draft), let existing = row(id) else { failEditor(.update(id), draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
         let clean = normalized(draft)
-        do { try repository.update(id: id, draft: clean); replace(existing, with: rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived), completed: confirmedCompletedDays[id] ?? [], day: existing.representedDay)); clearEditorFailure(); reload(savedMutation: true); return true } catch { failEditor(.update(id), draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
+        do { try repository.update(id: id, draft: clean); replace(existing, with: rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived), completed: confirmedCompletedDays[id] ?? [], day: existing.representedDay)); clearEditorFailure(matching: .update(id)); reload(savedMutation: true); return true } catch { failEditor(.update(id), draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
     }
     func setCompleted(id: UUID, completed state: Bool) async {
         let day = currentDay
@@ -94,7 +97,7 @@ final class RoutinesViewModel {
         let operation = RoutineActionOperation.delete(id)
         do {
             try repository.delete(id: id)
-            clearActionRecovery(matching: operation)
+            clearActionRecovery(targetID: id); clearEditorFailure(matching: .update(id))
             active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil
             reload(savedMutation: true)
             return true
@@ -117,8 +120,8 @@ final class RoutinesViewModel {
     }
     private func mutate(_ id: UUID, operation: RoutineActionOperation? = nil, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) {
         guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
-        guard let old = row(id) else { return }
-        do { try action(); if let operation { clearActionRecovery(matching: operation) }; replace(old, with: patch(old)); reload(savedMutation: true) } catch { if let operation { failAction(operation, message: "Your routine was not changed. Try again.") } }
+        guard let old = row(id) else { clearActionRecovery(targetID: id); refreshErrorMessage = "That routine is no longer available. Refresh routines to continue."; return }
+        do { try action(); if let operation { clearActionRecovery(targetID: operation.targetID) }; replace(old, with: patch(old)); reload(savedMutation: true) } catch { if let operation { failAction(operation, message: "Your routine was not changed. Try again.") } }
     }
     private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay) -> RoutineRowState {
         let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: completed.contains(day)) }
@@ -128,9 +131,9 @@ final class RoutinesViewModel {
     func canRetryEditor(_ operation: RoutineEditorOperation) -> Bool { failedEditorOperation == operation }
     func failedDraft(for operation: RoutineEditorOperation) -> RoutineDraft? { canRetryEditor(operation) ? draftOnFailure : nil }
     private func failEditor(_ operation: RoutineEditorOperation, draft: RoutineDraft, message: String) { failedEditorOperation = operation; draftOnFailure = draft; editorErrorMessage = message }
-    private func clearEditorFailure() { failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
+    private func clearEditorFailure(matching operation: RoutineEditorOperation) { guard failedEditorOperation == operation else { return }; failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
     private func failAction(_ operation: RoutineActionOperation, message: String) { actionToken += 1; actionRecovery = .init(operation: operation, message: message, token: actionToken) }
-    private func clearActionRecovery(matching operation: RoutineActionOperation) { guard actionRecovery?.operation == operation else { return }; actionRecovery = nil }
+    private func clearActionRecovery(targetID: UUID) { guard actionRecovery?.operation.targetID == targetID else { return }; actionRecovery = nil }
     func deleteErrorMessage(for id: UUID) -> String? { guard case let .delete(failedID)? = actionRecovery?.operation, failedID == id else { return nil }; return actionRecovery?.message }
     private func insert(_ row: RoutineRowState) { if row.routine.isArchived { archived.append(row) } else { active.append(row) } }
     private func replace(_ old: RoutineRowState, with new: RoutineRowState) { active.removeAll { $0.id == old.id }; archived.removeAll { $0.id == old.id }; insert(new) }

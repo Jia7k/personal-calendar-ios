@@ -685,7 +685,7 @@ final class FeatureViewModelTests: XCTestCase {
         repository.deleteError = TestError.failed; XCTAssertFalse(subject.delete(id: a.id)); subject.setPaused(id: b.id, paused: true)
         XCTAssertEqual(subject.failedActionOperation, .delete(a.id)); XCTAssertEqual(subject.resolveDeleteRetryTarget()?.id, a.id)
         repository.routines.removeAll { $0.id == a.id }; subject.reload()
-        XCTAssertNil(subject.resolveDeleteRetryTarget()); XCTAssertNil(subject.failedActionOperation); XCTAssertTrue(repository.deleteCalls.isEmpty); XCTAssertNotNil(subject.refreshErrorMessage)
+        XCTAssertNil(subject.resolveDeleteRetryTarget()); XCTAssertNil(subject.failedActionOperation); XCTAssertNil(subject.actionErrorMessage); XCTAssertTrue(repository.deleteCalls.isEmpty); XCTAssertNil(subject.refreshErrorMessage)
     }
 
     func testTaskCreateForwardsEventKitPriorityChoicesExactly() async {
@@ -693,6 +693,124 @@ final class FeatureViewModelTests: XCTestCase {
         let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar)
         for priority in [0, 1, 5, 9] { let saved = await subject.create(.init(title: "P\(priority)", notes: nil, dueDate: nil, dueHasTime: false, priority: priority, listID: "list")); XCTAssertTrue(saved) }
         XCTAssertEqual(service.createdDrafts.map(\.priority), [0, 1, 5, 9])
+    }
+
+    func testRoutineSuccessfulSameTargetActionClearsRecoveryButUnrelatedSuccessPreservesIt() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let b = RoutineSnapshot(id: UUID(), title: "B", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a, b]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.pauseError = TestError.failed; subject.setPaused(id: a.id, paused: true); XCTAssertEqual(subject.failedActionOperation, .pause(a.id, true))
+        repository.pauseError = nil; subject.setPaused(id: b.id, paused: true); XCTAssertEqual(subject.failedActionOperation, .pause(a.id, true))
+        subject.setArchived(id: a.id, archived: true); XCTAssertNil(subject.failedActionOperation)
+    }
+
+    func testRoutineUnrelatedEditorSuccessPreservesFailedUpdateDraft() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let b = RoutineSnapshot(id: UUID(), title: "B", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a, b]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: a.id, draft: .init(title: "Failed", weekdays: [2], window: .morning, reminderHour: nil, reminderMinute: nil)))
+        repository.updateError = nil; XCTAssertTrue(subject.update(id: b.id, draft: .init(title: "Saved", weekdays: [3], window: .evening, reminderHour: nil, reminderMinute: nil)))
+        XCTAssertEqual(subject.failedEditorOperation, .update(a.id)); XCTAssertEqual(subject.draftOnFailure?.title, "Failed")
+    }
+
+    func testTaskPriorityChoicesAndFormSavePredicate() {
+        XCTAssertEqual(TaskPriorityChoice.allCases.map { "\($0.label)=\($0.value)" }, ["None=0", "High=1", "Medium=5", "Low=9"])
+        let writable = ReminderListDescriptor(id: "write", title: "Write", colorHex: "#000", allowsContentModifications: true)
+        XCTAssertTrue(TaskFormValidation.canSave(title: "Task", isSaving: false, listID: "write", writableLists: [writable]))
+        XCTAssertFalse(TaskFormValidation.canSave(title: " ", isSaving: false, listID: "write", writableLists: [writable]))
+        XCTAssertFalse(TaskFormValidation.canSave(title: "Task", isSaving: true, listID: "write", writableLists: [writable]))
+        XCTAssertFalse(TaskFormValidation.canSave(title: "Task", isSaving: false, listID: "missing", writableLists: [writable]))
+        let readOnly = ReminderListDescriptor(id: "read", title: "Read", colorHex: "#000", allowsContentModifications: false)
+        XCTAssertFalse(TaskFormValidation.canSave(title: "Task", isSaving: false, listID: "read", writableLists: [readOnly]))
+    }
+
+    func testRoutineDeleteErrorIsScopedToDeleteTargetOnly() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.pauseError = TestError.failed; subject.setPaused(id: a.id, paused: true); XCTAssertNil(subject.deleteErrorMessage(for: a.id))
+        repository.pauseError = nil; repository.deleteError = TestError.failed; XCTAssertFalse(subject.delete(id: a.id)); XCTAssertNotNil(subject.deleteErrorMessage(for: a.id)); XCTAssertNil(subject.deleteErrorMessage(for: UUID()))
+    }
+
+    func testRoutineDeleteClearsFailedUpdateForSameTarget() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+        repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: a.id, draft: .init(title: "Failed", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil)))
+        repository.updateError = nil; XCTAssertTrue(subject.delete(id: a.id)); XCTAssertNil(subject.failedEditorOperation)
+    }
+
+    func testRoutineFailedPauseAndArchiveAreSupersededBySuccessfulSameTargetDelete() {
+        for kind in ["pause", "archive"] {
+            let a = RoutineSnapshot(id: UUID(), title: kind, weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+            let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload()
+            if kind == "pause" { repository.pauseError = TestError.failed; subject.setPaused(id: a.id, paused: true) } else { repository.archiveError = TestError.failed; subject.setArchived(id: a.id, archived: true) }
+            XCTAssertNotNil(subject.failedActionOperation); XCTAssertTrue(subject.delete(id: a.id)); XCTAssertNil(subject.failedActionOperation); subject.retryFailedAction(); XCTAssertEqual(repository.deleteCalls.count, 1)
+        }
+    }
+
+    func testRoutineMissingFailedPauseTargetClearsOnReloadAndDoesNotRetry() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload(); repository.pauseError = TestError.failed; subject.setPaused(id: a.id, paused: true)
+        repository.routines.removeAll { $0.id == a.id }; repository.pauseError = nil; subject.reload(); let calls = repository.pauseCalls.count; XCTAssertNil(subject.failedActionOperation); subject.retryFailedAction(); XCTAssertEqual(repository.pauseCalls.count, calls)
+    }
+
+    func testRoutineMatchingCreateAndUpdateSuccessClearOnlyTheirEditorFailures() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar)
+        repository.createError = TestError.failed; XCTAssertFalse(subject.create(.init(title: "Draft", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); repository.createError = nil; XCTAssertTrue(subject.create(.init(title: "Saved", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); XCTAssertNil(subject.failedEditorOperation)
+        subject.reload(); repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: a.id, draft: .init(title: "Draft update", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); repository.updateError = nil; XCTAssertTrue(subject.update(id: a.id, draft: .init(title: "Saved update", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); XCTAssertNil(subject.failedEditorOperation)
+    }
+
+    func testRoutineFailedCompletionThenDeleteClearsRecoveryWithoutReplay() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [calendar.component(.weekday, from: now)], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); repository.completionError = TestError.failed; await subject.setCompleted(id: a.id, completed: true)
+        repository.completionError = nil; XCTAssertTrue(subject.delete(id: a.id)); XCTAssertNil(subject.failedActionOperation); let calls = repository.completionCalls.count; subject.retryFailedAction(); XCTAssertEqual(repository.completionCalls.count, calls)
+    }
+
+    func testRoutineMissingArchiveAndCompletionTargetsClearOnReloadWithoutRetry() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        for kind in ["archive", "completion"] {
+            let a = RoutineSnapshot(id: UUID(), title: kind, weekdays: [calendar.component(.weekday, from: now)], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload()
+            if kind == "archive" { repository.archiveError = TestError.failed; subject.setArchived(id: a.id, archived: true) } else { repository.completionError = TestError.failed; await subject.setCompleted(id: a.id, completed: true) }
+            repository.routines.removeAll { $0.id == a.id }; subject.reload(); XCTAssertNil(subject.failedActionOperation); let archiveCalls = repository.archiveCalls.count; let completionCalls = repository.completionCalls.count; subject.retryFailedAction(); XCTAssertEqual(repository.archiveCalls.count, archiveCalls); XCTAssertEqual(repository.completionCalls.count, completionCalls)
+        }
+    }
+
+    func testRoutineFailedCreateSurvivesUnrelatedUpdate() {
+        let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [a]); let subject = RoutinesViewModel(repository: repository, calendar: calendar); subject.reload(); repository.createError = TestError.failed
+        XCTAssertFalse(subject.create(.init(title: "Draft", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); repository.createError = nil; XCTAssertTrue(subject.update(id: a.id, draft: .init(title: "Updated", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil))); XCTAssertEqual(subject.failedEditorOperation, .create); XCTAssertEqual(subject.draftOnFailure?.title, "Draft")
+    }
+
+    func testTaskMissingAfterRefreshClearsFailedCompletionRecoveryWithoutRetryWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list-a", listTitle: "A", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true); XCTAssertNotNil(subject.failedMutationOperation)
+        service.completionError = nil; service.reminders = []; await subject.load(); let calls = service.completedCalls.count; XCTAssertNil(subject.failedMutationOperation); await subject.retryFailedMutation(); XCTAssertEqual(service.completedCalls.count, calls)
+    }
+
+    func testTaskDeselectionAfterRefreshClearsFailedCompletionRecoveryWithoutRetryWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list-a", listTitle: "A", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let settings = AppSettingsStore(defaults: .ephemeral); settings.selectedReminderListIDs = ["list-a"]
+        let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: settings, calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true)
+        service.completionError = nil; settings.selectedReminderListIDs = ["list-b"]; await subject.load(); let calls = service.completedCalls.count; XCTAssertNil(subject.failedMutationOperation); await subject.retryFailedMutation(); XCTAssertEqual(service.completedCalls.count, calls)
+    }
+
+    func testTaskDeniedAccessClearsFailedCompletionRecoveryWithoutRetryWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true)
+        service.accessState = .denied; await subject.load(); let calls = service.completedCalls.count; XCTAssertNil(subject.failedMutationOperation); await subject.retryFailedMutation(); XCTAssertEqual(service.completedCalls.count, calls)
+    }
+
+    func testTaskExternallyResolvedAfterRefreshClearsFailedCompletionRecoveryWithoutRetryWrite() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true)
+        service.completionError = nil; service.reminders = [.init(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: true, allowsModification: true, hasRecurrence: false)]; await subject.load(); let calls = service.completedCalls.count; XCTAssertNil(subject.failedMutationOperation); await subject.retryFailedMutation(); XCTAssertEqual(service.completedCalls.count, calls)
+    }
+
+    func testTaskNewerSuccessfulSameIDMutationClearsObsoleteRecovery() async {
+        let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true); XCTAssertNotNil(subject.failedMutationOperation)
+        service.completionError = nil; await subject.setCompleted(id: "a", completed: false); XCTAssertNil(subject.failedMutationOperation)
+    }
+
+    func testTaskUnrelatedSuccessfulMutationPreservesAndRetryExecutesFailedRecovery() async {
+        let a = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let b = ReminderSnapshot(id: "b", title: "B", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [a, b]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true)
+        service.completionError = nil; await subject.setCompleted(id: "b", completed: true); XCTAssertEqual(subject.failedMutationOperation, .init(id: "a", completed: true)); await subject.retryFailedMutation(); XCTAssertNil(subject.failedMutationOperation); XCTAssertEqual(service.completedCalls.last?.id, "a")
     }
 
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
