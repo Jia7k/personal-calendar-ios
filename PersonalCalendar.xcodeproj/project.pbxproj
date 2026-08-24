@@ -18,6 +18,7 @@
 		33AF2479A22CB20B095AB8BA /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */; };
 		3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */; };
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
+		55773F2024616F8727C4996A /* FakesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4915ADDAF699A819650A494 /* FakesTests.swift */; };
 		58E1C3B01A2B6D9F004B69D9 /* RemindersServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9B9D6B59D700174A556740 /* RemindersServicing.swift */; };
 		67F5EBBB97AD60FF649FAFA6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2FC04E5363299D6D14B5C06 /* Assets.xcassets */; };
 		6809715C49E055E45CD15358 /* AgendaComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E982605EFFB1AD12838972FF /* AgendaComposer.swift */; };
@@ -38,6 +39,7 @@
 		EB75D60C51870941DFF5003D /* CalendarEventSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */; };
 		F025561331FF3463890E05E9 /* LocalDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC500C0ADDC6ACCF98F33F62 /* LocalDay.swift */; };
 		F0CA35D58C79407DA7D7A46E /* AppSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 838A8345765FC5BB3EA6B6DF /* AppSettingsStoreTests.swift */; };
+		F122954B32F22BAF1FA664A5 /* DemoEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF6331F0270F9D76E2D81E2 /* DemoEnvironmentTests.swift */; };
 		F6DF516226B8DAE7C32266C1 /* CalendarTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B766A1797C82BCFBE072693F /* CalendarTheme.swift */; };
 		F87E7C5DE0847CD2644D39EF /* RoutineSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */; };
 /* End PBXBuildFile section */
@@ -66,6 +68,7 @@
 		22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationFlowUITests.swift; sourceTree = "<group>"; };
 		29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineCompletionRecord.swift; sourceTree = "<group>"; };
 		3133012C2D91DDD347CFA0A7 /* PersonalCalendarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalCalendarApp.swift; sourceTree = "<group>"; };
+		3FF6331F0270F9D76E2D81E2 /* DemoEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEnvironmentTests.swift; sourceTree = "<group>"; };
 		42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepositoryTests.swift; sourceTree = "<group>"; };
 		4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		579876904A537535665E94EB /* LocalDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDayTests.swift; sourceTree = "<group>"; };
@@ -89,6 +92,7 @@
 		B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataRoutineRepository.swift; sourceTree = "<group>"; };
 		B2FC04E5363299D6D14B5C06 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B766A1797C82BCFBE072693F /* CalendarTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTheme.swift; sourceTree = "<group>"; };
+		C4915ADDAF699A819650A494 /* FakesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakesTests.swift; sourceTree = "<group>"; };
 		CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServicing.swift; sourceTree = "<group>"; };
 		E02776B6366CB5D539044404 /* RoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepository.swift; sourceTree = "<group>"; };
 		E982605EFFB1AD12838972FF /* AgendaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaComposer.swift; sourceTree = "<group>"; };
@@ -176,6 +180,7 @@
 		41487D283D0484D42220F254 /* PersonalCalendarTests */ = {
 			isa = PBXGroup;
 			children = (
+				52AF8B786171F1AEF4C406F8 /* App */,
 				999C6D16F3BC740167D13382 /* Domain */,
 				A046FAA6FEE48A933D2B3224 /* Persistence */,
 				00F143C07124C0AD86FAFF7A /* Services */,
@@ -197,8 +202,17 @@
 			isa = PBXGroup;
 			children = (
 				5D0F4CAF444E648C867C92FD /* Fakes.swift */,
+				C4915ADDAF699A819650A494 /* FakesTests.swift */,
 			);
 			path = Support;
+			sourceTree = "<group>";
+		};
+		52AF8B786171F1AEF4C406F8 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				3FF6331F0270F9D76E2D81E2 /* DemoEnvironmentTests.swift */,
+			);
+			path = App;
 			sourceTree = "<group>";
 		};
 		5F490C24CAF5F73049D54D36 /* Domain */ = {
@@ -452,8 +466,10 @@
 			files = (
 				0B8AF2D3E9D73F367992049C /* AgendaComposerTests.swift in Sources */,
 				F0CA35D58C79407DA7D7A46E /* AppSettingsStoreTests.swift in Sources */,
+				F122954B32F22BAF1FA664A5 /* DemoEnvironmentTests.swift in Sources */,
 				101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */,
 				76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */,
+				55773F2024616F8727C4996A /* FakesTests.swift in Sources */,
 				92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */,
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
 				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,

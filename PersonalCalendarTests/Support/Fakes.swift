@@ -29,7 +29,7 @@ final class FakeCalendarService: CalendarServicing {
     func calendars() -> [CalendarDescriptor] { descriptors }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
-        events
+        events.filter { calendarIDs.isEmpty || calendarIDs.contains($0.calendarID) }
     }
 
     func createEvent(_ draft: EventDraft) throws -> String {
@@ -146,7 +146,7 @@ final class FakeRemindersService: RemindersServicing {
         if let fetchError {
             throw fetchError
         }
-        return reminders
+        return reminders.filter { listIDs.isEmpty || listIDs.contains($0.listID) }
     }
 
     func createReminder(_ draft: ReminderDraft) throws -> String {
