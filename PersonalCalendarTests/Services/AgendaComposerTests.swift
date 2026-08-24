@@ -44,6 +44,16 @@ final class AgendaComposerTests: XCTestCase {
         XCTAssertEqual(compose(reminders: [overdue], includeOverdue: true).scheduled.map(\.title), ["File taxes"])
     }
 
+    // Break caught: a task due at the following local midnight would be displayed on the preceding day.
+    func testIncludesStartOfDayTimedReminderAndExcludesFollowingMidnight() throws {
+        let startOfDay = reminder(id: "start", title: "Start", dueHour: 0, priority: 1)
+        let followingMidnight = reminder(id: "next", title: "Next", dueHour: 0, priority: 1, dueDate: date(dayOffset: 1, hour: 0))
+
+        let result = compose(reminders: [startOfDay, followingMidnight])
+
+        XCTAssertEqual(result.scheduled.map(\.title), ["Start"])
+    }
+
     // Break caught: completed tasks would remain visible alongside actionable agenda items.
     func testExcludesCompletedReminders() throws {
         let completed = reminder(id: "done", title: "Finished", dueHour: 11, priority: 1, isCompleted: true)
@@ -66,6 +76,17 @@ final class AgendaComposerTests: XCTestCase {
         )
 
         XCTAssertEqual(result.scheduled.map(\.title), ["Active"])
+    }
+
+    // Break caught: routine completion records would not be reflected in their day-agenda item.
+    func testMarksCompletedRoutineFromCompletedRoutineIDs() throws {
+        let id = UUID(uuidString: "00000000-0000-0000-0000-000000000014")!
+        let result = compose(
+            routines: [routine(id: id.uuidString, title: "Complete", window: .morning)],
+            completedRoutineIDs: [id]
+        )
+
+        XCTAssertTrue(result.scheduled.first?.isCompleted == true)
     }
 
     // Break caught: events beginning before midnight would disappear even when they overlap the selected local day.
@@ -99,9 +120,10 @@ final class AgendaComposerTests: XCTestCase {
         events: [CalendarEventSnapshot] = [],
         reminders: [ReminderSnapshot] = [],
         routines: [RoutineSnapshot] = [],
+        completedRoutineIDs: Set<UUID> = [],
         includeOverdue: Bool = false
     ) -> DayAgenda {
-        AgendaComposer().compose(day: day, events: events, reminders: reminders, routines: routines, completedRoutineIDs: [], includeOverdueTasks: includeOverdue, calendar: calendar)
+        AgendaComposer().compose(day: day, events: events, reminders: reminders, routines: routines, completedRoutineIDs: completedRoutineIDs, includeOverdueTasks: includeOverdue, calendar: calendar)
     }
 
     private func date(dayOffset: Int = 0, hour: Int) -> Date {

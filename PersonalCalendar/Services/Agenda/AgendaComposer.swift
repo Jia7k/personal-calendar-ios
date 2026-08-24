@@ -47,7 +47,7 @@ struct AgendaComposer {
     ) -> Bool {
         guard !reminder.isCompleted, let dueDate = reminder.dueDate else { return false }
         let dueOnDay = reminder.dueHasTime
-            ? interval.contains(dueDate)
+            ? dueDate >= interval.start && dueDate < interval.end
             : LocalDay(date: dueDate, calendar: calendar) == day
         return dueOnDay || (includeOverdueTasks && dueDate < interval.start)
     }
