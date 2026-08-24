@@ -17,7 +17,7 @@ struct PersonalCalendarApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootTabView()
+            RootTabView(environment: environment)
                 .modelContainer(container)
         }
     }

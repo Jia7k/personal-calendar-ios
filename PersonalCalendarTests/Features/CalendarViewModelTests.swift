@@ -1,0 +1,96 @@
+import XCTest
+@testable import PersonalCalendar
+
+@MainActor
+final class CalendarViewModelTests: XCTestCase {
+    private var calendar: Calendar!
+    private let today = LocalDay(year: 2026, month: 8, day: 24)
+
+    override func setUp() {
+        calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+    }
+
+    func testLoadUsesOnlySelectedSources() async {
+        let start = today.startDate(in: calendar).addingTimeInterval(3_600)
+        let event = CalendarEventSnapshot(id: "included", title: "Included", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "included", calendarTitle: "Included", allowsModification: true, hasRecurrence: false)
+        let ignored = CalendarEventSnapshot(id: "ignored", title: "Ignored", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "ignored", calendarTitle: "Ignored", allowsModification: true, hasRecurrence: false)
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        settings.selectedCalendarIDs = ["included"]
+        let model = makeModel(calendarService: FakeCalendarService(access: .granted, events: [event, ignored]), settings: settings)
+
+        await model.load()
+
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Included"])
+    }
+
+    func testDeniedCalendarKeepsOtherSourcesAndReportsPermission() async {
+        let routine = RoutineSnapshot.sampleRoutine
+        let model = makeModel(calendarService: FakeCalendarService(access: .denied), routines: FakeRoutineRepository(routines: [routine]))
+
+        await model.load()
+
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Read"])
+        XCTAssertTrue(model.deniedSourceMessages.contains { $0.contains("Calendar") })
+    }
+
+    func testSelectingDayRecomposesAgendaForThatDay() async {
+        let next = LocalDay(year: 2026, month: 8, day: 25)
+        let start = next.startDate(in: calendar).addingTimeInterval(3_600)
+        let event = CalendarEventSnapshot(id: "next", title: "Tomorrow", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "calendar", calendarTitle: "Calendar", allowsModification: true, hasRecurrence: false)
+        let model = makeModel(calendarService: FakeCalendarService(access: .granted, events: [event]))
+        await model.load()
+
+        await model.select(next)
+
+        XCTAssertEqual(model.selectedDay, next)
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Tomorrow"])
+    }
+
+    func testMovingMonthChangesDisplayedMonth() async {
+        let model = makeModel()
+
+        await model.moveMonth(by: 1)
+
+        XCTAssertEqual(model.displayedMonth, LocalDay(year: 2026, month: 9, day: 1))
+    }
+
+    func testTrayStateChanges() {
+        let model = makeModel()
+
+        model.setTray(.expanded)
+
+        XCTAssertEqual(model.trayState, .expanded)
+    }
+
+    func testFailedRefreshRetainsConfirmedAgenda() async {
+        let start = today.startDate(in: calendar).addingTimeInterval(3_600)
+        let event = CalendarEventSnapshot(id: "confirmed", title: "Confirmed", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "calendar", calendarTitle: "Calendar", allowsModification: true, hasRecurrence: false)
+        let service = FakeCalendarService(access: .granted, events: [event])
+        let model = makeModel(calendarService: service)
+        await model.load()
+        service.fetchError = TestError.failed
+
+        await model.load()
+
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Confirmed"])
+        XCTAssertNotNil(model.errorMessage)
+    }
+
+    func testFailedEventSaveRetainsExactDraftForRetry() async {
+        let service = FakeCalendarService(access: .granted, createError: TestError.failed)
+        let model = makeModel(calendarService: service)
+        let draft = EventDraft(title: "Dentist", start: today.startDate(in: calendar).addingTimeInterval(3_600), end: today.startDate(in: calendar).addingTimeInterval(7_200), isAllDay: false, calendarID: "calendar")
+
+        await model.createEvent(draft)
+
+        XCTAssertEqual(model.eventDraftOnFailure, draft)
+        XCTAssertNotNil(model.errorMessage)
+    }
+
+    private func makeModel(calendarService: FakeCalendarService = FakeCalendarService(access: .granted), reminders: FakeRemindersService = FakeRemindersService(access: .granted), routines: FakeRoutineRepository = FakeRoutineRepository(), settings: AppSettingsStore = AppSettingsStore(defaults: .ephemeral)) -> CalendarViewModel {
+        CalendarViewModel(today: today, calendarService: calendarService, remindersService: reminders, routines: routines, composer: AgendaComposer(), settings: settings, systemCalendar: calendar)
+    }
+}
+
+private enum TestError: Error { case failed }

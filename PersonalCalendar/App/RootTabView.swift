@@ -5,11 +5,12 @@ enum RootTab: Hashable {
 }
 
 struct RootTabView: View {
+    let environment: AppEnvironment
     @State private var selection: RootTab = .calendar
 
     var body: some View {
         TabView(selection: $selection) {
-            NavigationStack { Text("Calendar") }
+            CalendarHomeView(environment: environment)
                 .tabItem { Label("Calendar", systemImage: "calendar") }
                 .tag(RootTab.calendar)
             NavigationStack { Text("Today") }

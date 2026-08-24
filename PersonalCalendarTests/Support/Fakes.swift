@@ -8,17 +8,23 @@ final class FakeCalendarService: CalendarServicing {
     var events: [CalendarEventSnapshot]
     var descriptors: [CalendarDescriptor]
     var createdDrafts: [EventDraft] = []
+    var fetchError: Error?
+    var createError: Error?
 
     init(
         access: AccessState,
         requestedAccess: AccessState? = nil,
         events: [CalendarEventSnapshot] = [],
-        descriptors: [CalendarDescriptor] = []
+        descriptors: [CalendarDescriptor] = [],
+        fetchError: Error? = nil,
+        createError: Error? = nil
     ) {
         accessState = access
         self.requestedAccess = requestedAccess ?? access
         self.events = events
         self.descriptors = descriptors
+        self.fetchError = fetchError
+        self.createError = createError
     }
 
     func requestFullAccess() async -> AccessState {
@@ -29,10 +35,12 @@ final class FakeCalendarService: CalendarServicing {
     func calendars() -> [CalendarDescriptor] { descriptors }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
-        events.filter { calendarIDs.isEmpty || calendarIDs.contains($0.calendarID) }
+        if let fetchError { throw fetchError }
+        return events.filter { calendarIDs.isEmpty || calendarIDs.contains($0.calendarID) }
     }
 
     func createEvent(_ draft: EventDraft) throws -> String {
+        if let createError { throw createError }
         createdDrafts.append(draft)
         return "created-event"
     }
