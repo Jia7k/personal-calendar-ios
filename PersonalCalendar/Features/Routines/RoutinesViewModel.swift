@@ -4,6 +4,7 @@ import Observation
 struct RoutineHistoryDay: Identifiable, Equatable, Sendable { let day: LocalDay; let isScheduled: Bool; let isCompleted: Bool; var id: LocalDay { day } }
 struct RoutineRowState: Identifiable, Equatable, Sendable { let routine: RoutineSnapshot; let isCompletedToday: Bool; let streak: Int; let history: [RoutineHistoryDay]; var id: UUID { routine.id } }
 enum RoutineEditorOperation: Equatable { case create, update(UUID) }
+enum RoutineActionOperation: Equatable { case pause(UUID, Bool), archive(UUID, Bool), completion(UUID, LocalDay, Bool), delete(UUID) }
 
 @MainActor
 @Observable
@@ -13,6 +14,7 @@ final class RoutinesViewModel {
     private(set) var errorMessage: String?
     private(set) var draftOnFailure: RoutineDraft?
     private(set) var failedEditorOperation: RoutineEditorOperation?
+    private(set) var failedActionOperation: RoutineActionOperation?
     private(set) var isLoading = false
     private(set) var mutatingIDs: Set<UUID> = []
     private let repository: any RoutineRepository; private let calendar: Calendar; private let now: () -> Date
@@ -56,18 +58,18 @@ final class RoutinesViewModel {
         guard let row = row(id), (row.isCompletedToday || (!row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)))), !mutatingIDs.contains(id) else { return }
         mutate(id, patch: { row in self.completedRow(row, completed: state) }) { try repository.setCompleted(routineID: id, day: currentDay, completed: state) }
     }
-    func setPaused(id: UUID, paused: Bool) { mutate(id, patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
-    func setArchived(id: UUID, archived: Bool) { mutate(id, patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
+    func setPaused(id: UUID, paused: Bool) { mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
+    func setArchived(id: UUID, archived: Bool) { mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
     func delete(id: UUID) { guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true) } catch { errorMessage = "Your routine was not deleted. Try again." } }
 
     private func mutateDraft(_ draft: RoutineDraft, action: (RoutineDraft) throws -> Void) -> Bool {
         guard valid(draft) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
         do { try action(normalized(draft)); draftOnFailure = nil; reload(); return true } catch { draftOnFailure = draft; errorMessage = "Your routine was not saved. Edit it and try again."; return false }
     }
-    private func mutate(_ id: UUID, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) {
+    private func mutate(_ id: UUID, operation: RoutineActionOperation? = nil, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) {
         guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         guard let old = row(id) else { return }
-        do { try action(); replace(old, with: patch(old)); reload(savedMutation: true) } catch { errorMessage = "Your routine was not changed. Try again." }
+        do { try action(); failedActionOperation = nil; replace(old, with: patch(old)); reload(savedMutation: true) } catch { failedActionOperation = operation; errorMessage = "Your routine was not changed. Try again." }
     }
     private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay? = nil) -> RoutineRowState {
         let today = today ?? currentDay

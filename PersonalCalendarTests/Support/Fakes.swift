@@ -91,6 +91,8 @@ final class FakeRoutineRepository: RoutineRepository {
     var createError: Error?
     var updateError: Error?
     var deleteError: Error?
+    var pauseError: Error?
+    var archiveError: Error?
     private var completions: [UUID: Set<LocalDay>] = [:]
 
     init(routines: [RoutineSnapshot] = []) {
@@ -111,9 +113,9 @@ final class FakeRoutineRepository: RoutineRepository {
 
     func update(id: UUID, draft: RoutineDraft) throws { if let updateError { throw updateError }; guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; updateCalls.append(.init(id: id, draft: draft)); let old = routines[index]; routines[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived) }
 
-    func setPaused(id: UUID, paused: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; pauseCalls.append(.init(id: id, value: paused)); let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: paused, isArchived: old.isArchived) }
+    func setPaused(id: UUID, paused: Bool) throws { if let pauseError { throw pauseError }; guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; pauseCalls.append(.init(id: id, value: paused)); let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: paused, isArchived: old.isArchived) }
 
-    func setArchived(id: UUID, archived: Bool) throws { guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; archiveCalls.append(.init(id: id, value: archived)); let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: archived) }
+    func setArchived(id: UUID, archived: Bool) throws { if let archiveError { throw archiveError }; guard let index = routines.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }; archiveCalls.append(.init(id: id, value: archived)); let old = routines[index]; routines[index] = .init(id: id, title: old.title, weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: archived) }
 
     func delete(id: UUID) throws {
         if let deleteError { throw deleteError }
