@@ -392,6 +392,27 @@ final class FeatureViewModelTests: XCTestCase {
         service.resumeSuspendedFetch(); await first.value
     }
 
+    func testOlderSuccessfulTaskCompletionDoesNotClearNewerDifferentIDFailure() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let first = reminder(id: "first", title: "First", due: now, hasTime: true)
+        let second = reminder(id: "second", title: "Second", due: now, hasTime: true)
+        let service = FakeRemindersService(access: .granted, reminders: [first, second])
+        let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
+        await subject.load()
+
+        service.suspendNextFetch = true
+        let older = Task { await subject.setCompleted(id: first.id, completed: true) }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+        service.completionError = TestError.failed
+        await subject.setCompleted(id: second.id, completed: true)
+        XCTAssertEqual(subject.failedMutationOperation, .init(id: second.id, completed: true))
+
+        service.resumeSuspendedFetch()
+        await older.value
+        XCTAssertEqual(subject.failedMutationOperation, .init(id: second.id, completed: true))
+        XCTAssertNotNil(subject.mutationErrorMessage)
+    }
+
     func testTaskValidationRejectsInvalidDraftsWithoutCreating() async {
         let list = ReminderListDescriptor(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)
         let service = FakeRemindersService(access: .granted, descriptors: [list]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
@@ -589,8 +610,26 @@ final class FeatureViewModelTests: XCTestCase {
     func testRoutineStaleRepresentedDayCannotWriteUntilReload() async {
         var now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day1 = LocalDay(date: now, calendar: calendar); let weekday1 = calendar.component(.weekday, from: now)
         let routine = RoutineSnapshot(id: UUID(), title: "Read", weekdays: [weekday1, weekday1 == 7 ? 1 : weekday1 + 1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false); let repository = FakeRoutineRepository(routines: [routine]); try? repository.setCompleted(routineID: routine.id, day: day1, completed: true); let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); XCTAssertEqual(subject.active[0].representedDay, day1)
-        now = calendar.date(byAdding: .day, value: 1, to: now)!; let calls = repository.completionCalls.count; await subject.setCompleted(id: routine.id, completed: false); XCTAssertEqual(repository.completionCalls.count, calls); XCTAssertEqual(subject.active[0].representedDay, day1); XCTAssertNotNil(subject.refreshErrorMessage)
+        now = calendar.date(byAdding: .day, value: 1, to: now)!; let calls = repository.completionCalls.count; XCTAssertFalse(subject.isRepresentingCurrentDay(subject.active[0])); XCTAssertFalse(subject.canChangeCompletion(subject.active[0])); await subject.setCompleted(id: routine.id, completed: false); XCTAssertEqual(repository.completionCalls.count, calls); XCTAssertEqual(subject.active[0].representedDay, day1); XCTAssertNotNil(subject.refreshErrorMessage)
         subject.reload(); let day2 = LocalDay(date: now, calendar: calendar); XCTAssertEqual(subject.active[0].representedDay, day2); XCTAssertFalse(subject.active[0].isCompletedToday); await subject.setCompleted(id: routine.id, completed: true); XCTAssertEqual(repository.completionCalls.last, .init(id: routine.id, day: day2, completed: true)); XCTAssertEqual(subject.active[0].representedDay, day2)
+    }
+
+    func testCompletedPausedAndArchivedCurrentDayRowsRemainUndoable() {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let day = LocalDay(date: now, calendar: calendar)
+        let paused = RoutineSnapshot(id: UUID(), title: "Paused", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: true, isArchived: false)
+        let archived = RoutineSnapshot(id: UUID(), title: "Archived", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: true)
+        let repository = FakeRoutineRepository(routines: [paused, archived])
+        repository.seedCompletedDays([day], routineID: paused.id)
+        repository.seedCompletedDays([day], routineID: archived.id)
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now })
+        subject.reload()
+        XCTAssertTrue(subject.active[0].isCompletedToday)
+        XCTAssertTrue(subject.archived[0].isCompletedToday)
+        XCTAssertTrue(subject.canChangeCompletion(subject.active[0]))
+        XCTAssertTrue(subject.canChangeCompletion(subject.archived[0]))
+        XCTAssertFalse(subject.canCompleteToday(subject.active[0]))
+        XCTAssertFalse(subject.canCompleteToday(subject.archived[0]))
     }
 
     func testRoutineEditorErrorSurvivesSuccessfulReloadIndependently() {

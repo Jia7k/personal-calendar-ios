@@ -85,8 +85,12 @@ final class TasksViewModel {
             try service.setCompleted(id: id, completed: state)
             confirmed = confirmed.map { $0.id == id ? replacing($0, completed: state) : $0 }
             publish()
+            let operation = TaskMutationOperation(id: id, completed: state)
+            if failedMutationOperation == operation {
+                failedMutationOperation = nil
+                mutationErrorMessage = nil
+            }
             await load()
-            mutationErrorMessage = nil; failedMutationOperation = nil
             if refreshErrorMessage != nil { refreshErrorMessage = "Your task change was saved, but tasks could not be refreshed. Pull to try again." }
         } catch { failedMutationOperation = .init(id: id, completed: state); mutationErrorMessage = "Your task was not changed. Try again." }
     }

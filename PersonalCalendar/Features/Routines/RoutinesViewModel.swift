@@ -36,7 +36,9 @@ final class RoutinesViewModel {
         let components = DateComponents(calendar: calendar, timeZone: calendar.timeZone, year: 2001, month: 1, day: 1, hour: hour ?? 9, minute: minute ?? 0, second: 0)
         return calendar.date(from: components) ?? Date(timeIntervalSinceReferenceDate: 0)
     }
-    func canCompleteToday(_ row: RoutineRowState) -> Bool { row.representedDay == currentDay && !row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)) }
+    func isRepresentingCurrentDay(_ row: RoutineRowState) -> Bool { row.representedDay == currentDay }
+    func canCompleteToday(_ row: RoutineRowState) -> Bool { isRepresentingCurrentDay(row) && !row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)) }
+    func canChangeCompletion(_ row: RoutineRowState) -> Bool { isRepresentingCurrentDay(row) && (row.isCompletedToday || canCompleteToday(row)) }
 
     func reload(savedMutation: Bool = false) {
         isLoading = true; defer { isLoading = false }
