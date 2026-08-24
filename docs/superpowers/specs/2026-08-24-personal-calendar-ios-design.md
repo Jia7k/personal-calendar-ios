@@ -1,7 +1,7 @@
 # Personal Calendar for iPhone — Design Specification
 
 **Date:** 2026-08-24  
-**Status:** Approved in conversation; awaiting review of this written specification
+**Status:** Approved by the user on 2026-08-24
 
 ## 1. Product summary
 
