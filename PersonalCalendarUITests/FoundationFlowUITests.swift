@@ -69,6 +69,19 @@ final class FoundationFlowUITests: XCTestCase {
         app.launch()
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(app.staticTexts["Schedule"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Coffee"].exists || app.staticTexts["Buy milk"].exists)
+        XCTAssertTrue(app.staticTexts["Coffee"].exists)
+        XCTAssertTrue(app.staticTexts["Buy milk"].exists)
+        XCTAssertTrue(app.staticTexts["Read"].exists)
+    }
+
+    func testTodayShowsCalendarPermissionWhileRemainingAgendaStaysVisible() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-denied"]
+        app.launch()
+        app.tabBars.buttons["Today"].tap()
+        XCTAssertTrue(app.staticTexts["Calendar events are unavailable"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Open System Settings"].exists)
+        XCTAssertTrue(app.staticTexts["Buy milk"].exists)
+        XCTAssertTrue(app.staticTexts["Read"].exists)
     }
 }

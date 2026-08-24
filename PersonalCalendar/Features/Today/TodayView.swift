@@ -36,10 +36,21 @@ struct TodayView: View {
         } } } }
     }
     @ViewBuilder private func errorRow(_ message: String?) -> some View {
-        if let message { Section { HStack { Image(systemName: "exclamationmark.triangle"); Text(message); Spacer(); Button("Retry") { Task { await model.load() } }.frame(minHeight: CalendarTheme.minimumTapSize) }.accessibilityElement(children: .combine) } }
+        if let message {
+            Section {
+                HStack {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                    Spacer(minLength: 8)
+                    Button("Retry") { Task { await model.load() }
+                    }
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityLabel("Retry this source")
+                }
+            }
+        }
     }
     private func permissionCard(title: String, restricted: Bool) -> some View {
-        Section { VStack(alignment: .leading, spacing: 8) { Label(title, systemImage: "lock") ; Text(restricted ? "This access is controlled by your device or account." : "Allow access in System Settings to include this source.").font(.footnote).foregroundStyle(.secondary); if !restricted { Button("Open System Settings", action: openSettings).frame(minHeight: CalendarTheme.minimumTapSize) } } }
+            Section { VStack(alignment: .leading, spacing: 8) { Label(title, systemImage: "lock") ; Text(restricted ? "This access is controlled by your device or account." : "Allow access in System Settings to include this source.").font(.footnote).foregroundStyle(.secondary); if !restricted { Button("Open System Settings", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) } } }
     }
     @MainActor private static func defaultOpenSettings() { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
 }

@@ -9,6 +9,7 @@ enum AgendaPlacement: Equatable, Sendable {
 }
 
 enum AgendaItemOrigin: Equatable, Sendable {
+    case synthetic
     case event(id: String)
     case reminder(id: String)
     case routine(id: UUID, day: LocalDay)
@@ -28,7 +29,7 @@ struct AgendaItem: Identifiable, Equatable, Sendable {
     init(id: String, title: String, source: AgendaSource, placement: AgendaPlacement, sortDate: Date?, priority: Int, isCompleted: Bool, allowsModification: Bool, origin: AgendaItemOrigin? = nil) {
         self.id = id; self.title = title; self.source = source; self.placement = placement; self.sortDate = sortDate
         self.priority = priority; self.isCompleted = isCompleted; self.allowsModification = allowsModification
-        self.origin = origin ?? .event(id: id)
+        self.origin = origin ?? .synthetic
     }
 }
 

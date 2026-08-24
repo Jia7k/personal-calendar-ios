@@ -77,6 +77,7 @@ final class FakeRoutineRepository: RoutineRepository {
     var completionCalls: [RoutineCompletionCall] = []
     var completedDaysCallCount = 0
     var completedDaysError: Error?
+    var completionError: Error?
     private var completions: [UUID: Set<LocalDay>] = [:]
 
     init(routines: [RoutineSnapshot] = []) {
@@ -104,6 +105,7 @@ final class FakeRoutineRepository: RoutineRepository {
     }
 
     func setCompleted(routineID: UUID, day: LocalDay, completed: Bool) throws {
+        if let completionError { throw completionError }
         completionCalls.append(.init(id: routineID, day: day, completed: completed))
         if completed {
             completions[routineID, default: []].insert(day)
@@ -133,6 +135,7 @@ final class FakeRemindersService: RemindersServicing {
     var createdDrafts: [ReminderDraft] = []
     var completedCalls: [CompletionCall] = []
     var completionError: Error?
+    var fetchErrorAfterCompletion: Error?
 
     init(
         access: AccessState,
@@ -156,6 +159,7 @@ final class FakeRemindersService: RemindersServicing {
     func lists() -> [ReminderListDescriptor] { descriptors }
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
+        if let fetchErrorAfterCompletion, !completedCalls.isEmpty { throw fetchErrorAfterCompletion }
         if let fetchError {
             throw fetchError
         }
