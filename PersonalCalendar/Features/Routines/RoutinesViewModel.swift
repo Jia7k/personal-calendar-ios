@@ -23,32 +23,41 @@ final class RoutinesViewModel {
     func reminderDate(hour: Int?, minute: Int?) -> Date { calendar.date(bySettingHour: hour ?? 9, minute: minute ?? 0, second: 0, of: now()) ?? now() }
     func canCompleteToday(_ row: RoutineRowState) -> Bool { !row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)) }
 
-    func reload() {
+    func reload(savedMutation: Bool = false) {
         isLoading = true; defer { isLoading = false }
         do {
             let snapshots = try repository.list(includeArchived: true)
             let staged = try snapshots.map(makeRow)
             active = staged.filter { !$0.routine.isArchived }; archived = staged.filter { $0.routine.isArchived }; errorMessage = nil
-        } catch { errorMessage = "Your routines could not be loaded. Pull to try again." }
+        } catch { errorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
     }
 
-    func create(_ draft: RoutineDraft) -> Bool { mutateDraft(draft) { _ = try repository.create($0) } }
-    func update(id: UUID, draft: RoutineDraft) -> Bool { mutateDraft(draft) { try repository.update(id: id, draft: $0) } }
+    func create(_ draft: RoutineDraft) -> Bool {
+        guard valid(draft) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
+        let clean = normalized(draft)
+        do { let id = try repository.create(clean); draftOnFailure = nil; insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false))); reload(savedMutation: true); return true } catch { draftOnFailure = clean; errorMessage = "Your routine was not saved. Edit it and try again."; return false }
+    }
+    func update(id: UUID, draft: RoutineDraft) -> Bool {
+        guard valid(draft), let existing = row(id) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
+        let clean = normalized(draft)
+        do { try repository.update(id: id, draft: clean); replace(existing, routine: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived)); draftOnFailure = nil; reload(savedMutation: true); return true } catch { draftOnFailure = clean; errorMessage = "Your routine was not saved. Edit it and try again."; return false }
+    }
     func setCompleted(id: UUID, completed state: Bool) async {
         guard let row = row(id), (row.isCompletedToday || (!row.routine.isPaused && !row.routine.isArchived && row.routine.weekdays.contains(weekday(for: currentDay)))), !mutatingIDs.contains(id) else { return }
-        mutate(id) { try repository.setCompleted(routineID: id, day: currentDay, completed: state) }
+        mutate(id, patch: { row in self.completedRow(row, completed: state) }) { try repository.setCompleted(routineID: id, day: currentDay, completed: state) }
     }
-    func setPaused(id: UUID, paused: Bool) { mutate(id) { try repository.setPaused(id: id, paused: paused) } }
-    func setArchived(id: UUID, archived: Bool) { mutate(id) { try repository.setArchived(id: id, archived: archived) } }
-    func delete(id: UUID) { mutate(id) { try repository.delete(id: id) } }
+    func setPaused(id: UUID, paused: Bool) { mutate(id, patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
+    func setArchived(id: UUID, archived: Bool) { mutate(id, patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
+    func delete(id: UUID) { guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; reload(savedMutation: true) } catch { errorMessage = "Your routine was not deleted. Try again." } }
 
     private func mutateDraft(_ draft: RoutineDraft, action: (RoutineDraft) throws -> Void) -> Bool {
         guard valid(draft) else { draftOnFailure = draft; errorMessage = "Enter a title, choose at least one day, and use a valid reminder time."; return false }
         do { try action(normalized(draft)); draftOnFailure = nil; reload(); return true } catch { draftOnFailure = draft; errorMessage = "Your routine was not saved. Edit it and try again."; return false }
     }
-    private func mutate(_ id: UUID, action: () throws -> Void) {
+    private func mutate(_ id: UUID, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) {
         guard !mutatingIDs.contains(id) else { return }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
-        do { try action(); reload() } catch { errorMessage = "Your routine was not changed. Try again." }
+        guard let old = row(id) else { return }
+        do { try action(); replace(old, with: patch(old)); reload(savedMutation: true) } catch { errorMessage = "Your routine was not changed. Try again." }
     }
     private func makeRow(_ routine: RoutineSnapshot) throws -> RoutineRowState {
         let completed = try repository.completedDays(routineID: routine.id); let today = currentDay
@@ -56,6 +65,12 @@ final class RoutinesViewModel {
         return .init(routine: routine, isCompletedToday: completed.contains(today), streak: RoutineStreakCalculator().currentStreak(routine: routine, completedDays: completed, through: today, calendar: calendar), history: history)
     }
     private func row(_ id: UUID) -> RoutineRowState? { (active + archived).first { $0.id == id } }
+    private func insert(_ row: RoutineRowState) { if row.routine.isArchived { archived.append(row) } else { active.append(row) } }
+    private func replace(_ old: RoutineRowState, with new: RoutineRowState) { active.removeAll { $0.id == old.id }; archived.removeAll { $0.id == old.id }; insert(new) }
+    private func replace(_ old: RoutineRowState, routine: RoutineSnapshot) { replace(old, with: .init(routine: routine, isCompletedToday: old.isCompletedToday, streak: old.streak, history: old.history)) }
+    private func with(_ row: RoutineRowState, paused: Bool? = nil, archived: Bool? = nil) -> RoutineRowState { .init(routine: .init(id: row.id, title: row.routine.title, weekdays: row.routine.weekdays, window: row.routine.window, reminderHour: row.routine.reminderHour, reminderMinute: row.routine.reminderMinute, isPaused: paused ?? row.routine.isPaused, isArchived: archived ?? row.routine.isArchived), isCompletedToday: row.isCompletedToday, streak: row.streak, history: row.history) }
+    private func completedRow(_ row: RoutineRowState, completed: Bool) -> RoutineRowState { let history = row.history.map { $0.day == currentDay ? .init(day: $0.day, isScheduled: $0.isScheduled, isCompleted: completed) : $0 }; return .init(routine: row.routine, isCompletedToday: completed, streak: completed ? max(1, row.streak + 1) : max(0, row.streak - 1), history: history) }
+    private func rowState(for routine: RoutineSnapshot) -> RoutineRowState { let today = currentDay; let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: false) }; return .init(routine: routine, isCompletedToday: false, streak: 0, history: history) }
     private func localDay(offset: Int, from day: LocalDay) -> LocalDay { LocalDay(date: calendar.date(byAdding: .day, value: offset, to: day.startDate(in: calendar))!, calendar: calendar) }
     private func weekday(for day: LocalDay) -> Int { calendar.component(.weekday, from: day.startDate(in: calendar)) }
     private func valid(_ d: RoutineDraft) -> Bool { !d.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !d.weekdays.isEmpty && d.weekdays.allSatisfy { (1...7).contains($0) } && ((d.reminderHour == nil && d.reminderMinute == nil) || ((0...23).contains(d.reminderHour ?? -1) && (0...59).contains(d.reminderMinute ?? -1))) }
