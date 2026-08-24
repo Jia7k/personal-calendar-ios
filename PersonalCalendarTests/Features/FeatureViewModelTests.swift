@@ -412,6 +412,17 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertTrue(explicit); XCTAssertTrue(fallback); XCTAssertEqual(service.createdDrafts.map(\.listID), ["a", "b"])
     }
 
+    func testRoutineSecondHistoryFailureKeepsPriorRowsAndCompletedCacheAtomic() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let weekday = calendar.component(.weekday, from: now)
+        let first = RoutineSnapshot(id: UUID(), title: "First", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let second = RoutineSnapshot(id: UUID(), title: "Second", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        let repository = FakeRoutineRepository(routines: [first, second]); try? repository.setCompleted(routineID: first.id, day: day, completed: true)
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar, now: { now }); subject.reload(); XCTAssertTrue(subject.active.first(where: { $0.id == first.id })!.isCompletedToday)
+        repository.completedDaysErrors[second.id] = TestError.failed; subject.reload()
+        XCTAssertEqual(subject.active.map(\.id), [first.id, second.id]); await subject.setCompleted(id: first.id, completed: false)
+        XCTAssertEqual(repository.completionCalls.last, .init(id: first.id, day: day, completed: false)); XCTAssertFalse(subject.active.first(where: { $0.id == first.id })!.isCompletedToday)
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
