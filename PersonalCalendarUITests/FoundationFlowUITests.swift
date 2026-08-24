@@ -127,6 +127,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.tabBars.buttons["Tasks"].tap(); app.buttons["New Task"].tap()
         let title = app.textFields["Task title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("First")
         app.buttons["Save"].tap(); XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 3))
+        app.buttons["Cancel"].tap(); app.buttons["New Task"].tap(); XCTAssertEqual(title.value as? String, "First")
         title.tap(); for _ in 0..<5 { title.typeText(XCUIKeyboardKey.delete.rawValue) }; title.typeText("Edited")
         app.buttons["Retry"].tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
     }

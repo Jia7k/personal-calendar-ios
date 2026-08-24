@@ -427,6 +427,12 @@ final class FeatureViewModelTests: XCTestCase {
         service.completionError = nil; await subject.retryFailedMutation(); XCTAssertNil(subject.mutationErrorMessage); XCTAssertNil(subject.failedMutationOperation); XCTAssertNotNil(subject.createErrorMessage)
     }
 
+    func testConfirmedTaskCreateRefreshFailureHasOnlyRefreshErrorAndNeverDuplicates() async {
+        let service = FakeRemindersService(access: .granted, descriptors: [.init(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral)); service.fetchErrorAfterCreate = TestError.failed
+        let saved = await subject.create(.init(title: "Saved", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list")); XCTAssertTrue(saved); XCTAssertEqual(service.createdDrafts.count, 1); XCTAssertNil(subject.createErrorMessage); XCTAssertNil(subject.draftOnFailure); XCTAssertNotNil(subject.refreshErrorMessage)
+        service.fetchErrorAfterCreate = nil; await subject.load(); XCTAssertNil(subject.refreshErrorMessage); XCTAssertEqual(service.createdDrafts.count, 1)
+    }
+
     func testRoutineSecondHistoryFailureKeepsPriorRowsAndCompletedCacheAtomic() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let weekday = calendar.component(.weekday, from: now)
         let first = RoutineSnapshot(id: UUID(), title: "First", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
