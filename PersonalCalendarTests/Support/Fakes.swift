@@ -2,6 +2,28 @@ import Foundation
 @testable import PersonalCalendar
 
 @MainActor
+final class RecordingEventKitMutationBacking: EventKitMutationBacking {
+    var eventCreates: [EventCreateRequest] = []
+    var eventUpdates: [(String, EventUpdateRequest)] = []
+    var eventRemovals: [(String, RecurrenceEditScope)] = []
+    var reminderCreates: [ReminderCreateRequest] = []
+    var reminderUpdates: [(String, ReminderUpdateRequest)] = []
+    var reminderRemovals: [String] = []
+    var reminderCompletionUpdates: [CompletionCall] = []
+    var error: Error?
+    var nextEventID: String? = "created-event"
+    var nextReminderID: String? = "created-reminder"
+    func createEvent(_ request: EventCreateRequest) throws -> String? { if let error { throw error }; eventCreates.append(request); return normalized(nextEventID) }
+    func updateEvent(id: String, request: EventUpdateRequest) throws { if let error { throw error }; eventUpdates.append((id, request)) }
+    func removeEvent(id: String, span: RecurrenceEditScope) throws { if let error { throw error }; eventRemovals.append((id, span)) }
+    func createReminder(_ request: ReminderCreateRequest) throws -> String? { if let error { throw error }; reminderCreates.append(request); return normalized(nextReminderID) }
+    func updateReminder(id: String, request: ReminderUpdateRequest) throws { if let error { throw error }; reminderUpdates.append((id, request)) }
+    func removeReminder(id: String) throws { if let error { throw error }; reminderRemovals.append(id) }
+    func setReminderCompleted(id: String, completed: Bool) throws { if let error { throw error }; reminderCompletionUpdates.append(.init(id: id, completed: completed)) }
+    private func normalized(_ identifier: String?) -> String? { guard let identifier, !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }; return identifier }
+}
+
+@MainActor
 final class FakeCalendarService: CalendarServicing {
     var accessState: AccessState
     private(set) var requestCount = 0
@@ -9,12 +31,18 @@ final class FakeCalendarService: CalendarServicing {
     var events: [CalendarEventSnapshot]
     var descriptors: [CalendarDescriptor]
     var createdDrafts: [EventDraft] = []
+    private(set) var eventUpdateCalls: [EventUpdateCall] = []
+    private(set) var eventDeleteCalls: [EventDeleteCall] = []
+    private(set) var successfulWriteCount = 0
     private(set) var fetchCalendarIDs: [Set<String>] = []
     var fetchError: Error?
     var createError: Error?
+    var updateError: Error?
+    var deleteError: Error?
     var suspendNextRequest = false
     private var requestContinuation: CheckedContinuation<Void, Never>?
     private(set) var isRequestSuspended = false
+    private let defaultCalendarID: String?
 
     init(
         access: AccessState,
@@ -22,7 +50,8 @@ final class FakeCalendarService: CalendarServicing {
         events: [CalendarEventSnapshot] = [],
         descriptors: [CalendarDescriptor] = [],
         fetchError: Error? = nil,
-        createError: Error? = nil
+        createError: Error? = nil,
+        defaultCalendarID: String? = nil
     ) {
         accessState = access
         self.requestedAccess = requestedAccess ?? access
@@ -30,6 +59,7 @@ final class FakeCalendarService: CalendarServicing {
         self.descriptors = descriptors
         self.fetchError = fetchError
         self.createError = createError
+        self.defaultCalendarID = defaultCalendarID
     }
 
     func requestFullAccess() async -> AccessState {
@@ -46,25 +76,106 @@ final class FakeCalendarService: CalendarServicing {
 
     func resumeSuspendedRequest() { requestContinuation?.resume(); requestContinuation = nil }
 
-    func calendars() -> [CalendarDescriptor] { descriptors }
+    func calendars() -> [CalendarDescriptor] { accessState == .granted ? descriptors : [] }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
         fetchCalendarIDs.append(calendarIDs)
+        guard accessState == .granted else { return [] }
         if let fetchError { throw fetchError }
         return events.filter { calendarIDs.isEmpty || calendarIDs.contains($0.calendarID) }
     }
 
-    func createEvent(_ draft: EventDraft) throws -> String {
+    func createEvent(_ draft: EventDraft) throws -> String? {
+        guard accessState == .granted else { throw DraftValidationError.itemNotFound }
         if let createError { throw createError }
+        try EventDraftValidator.validate(draft)
+        let destination: CalendarDescriptor
+        if let id = draft.calendarID {
+            guard let found = descriptors.first(where: { $0.id == id }) else { throw DraftValidationError.invalidDestination }
+            guard found.allowsContentModifications else { throw DraftValidationError.readOnlyDestination }
+            destination = found
+        } else {
+            guard let defaultCalendarID,
+                  !defaultCalendarID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let found = descriptors.first(where: { $0.id == defaultCalendarID }) else { throw DraftValidationError.invalidDestination }
+            guard found.allowsContentModifications else { throw DraftValidationError.readOnlyDestination }
+            destination = found
+        }
         createdDrafts.append(draft)
-        return "created-event"
+        let id = "created-event-\(createdDrafts.count)"
+        events.append(.init(id: id, mutationID: id, title: trimmed(draft.title), start: draft.start, end: draft.end, isAllDay: draft.isAllDay, calendarID: destination.id, calendarTitle: destination.title, allowsModification: true, hasRecurrence: recurrence(from: draft.recurrence) != .none, notes: draft.notes, location: draft.location, url: draft.url, alarms: alarms(from: draft.alarms), recurrence: recurrence(from: draft.recurrence)))
+        successfulWriteCount += 1
+        return id
     }
+    func event(id: String) -> CalendarEventSnapshot? {
+        guard accessState == .granted, let index = eventIndex(forDetailID: id) else { return nil }
+        return events[index]
+    }
+    func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws {
+        guard accessState == .granted, let index = eventIndex(forMutationID: id) else { throw DraftValidationError.itemNotFound }
+        let old = events[index]
+        guard old.allowsModification else { throw DraftValidationError.readOnlyDestination }
+        guard scope != .futureOccurrences || old.hasRecurrence else { throw DraftValidationError.invalidRecurrenceScope }
+        try EventDraftValidator.validate(draft)
+        if old.hasRecurrence { try draft.recurrence.validate(scope: scope) }
+        let destination: CalendarDescriptor
+        if let destinationID = draft.calendarID {
+            guard let found = descriptors.first(where: { $0.id == destinationID }) else { throw DraftValidationError.invalidDestination }
+            guard found.allowsContentModifications else { throw DraftValidationError.readOnlyDestination }
+            destination = found
+        } else {
+            destination = .init(id: old.calendarID, title: old.calendarTitle, colorHex: "#000000", allowsContentModifications: true)
+        }
+        let resultRecurrence = recurrence(from: draft.recurrence, preserving: old.recurrence)
+        let resultAlarms = alarms(from: draft.alarms, preserving: old.alarms)
+        if let updateError { throw updateError }
+        events[index] = .init(id: old.id, mutationID: old.mutationID, title: trimmed(draft.title), start: draft.start, end: draft.end, isAllDay: draft.isAllDay, calendarID: destination.id, calendarTitle: destination.title, allowsModification: old.allowsModification, hasRecurrence: resultRecurrence != .none, notes: draft.notes, location: draft.location, url: draft.url, alarms: resultAlarms, recurrence: resultRecurrence)
+        eventUpdateCalls.append(.init(id: id, draft: draft, scope: scope))
+        successfulWriteCount += 1
+    }
+    func deleteEvent(id: String, scope: RecurrenceEditScope) throws {
+        guard accessState == .granted, let index = eventIndex(forMutationID: id) else { throw DraftValidationError.itemNotFound }
+        guard events[index].allowsModification else { throw DraftValidationError.readOnlyDestination }
+        guard scope != .futureOccurrences || events[index].hasRecurrence else { throw DraftValidationError.invalidRecurrenceScope }
+        if let deleteError { throw deleteError }
+        events.remove(at: index)
+        eventDeleteCalls.append(.init(id: id, scope: scope))
+        successfulWriteCount += 1
+    }
+
+    private func recurrence(from intent: RecurrenceMutationIntent, preserving previous: RecurrenceSnapshot = .none) -> RecurrenceSnapshot {
+        switch intent { case .preserve: previous; case .clear: .none; case let .replace(rule): .editable(rule) }
+    }
+    private func alarms(from intent: EventAlarmMutationIntent, preserving previous: EventAlarmSnapshot = .none) -> EventAlarmSnapshot {
+        switch intent { case .preserve: previous; case .clear: .none; case let .replace(offsets): .editable(offsets) }
+    }
+    private func eventIndex(forMutationID id: String) -> Int? {
+        guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return events.firstIndex { event in
+            guard let mutationID = event.mutationID,
+                  !mutationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            return mutationID == id
+        }
+    }
+    private func eventIndex(forDetailID id: String) -> Int? {
+        events.firstIndex { event in
+            if event.id == id { return true }
+            guard let mutationID = event.mutationID,
+                  !mutationID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+            return mutationID == id
+        }
+    }
+    private func trimmed(_ title: String) -> String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
 struct CompletionCall: Equatable {
     let id: String
     let completed: Bool
 }
+
+struct EventUpdateCall: Equatable { let id: String; let draft: EventDraft; let scope: RecurrenceEditScope }
+struct EventDeleteCall: Equatable { let id: String; let scope: RecurrenceEditScope }
+struct ReminderUpdateCall: Equatable { let id: String; let draft: ReminderDraft }
 
 struct RoutineCompletionCall: Equatable {
     let id: UUID
@@ -173,9 +284,14 @@ final class FakeRemindersService: RemindersServicing {
     var descriptors: [ReminderListDescriptor]
     var fetchError: Error?
     var createdDrafts: [ReminderDraft] = []
+    private(set) var reminderUpdateCalls: [ReminderUpdateCall] = []
+    private(set) var reminderDeleteCalls: [String] = []
+    private(set) var successfulWriteCount = 0
     var completedCalls: [CompletionCall] = []
     var completionError: Error?
     var createError: Error?
+    var updateError: Error?
+    var deleteError: Error?
     var fetchErrorAfterCompletion: Error?
     var fetchErrorAfterCreate: Error?
     var suspendNextRequest = false
@@ -188,19 +304,22 @@ final class FakeRemindersService: RemindersServicing {
     private(set) var isFetchSuspended = false
     private var requestContinuation: CheckedContinuation<Void, Never>?
     private(set) var isRequestSuspended = false
+    private let defaultListID: String?
 
     init(
         access: AccessState,
         requestedAccess: AccessState? = nil,
         reminders: [ReminderSnapshot] = [],
         descriptors: [ReminderListDescriptor] = [],
-        fetchError: Error? = nil
+        fetchError: Error? = nil,
+        defaultListID: String? = nil
     ) {
         accessState = access
         self.requestedAccess = requestedAccess ?? access
         self.reminders = reminders
         self.descriptors = descriptors
         self.fetchError = fetchError
+        self.defaultListID = defaultListID
     }
 
     func requestFullAccess() async -> AccessState {
@@ -217,10 +336,11 @@ final class FakeRemindersService: RemindersServicing {
 
     func resumeSuspendedRequest() { requestContinuation?.resume(); requestContinuation = nil }
 
-    func lists() -> [ReminderListDescriptor] { descriptors }
+    func lists() -> [ReminderListDescriptor] { accessState == .granted ? descriptors : [] }
 
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] {
         fetchListIDs.append(listIDs)
+        guard accessState == .granted else { return [] }
         let result = reminders.filter { listIDs.isEmpty || listIDs.contains($0.listID) }
         let error = fetchError
         if suspendNextFetch {
@@ -245,22 +365,79 @@ final class FakeRemindersService: RemindersServicing {
 
     func resumeSuspendedFetch() { fetchContinuation?.resume(); fetchContinuation = nil }
 
-    func createReminder(_ draft: ReminderDraft) throws -> String {
+    func createReminder(_ draft: ReminderDraft) throws -> String? {
+        guard accessState == .granted else { throw DraftValidationError.itemNotFound }
         if let createError { throw createError }
+        if case .preserve = draft.schedule { throw DraftValidationError.recurringReminderRequiresDueDate }
+        try validate(draft, preserving: nil)
+        let destination: ReminderListDescriptor
+        if let id = draft.listID {
+            guard let found = descriptors.first(where: { $0.id == id }) else { throw DraftValidationError.invalidDestination }
+            guard found.allowsContentModifications else { throw DraftValidationError.readOnlyDestination }
+            destination = found
+        } else {
+            guard let defaultListID,
+                  !defaultListID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let found = descriptors.first(where: { $0.id == defaultListID }) else { throw DraftValidationError.invalidDestination }
+            guard found.allowsContentModifications else { throw DraftValidationError.readOnlyDestination }
+            destination = found
+        }
         createdDrafts.append(draft)
-        let id = "created-task-\(createdDrafts.count)"; reminders.append(.init(id: id, title: draft.title, notes: draft.notes, dueDate: draft.dueDate, dueHasTime: draft.dueHasTime, priority: draft.priority, listID: draft.listID ?? descriptors.first?.id ?? "tasks", listTitle: descriptors.first(where: { $0.id == draft.listID })?.title ?? "Tasks", isCompleted: false, allowsModification: true, hasRecurrence: false)); return id
+        let id = "created-task-\(createdDrafts.count)"
+        let schedule = schedule(from: draft.schedule, preserving: nil)
+        let recurrence = recurrence(from: draft.recurrence)
+        reminders.append(.init(id: id, title: trimmed(draft.title), notes: draft.notes, dueDate: schedule?.date, dueHasTime: schedule?.hasTime ?? false, priority: draft.priority, listID: destination.id, listTitle: destination.title, isCompleted: false, allowsModification: true, hasRecurrence: recurrence != .none, alarm: alarm(from: draft.alarm), recurrence: recurrence))
+        successfulWriteCount += 1
+        return id
     }
 
     func setCompleted(id: String, completed: Bool) throws {
+        guard accessState == .granted else { throw DraftValidationError.itemNotFound }
         if let completionError { throw completionError }
         guard allowMissingCompletion || reminders.contains(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
+        if let item = reminders.first(where: { $0.id == id }), !item.allowsModification { throw DraftValidationError.readOnlyDestination }
         completedCalls.append(.init(id: id, completed: completed))
         if let index = reminders.firstIndex(where: { $0.id == id }) {
             let old = reminders[index]
-            reminders[index] = .init(id: old.id, title: old.title, notes: old.notes, dueDate: old.dueDate, dueHasTime: old.dueHasTime, priority: old.priority, listID: old.listID, listTitle: old.listTitle, isCompleted: completed, allowsModification: old.allowsModification, hasRecurrence: old.hasRecurrence)
+            reminders[index] = old.withCompletion(completed)
         }
         if completed && omitCompletedAfterMutation { reminders.removeAll { $0.id == id } }
+        successfulWriteCount += 1
     }
+    func reminder(id: String) -> ReminderSnapshot? { guard accessState == .granted else { return nil }; return reminders.first { $0.id == id } }
+    func updateReminder(id: String, draft: ReminderDraft) throws {
+        guard accessState == .granted, let index = reminders.firstIndex(where: { $0.id == id }) else { throw DraftValidationError.itemNotFound }
+        let old = reminders[index]
+        guard old.allowsModification else { throw DraftValidationError.readOnlyDestination }
+        try validate(draft, preserving: .init(date: old.dueDate ?? .distantPast, hasTime: old.dueHasTime), hasSchedule: old.dueDate != nil, hasRecurrence: old.hasRecurrence)
+        let destination: ReminderListDescriptor
+        if let destinationID = draft.listID {
+            guard let found = descriptors.first(where: { $0.id == destinationID }) else { throw DraftValidationError.invalidDestination }
+            guard found.allowsContentModifications else { throw DraftValidationError.readOnlyDestination }
+            destination = found
+        } else { destination = .init(id: old.listID, title: old.listTitle, colorHex: "#000000", allowsContentModifications: true) }
+        let resultSchedule = schedule(from: draft.schedule, preserving: old.dueDate.map { .init(date: $0, hasTime: old.dueHasTime) })
+        let resultRecurrence = recurrence(from: draft.recurrence, preserving: old.recurrence)
+        if let updateError { throw updateError }
+        reminders[index] = .init(id: old.id, title: trimmed(draft.title), notes: draft.notes, dueDate: resultSchedule?.date, dueHasTime: resultSchedule?.hasTime ?? false, priority: draft.priority, listID: destination.id, listTitle: destination.title, isCompleted: old.isCompleted, allowsModification: old.allowsModification, hasRecurrence: resultRecurrence != .none, alarm: alarm(from: draft.alarm, preserving: old.alarm), recurrence: resultRecurrence)
+        reminderUpdateCalls.append(.init(id: id, draft: draft))
+        successfulWriteCount += 1
+    }
+    func deleteReminder(id: String) throws { guard accessState == .granted, let index = reminders.firstIndex(where: { $0.id == id }) else { throw DraftValidationError.itemNotFound }; guard reminders[index].allowsModification else { throw DraftValidationError.readOnlyDestination }; if let deleteError { throw deleteError }; reminders.remove(at: index); reminderDeleteCalls.append(id); successfulWriteCount += 1 }
+
+    private func validate(_ draft: ReminderDraft, preserving current: ReminderScheduleValue?, hasSchedule: Bool = false, hasRecurrence: Bool = false) throws {
+        var effective = draft
+        switch draft.schedule {
+        case .preserve: effective.schedule = hasSchedule ? .replace(current!) : .clear
+        case .clear, .replace: break
+        }
+        if hasRecurrence, case .clear = effective.schedule, effective.recurrence == .preserve { throw DraftValidationError.recurringReminderRequiresDueDate }
+        try ReminderDraftValidator.validate(effective)
+    }
+    private func schedule(from intent: ReminderScheduleMutationIntent, preserving previous: ReminderScheduleValue?) -> ReminderScheduleValue? { switch intent { case .preserve: previous; case .clear: nil; case let .replace(value): value } }
+    private func recurrence(from intent: RecurrenceMutationIntent, preserving previous: RecurrenceSnapshot = .none) -> RecurrenceSnapshot { switch intent { case .preserve: previous; case .clear: .none; case let .replace(rule): .editable(rule) } }
+    private func alarm(from intent: ReminderAlarmMutationIntent, preserving previous: ReminderAlarmSnapshot = .none) -> ReminderAlarmSnapshot { switch intent { case .preserve: previous; case .clear: .none; case let .replace(date): .editable(date) } }
+    private func trimmed(_ title: String) -> String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
 extension ReminderSnapshot {

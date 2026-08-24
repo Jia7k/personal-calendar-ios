@@ -137,7 +137,7 @@ final class TodayViewModel {
             try reminders.setCompleted(id: id, completed: completed)
             cachedReminders = cachedReminders.map { value in
                 guard value.id == id else { return value }
-                return ReminderSnapshot(id: value.id, title: value.title, notes: value.notes, dueDate: value.dueDate, dueHasTime: value.dueHasTime, priority: value.priority, listID: value.listID, listTitle: value.listTitle, isCompleted: completed, allowsModification: value.allowsModification, hasRecurrence: value.hasRecurrence)
+                return value.withCompletion(completed)
             }
             if completed {
                 latestTaskUndo = TaskUndoState(generation: UUID(), title: snapshot.title, rawID: id, snapshot: snapshot)
@@ -165,7 +165,7 @@ final class TodayViewModel {
         do {
             try reminders.setCompleted(id: undo.rawID, completed: false)
             let restored = undo.snapshot
-            let restoredSnapshot = ReminderSnapshot(id: restored.id, title: restored.title, notes: restored.notes, dueDate: restored.dueDate, dueHasTime: restored.dueHasTime, priority: restored.priority, listID: restored.listID, listTitle: restored.listTitle, isCompleted: false, allowsModification: restored.allowsModification, hasRecurrence: restored.hasRecurrence)
+            let restoredSnapshot = restored.withCompletion(false)
             cachedReminders = cachedReminders.map { value in
                 guard value.id == undo.rawID else { return value }
                 return restoredSnapshot

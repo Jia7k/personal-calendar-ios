@@ -21,5 +21,8 @@ protocol CalendarServicing: AnyObject {
     func requestFullAccess() async -> AccessState
     func calendars() -> [CalendarDescriptor]
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot]
-    func createEvent(_ draft: EventDraft) throws -> String
+    func createEvent(_ draft: EventDraft) throws -> String?
+    func event(id: String) -> CalendarEventSnapshot?
+    func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws
+    func deleteEvent(id: String, scope: RecurrenceEditScope) throws
 }

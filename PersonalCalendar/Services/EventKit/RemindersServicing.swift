@@ -14,6 +14,9 @@ protocol RemindersServicing: AnyObject {
     func requestFullAccess() async -> AccessState
     func lists() -> [ReminderListDescriptor]
     func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot]
-    func createReminder(_ draft: ReminderDraft) throws -> String
+    func createReminder(_ draft: ReminderDraft) throws -> String?
     func setCompleted(id: String, completed: Bool) throws
+    func reminder(id: String) -> ReminderSnapshot?
+    func updateReminder(id: String, draft: ReminderDraft) throws
+    func deleteReminder(id: String) throws
 }

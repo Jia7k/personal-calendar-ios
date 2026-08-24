@@ -11,8 +11,10 @@
 		0AE91457447B35874ABD10F0 /* MonthGridBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AF4020FD69A4B8730D2241 /* MonthGridBuilder.swift */; };
 		0B8AF2D3E9D73F367992049C /* AgendaComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5021C67427C6B125C25408 /* AgendaComposerTests.swift */; };
 		0BC46EE714C5B96DF10D5167 /* EventKitMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682D2D6896B3FC8506DC0440 /* EventKitMapping.swift */; };
+		0D4BD0EC64C9BC33C0608878 /* SystemEventKitMutationBackingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0803C264A5CA128C688646D /* SystemEventKitMutationBackingTests.swift */; };
 		0FFDD637EA1D1F64D2A2514C /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93EF05B1DCB2CB75F40436F /* TasksView.swift */; };
 		101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */; };
+		113257C9C6CA7C6B0E63E1FD /* EventKitMutationBacking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 937AF9948796D74A6142B26F /* EventKitMutationBacking.swift */; };
 		24417F7F5F60897AAE27CA48 /* SwiftDataRoutineRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */; };
 		26924EB8B191A5E28AA0674E /* PermissionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */; };
 		27CD7B0F0980F9EA7E512484 /* MonthGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0305691ED4EE8A7D16468599 /* MonthGridView.swift */; };
@@ -27,12 +29,15 @@
 		3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */; };
 		3F603968C9CA4B33CE4E9E65 /* NewTaskSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D90265B4DBB0AFBC001F7D4 /* NewTaskSheet.swift */; };
 		3F6D09DBB7F1E87EE449C033 /* NewEventSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12E8DD3F1850C55169F982DB /* NewEventSheet.swift */; };
+		425318B7558612515C9DA01C /* EventKitStoreDriving.swift in Sources */ = {isa = PBXBuildFile; fileRef = 792CF047FFCC3C20ED265ADD /* EventKitStoreDriving.swift */; };
+		46CFA3CF00AC1220693040B0 /* EventKitMappingContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CD5638BB582030245CBBD2 /* EventKitMappingContractTests.swift */; };
 		47B170E351047751A2E2E7F8 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8F1D75CF739246732E16F1 /* TodayView.swift */; };
 		4C4875701620A6BBD29869D2 /* TasksViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46669A23593638D5CF76617F /* TasksViewModel.swift */; };
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
 		52F2EB3488323A3419FE4748 /* PermissionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E5A68FE9293E4CA53E0168 /* PermissionCard.swift */; };
 		5507919C00277E8FA55CB5FC /* DayTrayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB967637C56AFC66EA20405A /* DayTrayView.swift */; };
 		55773F2024616F8727C4996A /* FakesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4915ADDAF699A819650A494 /* FakesTests.swift */; };
+		55A303C71A884C24E6380F9B /* SystemEventKitStoreDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9616056D0CC8106E6AB292D /* SystemEventKitStoreDriver.swift */; };
 		58E1C3B01A2B6D9F004B69D9 /* RemindersServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9B9D6B59D700174A556740 /* RemindersServicing.swift */; };
 		67F5EBBB97AD60FF649FAFA6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2FC04E5363299D6D14B5C06 /* Assets.xcassets */; };
 		6809715C49E055E45CD15358 /* AgendaComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E982605EFFB1AD12838972FF /* AgendaComposer.swift */; };
@@ -43,6 +48,7 @@
 		75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */; };
 		76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0F4CAF444E648C867C92FD /* Fakes.swift */; };
 		7BC4A396299E8CB6229A40DE /* FeatureViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */; };
+		82C670AC2DB052F951B3731E /* SystemEventKitMutationBacking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54516BE84D8002D324917B88 /* SystemEventKitMutationBacking.swift */; };
 		85AB5DCA3D670D2D1B4F7F5C /* RoutineRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */; };
 		874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AD119EADEB4886F8A223D8 /* RootLifecycleControllerTests.swift */; };
 		92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 579876904A537535665E94EB /* LocalDayTests.swift */; };
@@ -60,6 +66,8 @@
 		D71F641DFE696D96353013AB /* ReminderSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */; };
 		DB74C74071E502004BE24BEF /* DemoEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859D87BBAC87EF206016C3E8 /* DemoEnvironment.swift */; };
 		E3F00C8B2BE2A11B793C24CB /* CalendarServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */; };
+		E9AF60A9B0B2B3224BC25DB5 /* EventKitMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C30CD53CF9716208915AEEB /* EventKitMutationTests.swift */; };
+		EA109F1C24B3F290A8494F8F /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0301807D2E3D787BF7934E52 /* Recurrence.swift */; };
 		EB75D60C51870941DFF5003D /* CalendarEventSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */; };
 		F025561331FF3463890E05E9 /* LocalDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC500C0ADDC6ACCF98F33F62 /* LocalDay.swift */; };
 		F0CA35D58C79407DA7D7A46E /* AppSettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 838A8345765FC5BB3EA6B6DF /* AppSettingsStoreTests.swift */; };
@@ -87,6 +95,7 @@
 
 /* Begin PBXFileReference section */
 		012FE84C82D1D4E773C4F71F /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
+		0301807D2E3D787BF7934E52 /* Recurrence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recurrence.swift; sourceTree = "<group>"; };
 		0305691ED4EE8A7D16468599 /* MonthGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridView.swift; sourceTree = "<group>"; };
 		0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRecord.swift; sourceTree = "<group>"; };
 		0E9B9D6B59D700174A556740 /* RemindersServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersServicing.swift; sourceTree = "<group>"; };
@@ -99,6 +108,7 @@
 		42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepositoryTests.swift; sourceTree = "<group>"; };
 		46669A23593638D5CF76617F /* TasksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksViewModel.swift; sourceTree = "<group>"; };
 		4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		54516BE84D8002D324917B88 /* SystemEventKitMutationBacking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemEventKitMutationBacking.swift; sourceTree = "<group>"; };
 		579876904A537535665E94EB /* LocalDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDayTests.swift; sourceTree = "<group>"; };
 		58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingModelTests.swift; sourceTree = "<group>"; };
 		5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinator.swift; sourceTree = "<group>"; };
@@ -114,21 +124,26 @@
 		7571750731AA225FF73E941D /* AgendaRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaRow.swift; sourceTree = "<group>"; };
 		76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNotificationAuthorizer.swift; sourceTree = "<group>"; };
 		777DF563D8F009E685D3D51D /* PersonalCalendarUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = PersonalCalendarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		792CF047FFCC3C20ED265ADD /* EventKitStoreDriving.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitStoreDriving.swift; sourceTree = "<group>"; };
 		7B5021C67427C6B125C25408 /* AgendaComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaComposerTests.swift; sourceTree = "<group>"; };
 		7D90265B4DBB0AFBC001F7D4 /* NewTaskSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewTaskSheet.swift; sourceTree = "<group>"; };
 		838A8345765FC5BB3EA6B6DF /* AppSettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStoreTests.swift; sourceTree = "<group>"; };
 		859D87BBAC87EF206016C3E8 /* DemoEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEnvironment.swift; sourceTree = "<group>"; };
 		8A8609613CA7D41FBA9F361D /* Drafts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Drafts.swift; sourceTree = "<group>"; };
 		8A9588BA0EA24F41535C7D3D /* RoutinesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutinesViewModel.swift; sourceTree = "<group>"; };
+		8C30CD53CF9716208915AEEB /* EventKitMutationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMutationTests.swift; sourceTree = "<group>"; };
 		91EF6FEBDD3C20D483D57C42 /* EventKitCalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitCalendarService.swift; sourceTree = "<group>"; };
 		92040DBC3A8DA59C6CA26D38 /* RootLifecycleController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootLifecycleController.swift; sourceTree = "<group>"; };
+		937AF9948796D74A6142B26F /* EventKitMutationBacking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMutationBacking.swift; sourceTree = "<group>"; };
 		94F43A03F235594E97C87F1C /* MonthGridBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridBuilderTests.swift; sourceTree = "<group>"; };
 		9635321CC649FEA69B57A29F /* PersonalCalendar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PersonalCalendar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		99CD5638BB582030245CBBD2 /* EventKitMappingContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMappingContractTests.swift; sourceTree = "<group>"; };
 		9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventSnapshot.swift; sourceTree = "<group>"; };
 		A0AD119EADEB4886F8A223D8 /* RootLifecycleControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootLifecycleControllerTests.swift; sourceTree = "<group>"; };
 		A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitServiceMappingTests.swift; sourceTree = "<group>"; };
 		A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineSnapshot.swift; sourceTree = "<group>"; };
 		A93EF05B1DCB2CB75F40436F /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
+		B0803C264A5CA128C688646D /* SystemEventKitMutationBackingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemEventKitMutationBackingTests.swift; sourceTree = "<group>"; };
 		B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataRoutineRepository.swift; sourceTree = "<group>"; };
 		B2FC04E5363299D6D14B5C06 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B766A1797C82BCFBE072693F /* CalendarTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTheme.swift; sourceTree = "<group>"; };
@@ -146,6 +161,7 @@
 		F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSnapshot.swift; sourceTree = "<group>"; };
 		F1C577F2D32A0F22D8B27D82 /* CalendarHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarHomeView.swift; sourceTree = "<group>"; };
 		F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinatorTests.swift; sourceTree = "<group>"; };
+		F9616056D0CC8106E6AB292D /* SystemEventKitStoreDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemEventKitStoreDriver.swift; sourceTree = "<group>"; };
 		FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitRemindersService.swift; sourceTree = "<group>"; };
 		FC500C0ADDC6ACCF98F33F62 /* LocalDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -155,8 +171,11 @@
 			isa = PBXGroup;
 			children = (
 				7B5021C67427C6B125C25408 /* AgendaComposerTests.swift */,
+				99CD5638BB582030245CBBD2 /* EventKitMappingContractTests.swift */,
+				8C30CD53CF9716208915AEEB /* EventKitMutationTests.swift */,
 				A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */,
 				F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */,
+				B0803C264A5CA128C688646D /* SystemEventKitMutationBackingTests.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -320,6 +339,7 @@
 				9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */,
 				8A8609613CA7D41FBA9F361D /* Drafts.swift */,
 				FC500C0ADDC6ACCF98F33F62 /* LocalDay.swift */,
+				0301807D2E3D787BF7934E52 /* Recurrence.swift */,
 				F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */,
 				A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */,
 			);
@@ -354,8 +374,12 @@
 				CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */,
 				91EF6FEBDD3C20D483D57C42 /* EventKitCalendarService.swift */,
 				682D2D6896B3FC8506DC0440 /* EventKitMapping.swift */,
+				937AF9948796D74A6142B26F /* EventKitMutationBacking.swift */,
 				FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */,
+				792CF047FFCC3C20ED265ADD /* EventKitStoreDriving.swift */,
 				0E9B9D6B59D700174A556740 /* RemindersServicing.swift */,
+				54516BE84D8002D324917B88 /* SystemEventKitMutationBacking.swift */,
+				F9616056D0CC8106E6AB292D /* SystemEventKitStoreDriver.swift */,
 			);
 			path = EventKit;
 			sourceTree = "<group>";
@@ -584,7 +608,9 @@
 				0326E0C3B09C29FD9F233CE4 /* Drafts.swift in Sources */,
 				A3677D3E1B137DED57141F64 /* EventKitCalendarService.swift in Sources */,
 				0BC46EE714C5B96DF10D5167 /* EventKitMapping.swift in Sources */,
+				113257C9C6CA7C6B0E63E1FD /* EventKitMutationBacking.swift in Sources */,
 				C8986CA8CFA4922425B576A3 /* EventKitRemindersService.swift in Sources */,
+				425318B7558612515C9DA01C /* EventKitStoreDriving.swift in Sources */,
 				F025561331FF3463890E05E9 /* LocalDay.swift in Sources */,
 				0AE91457447B35874ABD10F0 /* MonthGridBuilder.swift in Sources */,
 				27CD7B0F0980F9EA7E512484 /* MonthGridView.swift in Sources */,
@@ -594,6 +620,7 @@
 				26924EB8B191A5E28AA0674E /* PermissionCoordinator.swift in Sources */,
 				2A77B412EB00DF027D6C6BB8 /* PermissionOnboardingView.swift in Sources */,
 				BF8AE8405E98A3E6621831F7 /* PersonalCalendarApp.swift in Sources */,
+				EA109F1C24B3F290A8494F8F /* Recurrence.swift in Sources */,
 				D71F641DFE696D96353013AB /* ReminderSnapshot.swift in Sources */,
 				58E1C3B01A2B6D9F004B69D9 /* RemindersServicing.swift in Sources */,
 				952FC1963D9FD5BF33DF7791 /* RootLifecycleController.swift in Sources */,
@@ -607,6 +634,8 @@
 				394675A289A87CA98F83F833 /* RoutinesViewModel.swift in Sources */,
 				6B2D0A6D3F8D748AF707A1C2 /* SettingsView.swift in Sources */,
 				24417F7F5F60897AAE27CA48 /* SwiftDataRoutineRepository.swift in Sources */,
+				82C670AC2DB052F951B3731E /* SystemEventKitMutationBacking.swift in Sources */,
+				55A303C71A884C24E6380F9B /* SystemEventKitStoreDriver.swift in Sources */,
 				50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */,
 				0FFDD637EA1D1F64D2A2514C /* TasksView.swift in Sources */,
 				4C4875701620A6BBD29869D2 /* TasksViewModel.swift in Sources */,
@@ -623,6 +652,8 @@
 				F0CA35D58C79407DA7D7A46E /* AppSettingsStoreTests.swift in Sources */,
 				A290AB09195325167FF261AA /* CalendarViewModelTests.swift in Sources */,
 				F122954B32F22BAF1FA664A5 /* DemoEnvironmentTests.swift in Sources */,
+				46CFA3CF00AC1220693040B0 /* EventKitMappingContractTests.swift in Sources */,
+				E9AF60A9B0B2B3224BC25DB5 /* EventKitMutationTests.swift in Sources */,
 				101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */,
 				76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */,
 				55773F2024616F8727C4996A /* FakesTests.swift in Sources */,
@@ -633,6 +664,7 @@
 				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
 				874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */,
 				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,
+				0D4BD0EC64C9BC33C0608878 /* SystemEventKitMutationBackingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

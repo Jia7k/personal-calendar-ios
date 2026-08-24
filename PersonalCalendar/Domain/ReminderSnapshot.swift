@@ -12,6 +12,8 @@ struct ReminderSnapshot: Identifiable, Equatable, Sendable {
     let isCompleted: Bool
     let allowsModification: Bool
     let hasRecurrence: Bool
+    let alarm: ReminderAlarmSnapshot
+    let recurrence: RecurrenceSnapshot
 
     init(
         id: String,
@@ -24,8 +26,11 @@ struct ReminderSnapshot: Identifiable, Equatable, Sendable {
         listTitle: String,
         isCompleted: Bool,
         allowsModification: Bool,
-        hasRecurrence: Bool
+        hasRecurrence: Bool,
+        alarm: ReminderAlarmSnapshot = .none,
+        recurrence: RecurrenceSnapshot = .none
     ) {
+        let normalizedRecurrence = RecurrenceSnapshot.normalized(recurrence, legacyHasRecurrence: hasRecurrence)
         self.id = id
         self.title = title
         self.notes = notes
@@ -36,6 +41,12 @@ struct ReminderSnapshot: Identifiable, Equatable, Sendable {
         self.listTitle = listTitle
         self.isCompleted = isCompleted
         self.allowsModification = allowsModification
-        self.hasRecurrence = hasRecurrence
+        self.hasRecurrence = normalizedRecurrence != .none
+        self.alarm = alarm
+        self.recurrence = normalizedRecurrence
+    }
+
+    func withCompletion(_ isCompleted: Bool) -> ReminderSnapshot {
+        .init(id: id, title: title, notes: notes, dueDate: dueDate, dueHasTime: dueHasTime, priority: priority, listID: listID, listTitle: listTitle, isCompleted: isCompleted, allowsModification: allowsModification, hasRecurrence: hasRecurrence, alarm: alarm, recurrence: recurrence)
     }
 }

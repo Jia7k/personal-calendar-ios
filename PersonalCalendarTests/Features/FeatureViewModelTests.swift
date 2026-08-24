@@ -741,6 +741,26 @@ final class FeatureViewModelTests: XCTestCase {
         service.fetchErrorAfterCreate = nil; await subject.load(); XCTAssertNil(subject.refreshErrorMessage); XCTAssertEqual(service.createdDrafts.count, 1)
     }
 
+    // Break caught: a confirmed create without an addressable EventKit identifier could be retried and duplicate the task.
+    func testNilReminderMutationIDAfterConfirmedRetryReturnsSuccessClearsDraftWithoutSecondWrite() async {
+        let service = NilIDReminderCreateService()
+        let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar)
+        let draft = ReminderDraft(title: "Task", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list")
+        service.createError = TestError.failed
+
+        let failed = await subject.create(draft)
+        XCTAssertFalse(failed)
+        XCTAssertEqual(subject.draftOnFailure, draft)
+
+        service.createError = nil
+        let saved = await subject.create(draft)
+        XCTAssertTrue(saved)
+
+        XCTAssertNil(subject.draftOnFailure)
+        XCTAssertEqual(service.confirmedCreateCount, 1)
+        XCTAssertEqual(service.createAttemptCount, 2)
+    }
+
     func testRoutineSecondHistoryFailureKeepsPriorRowsAndCompletedCacheAtomic() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let day = LocalDay(date: now, calendar: calendar); let weekday = calendar.component(.weekday, from: now)
         let first = RoutineSnapshot(id: UUID(), title: "First", weekdays: [weekday], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
@@ -1171,3 +1191,25 @@ final class FeatureViewModelTests: XCTestCase {
 }
 
 private enum TestError: Error { case failed }
+
+@MainActor
+private final class NilIDReminderCreateService: RemindersServicing {
+    var accessState: AccessState = .granted
+    var createError: Error?
+    private(set) var createAttemptCount = 0
+    private(set) var confirmedCreateCount = 0
+
+    func requestFullAccess() async -> AccessState { accessState }
+    func lists() -> [ReminderListDescriptor] { [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)] }
+    func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] { [] }
+    func createReminder(_ draft: ReminderDraft) throws -> String? {
+        createAttemptCount += 1
+        if let createError { throw createError }
+        confirmedCreateCount += 1
+        return nil
+    }
+    func setCompleted(id: String, completed: Bool) throws {}
+    func reminder(id: String) -> ReminderSnapshot? { nil }
+    func updateReminder(id: String, draft: ReminderDraft) throws {}
+    func deleteReminder(id: String) throws {}
+}

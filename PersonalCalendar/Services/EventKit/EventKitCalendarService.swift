@@ -4,16 +4,29 @@ enum DraftValidationError: Error, Equatable {
     case emptyTitle
     case invalidDateRange
     case readOnlyDestination
+    case itemNotFound
+    case invalidDestination
+    case invalidRecurrence
+    case invalidRecurrenceScope
+    case recurringReminderRequiresDueDate
 }
 
+@MainActor
 enum EventDraftValidator {
     static func validate(_ draft: EventDraft) throws {
         guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DraftValidationError.emptyTitle
         }
-        guard draft.end > draft.start else {
+        guard draft.start.timeIntervalSinceReferenceDate.isFinite,
+              draft.end.timeIntervalSinceReferenceDate.isFinite,
+              draft.end > draft.start else {
             throw DraftValidationError.invalidDateRange
         }
+        if case let .replace(offsets) = draft.alarms,
+           !offsets.allSatisfy(\.isFinite) {
+            throw DraftValidationError.invalidDateRange
+        }
+        if case let .replace(rule) = draft.recurrence { try EventKitRecurrenceMapper.validate(rule, startsAt: draft.start) }
     }
 }
 
@@ -35,11 +48,48 @@ enum EventKitAccessMapper {
 }
 
 @MainActor
+struct EventKitEventDetailResolver {
+    let eventForIdentifier: (String) -> EKEvent?
+    let calendarItemForIdentifier: (String) -> EKCalendarItem?
+
+    func requiredEvent(id: String) -> CalendarEventSnapshot? {
+        if let event = eventForIdentifier(id) {
+            return CalendarEventSnapshot(event: event)
+        }
+        guard let event = calendarItemForIdentifier(id) as? EKEvent else { return nil }
+        return viewOnlySnapshot(for: event, displayID: id)
+    }
+
+    private func viewOnlySnapshot(for event: EKEvent, displayID: String) -> CalendarEventSnapshot {
+        let eventSnapshot = CalendarEventSnapshot(event: event)
+        return CalendarEventSnapshot(
+            id: displayID,
+            mutationID: nil,
+            title: eventSnapshot.title,
+            start: eventSnapshot.start,
+            end: eventSnapshot.end,
+            isAllDay: eventSnapshot.isAllDay,
+            calendarID: eventSnapshot.calendarID,
+            calendarTitle: eventSnapshot.calendarTitle,
+            allowsModification: false,
+            hasRecurrence: eventSnapshot.hasRecurrence,
+            notes: eventSnapshot.notes,
+            location: eventSnapshot.location,
+            url: eventSnapshot.url,
+            alarms: eventSnapshot.alarms,
+            recurrence: eventSnapshot.recurrence
+        )
+    }
+}
+
+@MainActor
 final class EventKitCalendarService: CalendarServicing {
     private let store: EKEventStore
+    private let mutations: any EventKitMutationBacking
 
-    init(store: EKEventStore) {
+    init(store: EKEventStore, mutations: (any EventKitMutationBacking)? = nil) {
         self.store = store
+        self.mutations = mutations ?? SystemEventKitMutationBacking(store: store)
     }
 
     var accessState: AccessState {
@@ -81,28 +131,20 @@ final class EventKitCalendarService: CalendarServicing {
         return store.events(matching: predicate).map(CalendarEventSnapshot.init(event:))
     }
 
-    func createEvent(_ draft: EventDraft) throws -> String {
-        try EventDraftValidator.validate(draft)
-
-        let destination: EKCalendar?
-        if let calendarID = draft.calendarID {
-            destination = store.calendars(for: .event).first {
-                $0.calendarIdentifier == calendarID
-            }
-        } else {
-            destination = store.defaultCalendarForNewEvents
-        }
-        guard let destination, destination.allowsContentModifications else {
-            throw DraftValidationError.readOnlyDestination
-        }
-
-        let event = EKEvent(eventStore: store)
-        event.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        event.startDate = draft.start
-        event.endDate = draft.end
-        event.isAllDay = draft.isAllDay
-        event.calendar = destination
-        try store.save(event, span: .thisEvent, commit: true)
-        return event.eventIdentifier
+    func createEvent(_ draft: EventDraft) throws -> String? {
+        try mutations.createEvent(.init(draft: draft, destination: draft.calendarID.map(CreateDestination.explicit) ?? .defaultWritable))
     }
+
+    func event(id: String) -> CalendarEventSnapshot? {
+        guard accessState == .granted else { return nil }
+        let resolver = EventKitEventDetailResolver(
+            eventForIdentifier: { [store] in store.event(withIdentifier: $0) },
+            calendarItemForIdentifier: { [store] in store.calendarItem(withIdentifier: $0) }
+        )
+        return resolver.requiredEvent(id: id)
+    }
+    func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws {
+        try mutations.updateEvent(id: id, request: .init(draft: draft, destination: draft.calendarID.map(UpdateDestination.explicit) ?? .preserveCurrent, scope: scope))
+    }
+    func deleteEvent(id: String, scope: RecurrenceEditScope) throws { try mutations.removeEvent(id: id, span: scope) }
 }

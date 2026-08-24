@@ -69,7 +69,6 @@ final class TasksViewModel {
         guard isValid(draft), let listID = resolvedListID(for: draft) else { createErrorMessage = "Enter a title and choose a writable reminder list."; return false }
         isSaving = true; defer { isSaving = false }
         var saved = draft; saved.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines); saved.listID = listID
-        if saved.dueDate == nil { saved.dueHasTime = false }
         do {
             _ = try service.createReminder(saved); draftOnFailure = nil; createErrorMessage = nil
             await load()
@@ -136,6 +135,6 @@ final class TasksViewModel {
         if let chosen = draft.listID { return writableLists.contains(where: { $0.id == chosen }) ? chosen : nil }
         return defaultWritableListID
     }
-    private func isValid(_ draft: ReminderDraft) -> Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (0...9).contains(draft.priority) && (draft.dueDate != nil || !draft.dueHasTime) }
-    private func replacing(_ item: ReminderSnapshot, completed: Bool) -> ReminderSnapshot { .init(id: item.id, title: item.title, notes: item.notes, dueDate: item.dueDate, dueHasTime: item.dueHasTime, priority: item.priority, listID: item.listID, listTitle: item.listTitle, isCompleted: completed, allowsModification: item.allowsModification, hasRecurrence: item.hasRecurrence) }
+    private func isValid(_ draft: ReminderDraft) -> Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (0...9).contains(draft.priority) && !draft.hasInvalidLegacyDueTimeWithoutDate && (draft.dueDate != nil || !draft.dueHasTime) }
+    private func replacing(_ item: ReminderSnapshot, completed: Bool) -> ReminderSnapshot { item.withCompletion(completed) }
 }

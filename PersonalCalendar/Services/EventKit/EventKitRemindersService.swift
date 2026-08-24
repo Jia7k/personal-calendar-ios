@@ -1,19 +1,36 @@
 import EventKit
 
+@MainActor
 enum ReminderDraftValidator {
     static func validate(_ draft: ReminderDraft) throws {
         guard !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw DraftValidationError.emptyTitle
         }
+        guard !draft.hasInvalidLegacyDueTimeWithoutDate else {
+            throw DraftValidationError.recurringReminderRequiresDueDate
+        }
+        guard (0...9).contains(draft.priority) else {
+            throw DraftValidationError.invalidDateRange
+        }
+        guard draft.dueDate?.timeIntervalSinceReferenceDate.isFinite ?? true else {
+            throw DraftValidationError.invalidDateRange
+        }
+        if case let .replace(date) = draft.alarm,
+           !date.timeIntervalSinceReferenceDate.isFinite {
+            throw DraftValidationError.invalidDateRange
+        }
+        if case let .replace(rule) = draft.recurrence { guard let due = draft.dueDate else { throw DraftValidationError.recurringReminderRequiresDueDate }; try EventKitRecurrenceMapper.validate(rule, startsAt: due) }
     }
 }
 
 @MainActor
 final class EventKitRemindersService: RemindersServicing {
     private let store: EKEventStore
+    private let mutations: any EventKitMutationBacking
 
-    init(store: EKEventStore) {
+    init(store: EKEventStore, mutations: (any EventKitMutationBacking)? = nil) {
         self.store = store
+        self.mutations = mutations ?? SystemEventKitMutationBacking(store: store)
     }
 
     var accessState: AccessState {
@@ -63,48 +80,18 @@ final class EventKitRemindersService: RemindersServicing {
         }
     }
 
-    func createReminder(_ draft: ReminderDraft) throws -> String {
-        try ReminderDraftValidator.validate(draft)
-
-        let destination: EKCalendar?
-        if let listID = draft.listID {
-            destination = store.calendars(for: .reminder).first {
-                $0.calendarIdentifier == listID
-            }
-        } else {
-            destination = store.defaultCalendarForNewReminders()
-        }
-        guard let destination, destination.allowsContentModifications else {
-            throw DraftValidationError.readOnlyDestination
-        }
-
-        let reminder = EKReminder(eventStore: store)
-        reminder.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        reminder.notes = draft.notes
-        reminder.priority = draft.priority
-        reminder.calendar = destination
-        if let dueDate = draft.dueDate {
-            reminder.dueDateComponents = ReminderDueComponentBuilder.components(
-                for: dueDate,
-                dueHasTime: draft.dueHasTime,
-                preferredCalendar: .autoupdatingCurrent
-            )
-        }
-
-        try store.save(reminder, commit: true)
-        return reminder.calendarItemIdentifier
+    func createReminder(_ draft: ReminderDraft) throws -> String? {
+        try mutations.createReminder(.init(draft: draft, destination: draft.listID.map(CreateDestination.explicit) ?? .defaultWritable))
     }
 
     func setCompleted(id: String, completed: Bool) throws {
-        guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder,
-              reminder.calendar.allowsContentModifications else {
-            throw DraftValidationError.readOnlyDestination
-        }
-
-        reminder.isCompleted = completed
-        try store.save(reminder, commit: true)
+        try mutations.setReminderCompleted(id: id, completed: completed)
     }
+    func reminder(id: String) -> ReminderSnapshot? { guard accessState == .granted, let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else { return nil }; return ReminderSnapshotMapper.snapshot(from: .init(reminder: reminder)) }
+    func updateReminder(id: String, draft: ReminderDraft) throws { try mutations.updateReminder(id: id, request: .init(draft: draft, destination: draft.listID.map(UpdateDestination.explicit) ?? .preserveCurrent)) }
+    func deleteReminder(id: String) throws { try mutations.removeReminder(id: id) }
 }
+
 
 private enum ReminderFetchError: Error {
     case missingResult

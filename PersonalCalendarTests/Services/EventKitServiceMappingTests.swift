@@ -2,6 +2,7 @@ import EventKit
 import XCTest
 @testable import PersonalCalendar
 
+@MainActor
 final class EventKitServiceMappingTests: XCTestCase {
     // Break caught: accepting an empty reminder title would create an unusable task.
     func testReminderDraftRejectsBlankTitle() {
@@ -10,6 +11,13 @@ final class EventKitServiceMappingTests: XCTestCase {
                 .init(title: "\n", notes: nil, dueDate: nil, priority: 0, listID: nil)
             )
         )
+    }
+
+    // Break caught: recurring reminders with no due date cannot have a valid recurrence start.
+    func testReminderDraftRejectsRecurringRuleWithoutDueDate() {
+        XCTAssertThrowsError(try ReminderDraftValidator.validate(.init(title: "Pay bill", notes: nil, dueDate: nil, priority: 0, recurrence: .replace(.init(frequency: .monthly, interval: 1, weekdays: [], endDate: nil)))) ) { error in
+            XCTAssertEqual(error as? DraftValidationError, .recurringReminderRequiresDueDate)
+        }
     }
 
     // Break caught: a recurring EventKit occurrence would be expanded into unsupplied future snapshots.
@@ -147,10 +155,55 @@ final class EventKitServiceMappingTests: XCTestCase {
         XCTAssertNoThrow(try EventDraftValidator.validate(draft))
     }
 
+    // Break caught: Date accepts NaN and infinity, but EventKit cannot safely persist either as an event range or alert offset.
+    func testEventDraftRejectsNonFiniteDatesAndReplacementAlarmOffsets() {
+        let validStart = Date(timeIntervalSince1970: 100)
+        let invalidDates = [Date(timeIntervalSinceReferenceDate: .nan), Date(timeIntervalSinceReferenceDate: .infinity)]
+
+        for invalidDate in invalidDates {
+            XCTAssertThrowsError(try EventDraftValidator.validate(.init(title: "Dentist", start: invalidDate, end: validStart, isAllDay: false, calendarID: nil)))
+            XCTAssertThrowsError(try EventDraftValidator.validate(.init(title: "Dentist", start: validStart, end: invalidDate, isAllDay: false, calendarID: nil)))
+        }
+        XCTAssertThrowsError(try EventDraftValidator.validate(.init(title: "Dentist", start: validStart, end: validStart.addingTimeInterval(60), isAllDay: false, calendarID: nil, alarms: .replace([-Double.infinity]))))
+    }
+
+    // Break caught: malformed reminder schedules, priorities, and absolute alerts would reach EventKit as invalid provider values.
+    func testReminderDraftRejectsInvalidLegacySchedulePriorityAndNonFiniteDates() {
+        let validDate = Date(timeIntervalSince1970: 100)
+        let legacy = ReminderDraft(title: "Pay bill", notes: nil, dueDate: nil, dueHasTime: true, priority: 0)
+
+        XCTAssertThrowsError(try ReminderDraftValidator.validate(legacy))
+        XCTAssertThrowsError(try ReminderDraftValidator.validate(.init(title: "Pay bill", notes: nil, dueDate: validDate, priority: -1)))
+        XCTAssertThrowsError(try ReminderDraftValidator.validate(.init(title: "Pay bill", notes: nil, dueDate: validDate, priority: 10)))
+        XCTAssertThrowsError(try ReminderDraftValidator.validate(.init(title: "Pay bill", notes: nil, dueDate: Date(timeIntervalSinceReferenceDate: .nan), priority: 0)))
+        XCTAssertThrowsError(try ReminderDraftValidator.validate(.init(title: "Pay bill", notes: nil, dueDate: validDate, priority: 0, alarm: .replace(Date(timeIntervalSinceReferenceDate: .infinity)))))
+    }
+
     func testAuthorizationMappingRequiresFullAccess() {
         XCTAssertEqual(EventKitAccessMapper.map(.fullAccess), .granted)
         XCTAssertEqual(EventKitAccessMapper.map(.denied), .denied)
         XCTAssertEqual(EventKitAccessMapper.map(.writeOnly), .restricted)
+    }
+
+    // Break caught: a detail view for an event without a mutable EventKit address would disappear instead of remaining viewable.
+    func testEventDetailResolverFallsBackToCalendarItemIdentityAsViewOnlySnapshot() {
+        let displayID = "calendar-item-only"
+        let event = EKEvent(eventStore: EKEventStore())
+        event.title = "Shared holiday"
+        event.startDate = Date(timeIntervalSince1970: 1_000)
+        event.endDate = Date(timeIntervalSince1970: 1_600)
+
+        let resolver = EventKitEventDetailResolver(
+            eventForIdentifier: { _ in nil },
+            calendarItemForIdentifier: { identifier in identifier == displayID ? event : nil }
+        )
+
+        let snapshot = resolver.requiredEvent(id: displayID)
+
+        XCTAssertEqual(snapshot?.id, displayID)
+        XCTAssertEqual(snapshot?.title, "Shared holiday")
+        XCTAssertFalse(snapshot?.isAddressable ?? true)
+        XCTAssertFalse(snapshot?.allowsModification ?? true)
     }
 
     // Break caught: calendar colors would be formatted with nondeterministic or non-RGB output.

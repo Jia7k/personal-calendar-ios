@@ -14,8 +14,9 @@ struct AppEnvironment {
 
     static func live(container: ModelContainer) -> AppEnvironment {
         let store = EKEventStore()
-        let calendar = EventKitCalendarService(store: store)
-        let reminders = EventKitRemindersService(store: store)
+        let mutations = SystemEventKitMutationBacking(store: store)
+        let calendar = EventKitCalendarService(store: store, mutations: mutations)
+        let reminders = EventKitRemindersService(store: store, mutations: mutations)
         let notifications = SystemNotificationAuthorizer()
         let permissions = PermissionCoordinator(
             calendar: calendar,
@@ -36,9 +37,21 @@ struct AppEnvironment {
 
     static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
         let calendarAccess: AccessState = arguments.contains("-calendar-not-determined") ? .notDetermined : arguments.contains("-calendar-restricted") ? .restricted : arguments.contains("-calendar-denied") ? .denied : .granted
-        let calendar = DemoCalendarService(access: calendarAccess, failFirstCreate: arguments.contains("-event-save-fails-once"), multipleSources: arguments.contains("-demo-multiple-sources"))
+        let calendar = DemoCalendarService(
+            access: calendarAccess,
+            failFirstCreate: arguments.contains("-event-save-fails-once"),
+            failFirstUpdate: arguments.contains("-event-update-fails-once"),
+            failFirstDelete: arguments.contains("-event-delete-fails-once"),
+            multipleSources: arguments.contains("-demo-multiple-sources")
+        )
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
-        let reminders = DemoRemindersService(access: reminderAccess, failFirstCreate: arguments.contains("-task-save-fails-once"), multipleSources: arguments.contains("-demo-multiple-sources"))
+        let reminders = DemoRemindersService(
+            access: reminderAccess,
+            failFirstCreate: arguments.contains("-task-save-fails-once"),
+            failFirstUpdate: arguments.contains("-task-update-fails-once"),
+            failFirstDelete: arguments.contains("-task-delete-fails-once"),
+            multipleSources: arguments.contains("-demo-multiple-sources")
+        )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let permissions = PermissionCoordinator(
