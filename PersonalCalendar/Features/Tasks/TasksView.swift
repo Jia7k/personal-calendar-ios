@@ -2,9 +2,16 @@ import SwiftUI
 
 struct TasksView: View {
     @State private var model: TasksViewModel
-    @State private var showingNewTask = false
+    @State private var editorPresentation: TasksEditorPresentation?
+    private let environment: AppEnvironment
     private let revision: Int
-    init(environment: AppEnvironment, revision: Int = 0) { _model = State(initialValue: TasksViewModel(service: environment.reminders, settings: environment.settings)); self.revision = revision }
+
+    init(environment: AppEnvironment, revision: Int = 0) {
+        self.environment = environment
+        _model = State(initialValue: TasksViewModel(service: environment.reminders, settings: environment.settings))
+        self.revision = revision
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -16,19 +23,121 @@ struct TasksView: View {
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
             }
             .navigationTitle("Tasks")
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Task", systemImage: "plus") { showingNewTask = true }.disabled(model.accessExplanation != nil).frame(minWidth: 44, minHeight: 44) } }
-            .sheet(isPresented: $showingNewTask) { NewTaskSheet(model: model) }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("New Task", systemImage: "plus", action: presentNewTask)
+                        .disabled(model.accessExplanation != nil)
+                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                }
+            }
+            .sheet(item: $editorPresentation) { presentation in
+                TaskEditorView(
+                    model: presentation.model,
+                    lists: presentation.lists,
+                    nilDestinationLabel: presentation.nilDestinationLabel,
+                    showsDelete: presentation.showsDelete,
+                    onDismiss: dismissEditor
+                )
+            }
             .task(id: revision) { await model.load() }
             .refreshable { await model.load() }
         }
     }
+
     @ViewBuilder private func taskSection(_ title: String, _ values: [ReminderSnapshot]) -> some View { if !values.isEmpty { Section(title) { ForEach(values) { taskRow($0) } } } }
+
     private func taskRow(_ task: ReminderSnapshot) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Button { Task { await model.setCompleted(id: task.id, completed: !task.isCompleted) } } label: { Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle").font(.title3) }
-                .disabled(!task.allowsModification || model.mutatingIDs.contains(task.id)).frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel("Mark \(task.title) \(task.isCompleted ? "incomplete" : "complete")").accessibilityValue(task.isCompleted ? "Completed" : "Not completed").accessibilityHint(task.allowsModification ? "" : "This task is read-only.")
-            VStack(alignment: .leading, spacing: 3) { Text(task.title).strikethrough(task.isCompleted); if let due = task.dueDate { Text(due, format: task.dueHasTime ? .dateTime.month().day().hour().minute() : .dateTime.month().day()).font(.footnote).foregroundStyle(.secondary) } else { Text("No due date").font(.footnote).foregroundStyle(.secondary) } }
-        }.buttonStyle(.borderless)
+        HStack(spacing: 12) {
+            Button {
+                Task { await model.setCompleted(id: task.id, completed: !task.isCompleted) }
+            } label: {
+                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .disabled(!task.allowsModification || model.mutatingIDs.contains(task.id))
+            .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            .accessibilityIdentifier("task-complete-\(task.id)")
+            .accessibilityLabel("Mark \(task.title) \(task.isCompleted ? "incomplete" : "complete")")
+            .accessibilityValue(task.isCompleted ? "Completed" : "Not completed")
+            .accessibilityHint(task.allowsModification ? "" : "This task is read-only.")
+
+            Button { openTask(task) } label: {
+                taskDetails(task)
+            }
+            .buttonStyle(.borderless)
+            .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
+            .contentShape(Rectangle())
+            .accessibilityIdentifier("task-open-\(task.id)")
+            .accessibilityLabel("Open task \(task.title)")
+        }
     }
+
+    private func taskDetails(_ task: ReminderSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(task.title).strikethrough(task.isCompleted)
+            if let due = task.dueDate {
+                Text(due, format: task.dueHasTime ? .dateTime.month().day().hour().minute() : .dateTime.month().day())
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No due date")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func presentNewTask() {
+        let editorModel = TaskEditorViewModel.creating(
+            service: environment.reminders,
+            savedDefaultListID: environment.settings.defaultReminderListID,
+            onCommitted: { commit in finishEditorAndReload(commit) }
+        )
+        editorPresentation = .init(
+            model: editorModel,
+            lists: environment.reminders.lists(),
+            nilDestinationLabel: "System Default",
+            showsDelete: false
+        )
+    }
+
+    private func openTask(_ task: ReminderSnapshot) {
+        let editorModel = TaskEditorViewModel.editing(
+            reminderID: task.id,
+            service: environment.reminders,
+            onCommitted: { commit in finishEditorAndReload(commit) },
+            onReconciliationNeeded: reconcileEditorWithoutDismissing
+        )
+        editorPresentation = .init(
+            model: editorModel,
+            lists: environment.reminders.lists(),
+            nilDestinationLabel: "Preserve Current",
+            showsDelete: true
+        )
+    }
+
+    private func dismissEditor() {
+        editorPresentation = nil
+    }
+
+    private func reconcileEditorWithoutDismissing() {
+        Task { @MainActor in await model.load() }
+    }
+
+    private func finishEditorAndReload(_ commit: TaskEditorCommit) {
+        Task { @MainActor in
+            editorPresentation = nil
+            await model.refreshAfterEditorCommit(commit)
+        }
+    }
+}
+
+private struct TasksEditorPresentation: Identifiable {
+    let id = UUID()
+    let model: TaskEditorViewModel
+    let lists: [ReminderListDescriptor]
+    let nilDestinationLabel: String
+    let showsDelete: Bool
 }

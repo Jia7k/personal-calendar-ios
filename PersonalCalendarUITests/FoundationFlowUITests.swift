@@ -139,11 +139,15 @@ final class FoundationFlowUITests: XCTestCase {
         title.tap()
         title.typeText("Dentist")
         app.buttons["Save"].tap()
-        XCTAssertTrue(app.buttons["event-save-retry"].waitForExistence(timeout: 3))
+        let retry = app.buttons["event-save-retry"]
+        scrollToHittable(retry, in: app)
+        for _ in 0..<6 where !title.isHittable { app.swipeDown() }
+        XCTAssertTrue(title.isHittable)
         title.tap()
         for _ in 0..<7 { title.typeText(XCUIKeyboardKey.delete.rawValue) }
         title.typeText("Dentist Updated")
-        app.buttons["event-save-retry"].tap()
+        scrollToHittable(retry, in: app)
+        retry.tap()
         XCTAssertTrue(app.staticTexts["Dentist Updated"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Dentist"].exists)
     }
@@ -334,22 +338,17 @@ final class FoundationFlowUITests: XCTestCase {
         app.launchArguments = ["-ui-testing"]
         app.launch()
         app.tabBars.buttons["Today"].tap()
-        let complete = app.buttons["Mark Buy milk complete"]
+        let complete = app.buttons["agenda-complete-task-demo-task"]
         XCTAssertTrue(complete.waitForExistence(timeout: 3))
+        XCTAssertEqual(complete.value as? String, "Not completed")
         complete.tap()
         XCTAssertTrue(app.buttons["Undo completion for Buy milk"].waitForExistence(timeout: 3))
         XCTAssertFalse(app.staticTexts["Buy milk"].exists)
         app.buttons["Undo completion for Buy milk"].tap()
         XCTAssertTrue(app.staticTexts["Buy milk"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Mark Buy milk complete"].exists)
-    }
-
-    func testTaskTitleTapDoesNotToggleButCompletionControlDoes() {
-        let app = XCUIApplication(); app.launchArguments = ["-ui-testing"]; app.launch(); app.tabBars.buttons["Tasks"].tap()
-        XCTAssertTrue(app.staticTexts["Buy milk"].waitForExistence(timeout: 3)); app.staticTexts["Buy milk"].tap()
-        XCTAssertTrue(app.buttons["Mark Buy milk complete"].exists); XCTAssertFalse(app.buttons["Mark Buy milk incomplete"].exists)
-        app.buttons["Mark Buy milk complete"].tap(); app.buttons["Completed"].tap(); let undo = app.buttons["Mark Buy milk incomplete"]
-        XCTAssertTrue(undo.waitForExistence(timeout: 3)); XCTAssertEqual(undo.value as? String, "Completed")
+        let restored = app.buttons["agenda-complete-task-demo-task"]
+        XCTAssertTrue(restored.exists)
+        XCTAssertEqual(restored.value as? String, "Not completed")
     }
 
     func testCreateTaskAndCompleteRoutineInDemoMode() {
@@ -382,11 +381,15 @@ final class FoundationFlowUITests: XCTestCase {
     func testEditedTaskRetryAfterDemoFailOnceCreatesOnlyEditedTask() {
         let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-task-save-fails-once"]; app.launch()
         app.tabBars.buttons["Tasks"].tap(); app.buttons["New Task"].tap()
-        let title = app.textFields["Task title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("First")
-        app.buttons["Save"].tap(); XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 3))
-        app.buttons["Cancel"].tap(); app.buttons["New Task"].tap(); XCTAssertEqual(title.value as? String, "First")
+        let title = app.textFields["task-editor-title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("First")
+        app.buttons["task-editor-save"].tap()
+        let retry = app.buttons["task-save-retry"]
+        scrollToHittable(retry, in: app)
+        XCTAssertEqual(title.value as? String, "First")
+        for _ in 0..<6 where !title.isHittable { app.swipeDown() }
+        XCTAssertTrue(title.isHittable)
         title.tap(); for _ in 0..<5 { title.typeText(XCUIKeyboardKey.delete.rawValue) }; title.typeText("Edited")
-        app.buttons["Retry"].tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
+        scrollToHittable(retry, in: app); retry.tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
     }
 
     func testRoutineCreateFailureCancelReopenAndEditedRetry() {
@@ -439,6 +442,308 @@ final class FoundationFlowUITests: XCTestCase {
         confirmationDelete(in: app).tap(); XCTAssertTrue(app.staticTexts["Your routine was not deleted. Try again. The routine and its completion history are still safe on this iPhone."].waitForExistence(timeout: 3)); XCTAssertTrue(app.buttons["Cancel Delete"].isHittable); XCTAssertTrue(confirmationDelete(in: app).isHittable); XCTAssertTrue(app.staticTexts[title].exists)
     }
 
+    func testCalendarTrayRoutesEventAndTaskByOrigin() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+
+        app.buttons["Expand day"].tap()
+        let event = app.buttons["agenda-open-event-demo-event"]
+        XCTAssertTrue(event.waitForExistence(timeout: 3))
+        event.tap()
+        XCTAssertTrue(app.navigationBars["Event"].waitForExistence(timeout: 3))
+        app.buttons["event-editor-cancel"].tap()
+
+        let task = app.buttons["agenda-open-task-demo-task"]
+        let completion = app.buttons["agenda-complete-task-demo-task"]
+        XCTAssertTrue(task.waitForExistence(timeout: 3))
+        XCTAssertTrue(completion.exists)
+        XCTAssertEqual(completion.value as? String, "Not completed")
+        task.tap()
+        XCTAssertTrue(app.navigationBars["Task"].waitForExistence(timeout: 3))
+        app.buttons["task-editor-cancel"].tap()
+
+        XCTAssertTrue(completion.waitForExistence(timeout: 3))
+        XCTAssertEqual(completion.value as? String, "Not completed")
+        completion.tap()
+        XCTAssertFalse(task.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.navigationBars["Task"].exists)
+    }
+
+    func testTodayRoutesEventAndTaskByOrigin() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        app.tabBars.buttons["Today"].tap()
+
+        app.buttons["agenda-open-event-demo-event"].tap()
+        XCTAssertTrue(app.navigationBars["Event"].waitForExistence(timeout: 3))
+        app.buttons["event-editor-cancel"].tap()
+
+        let task = app.buttons["agenda-open-task-demo-task"]
+        let completion = app.buttons["agenda-complete-task-demo-task"]
+        XCTAssertTrue(completion.waitForExistence(timeout: 3))
+        XCTAssertEqual(completion.value as? String, "Not completed")
+        task.tap()
+        XCTAssertTrue(app.navigationBars["Task"].waitForExistence(timeout: 3))
+        app.buttons["task-editor-cancel"].tap()
+
+        XCTAssertTrue(completion.waitForExistence(timeout: 3))
+        XCTAssertEqual(completion.value as? String, "Not completed")
+        completion.tap()
+        XCTAssertTrue(app.buttons["Undo completion for Buy milk"].waitForExistence(timeout: 3))
+        XCTAssertFalse(task.exists)
+    }
+
+    func testTaskTitleOpensDetailWhileSeparateCompletionControlAloneToggles() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing"]
+        app.launch()
+        app.tabBars.buttons["Tasks"].tap()
+
+        let openTask = app.buttons["task-open-demo-task"]
+        let completion = app.buttons["task-complete-demo-task"]
+        XCTAssertTrue(openTask.waitForExistence(timeout: 3))
+        XCTAssertTrue(completion.exists)
+        XCTAssertEqual(completion.value as? String, "Not completed")
+        openTask.tap()
+        XCTAssertTrue(app.navigationBars["Task"].waitForExistence(timeout: 3))
+        app.buttons["task-editor-cancel"].tap()
+        completion.tap()
+        XCTAssertFalse(openTask.waitForExistence(timeout: 3))
+        app.buttons["Completed"].tap()
+        let completedControl = app.buttons["task-complete-demo-task"]
+        XCTAssertTrue(completedControl.waitForExistence(timeout: 3))
+        XCTAssertEqual(completedControl.value as? String, "Completed")
+    }
+
+    func testReadOnlyEditorDetailsShowDistinctReasonAndDisabledEditDelete() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-read-only"]
+        app.launch()
+        app.buttons["Expand day"].tap()
+
+        app.buttons["agenda-open-event-demo-event-read-only"].tap()
+        let readOnlyEventReason = app.staticTexts["This event belongs to a read-only calendar."]
+        scrollToExistence(readOnlyEventReason, in: app)
+        let unavailableEdit = app.buttons["event-editor-edit-unavailable"]
+        let unavailableDelete = app.buttons["event-editor-delete"]
+        scrollToExistence(unavailableEdit, in: app)
+        XCTAssertTrue(unavailableDelete.exists)
+        XCTAssertFalse(unavailableEdit.isEnabled)
+        XCTAssertFalse(unavailableDelete.isEnabled)
+        app.buttons["event-editor-cancel"].tap()
+
+        app.buttons["agenda-open-event-demo-event-nonaddressable"].tap()
+        let nonaddressableReason = app.staticTexts["Calendar did not provide a stable editing identifier for this event."]
+        scrollToExistence(nonaddressableReason, in: app)
+        XCTAssertFalse(app.buttons["event-editor-edit-unavailable"].isEnabled)
+        XCTAssertFalse(app.buttons["event-editor-delete"].isEnabled)
+        app.buttons["event-editor-cancel"].tap()
+
+        app.buttons["agenda-open-task-demo-task-read-only"].tap()
+        let taskReason = app.staticTexts["This task belongs to a read-only reminders list."]
+        scrollToExistence(taskReason, in: app)
+        let taskUnavailableEdit = app.buttons["task-editor-edit-unavailable"]
+        let taskUnavailableDelete = app.buttons["task-editor-delete"]
+        scrollToExistence(taskUnavailableEdit, in: app)
+        XCTAssertTrue(taskUnavailableDelete.exists)
+        XCTAssertFalse(taskUnavailableEdit.isEnabled)
+        XCTAssertFalse(taskUnavailableDelete.isEnabled)
+    }
+
+    func testUnsupportedProviderEditorValuesRemainVisibleAndProtected() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-unsupported"]
+        app.launch()
+        app.buttons["Expand day"].tap()
+
+        app.buttons["agenda-open-event-demo-event-unsupported"].tap()
+        let eventAlarm = app.descendants(matching: .any)["event-editor-unsupported-alarm"]
+        let eventRepeat = app.descendants(matching: .any)["event-editor-unsupported-recurrence"]
+        scrollToExistence(eventAlarm, in: app)
+        XCTAssertTrue(eventAlarm.label.contains("Provider-defined alerts"))
+        scrollToExistence(eventRepeat, in: app)
+        XCTAssertTrue(eventRepeat.label.contains("Provider-defined repeat"))
+        app.buttons["event-editor-cancel"].tap()
+
+        app.buttons["agenda-open-task-demo-task-unsupported"].tap()
+        let taskAlarm = app.descendants(matching: .any)["task-editor-unsupported-alarm"]
+        let taskRepeat = app.descendants(matching: .any)["task-editor-unsupported-recurrence"]
+        scrollToExistence(taskAlarm, in: app)
+        XCTAssertTrue(taskAlarm.label.contains("Provider-defined alert"))
+        scrollToExistence(taskRepeat, in: app)
+        XCTAssertTrue(taskRepeat.label.contains("Provider-defined repeat"))
+    }
+
+    func testRecurringEditorsExposeEventScopesAndExactReminderSafetyCopy() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-recurring"]
+        app.launch()
+        app.buttons["Expand day"].tap()
+
+        app.buttons["agenda-open-event-demo-event-recurring"].tap()
+        let currentAlerts = app.descendants(matching: .any)["event-editor-current-alarm"]
+        scrollToExistence(currentAlerts, in: app)
+        let alertValue = currentAlerts.label + " " + (currentAlerts.value as? String ?? "")
+        XCTAssertTrue(alertValue.contains("15 minutes before"))
+        XCTAssertTrue(alertValue.contains("1 hour before"))
+        let currentRepeat = app.descendants(matching: .any)["event-editor-current-recurrence"]
+        scrollToExistence(currentRepeat, in: app)
+        let repeatValue = currentRepeat.label + " " + (currentRepeat.value as? String ?? "")
+        XCTAssertTrue(repeatValue.contains("2 weeks"))
+        XCTAssertTrue(repeatValue.contains("until"))
+
+        let saveScope = app.descendants(matching: .any)["event-editor-recurrence-scope"]
+        scrollToExistence(saveScope, in: app)
+        let saveScopeValue = saveScope.label + " " + (saveScope.value as? String ?? "")
+        XCTAssertTrue(saveScopeValue.contains("This Event"))
+
+        let repeatPicker = app.descendants(matching: .any)["event-editor-recurrence-intent"]
+        scrollToHittable(repeatPicker, in: app)
+        repeatPicker.tap(); app.buttons["Never"].tap()
+        let delete = app.buttons["event-editor-delete"]
+        scrollToHittable(delete, in: app); delete.tap()
+        let singleDelete = app.buttons.matching(identifier: "event-editor-confirm-delete").firstMatch
+        XCTAssertTrue(singleDelete.waitForExistence(timeout: 3))
+        XCTAssertEqual(singleDelete.label, "Delete This Event")
+        XCTAssertTrue(app.staticTexts["Delete only this event? This can’t be undone."].exists)
+        app.buttons.matching(identifier: "event-editor-confirm-cancel").firstMatch.tap()
+
+        app.buttons["event-editor-cancel"].tap()
+        app.buttons.matching(identifier: "event-editor-discard").firstMatch.tap()
+
+        app.buttons["agenda-open-task-demo-task-recurring"].tap()
+        let occurrenceCopy = app.staticTexts.matching(
+            NSPredicate(format: "label == %@", "Only the current incomplete reminder occurrence is shown. Completing it may reveal the next occurrence supplied by Apple Reminders.")
+        ).firstMatch
+        scrollToExistence(occurrenceCopy, in: app)
+        let deleteCopy = app.staticTexts["Deleting this task removes the repeating reminder."]
+        scrollToExistence(deleteCopy, in: app)
+        let taskAlarm = app.descendants(matching: .any)["task-editor-current-alarm"]
+        scrollToExistence(taskAlarm, in: app)
+        let taskAlarmValue = taskAlarm.label + " " + (taskAlarm.value as? String ?? "")
+        // The demo task is due at 16:30 today and carries a provider alert 30
+        // minutes earlier. Derive the localized expected provider value instead
+        // of hard-coding the simulator's launch day.
+        let expectedAlarm = Calendar.current.date(bySettingHour: 16, minute: 0, second: 0, of: .now)!
+            .formatted(date: .abbreviated, time: .shortened)
+        XCTAssertTrue(taskAlarmValue.contains(expectedAlarm))
+        let taskRepeat = app.descendants(matching: .any)["task-editor-current-recurrence"]
+        scrollToExistence(taskRepeat, in: app)
+        let taskRepeatValue = taskRepeat.label + " " + (taskRepeat.value as? String ?? "")
+        XCTAssertTrue(taskRepeatValue.contains("2 weeks"))
+        XCTAssertTrue(taskRepeatValue.contains("until"))
+        XCTAssertFalse(app.descendants(matching: .any)["task-editor-recurrence-scope"].exists)
+    }
+
+    func testFailedEventAndTaskUpdatesKeepEditedFormForRetry() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-event-update-fails-once", "-task-update-fails-once"]
+        app.launch()
+
+        app.buttons["agenda-open-event-demo-event"].tap()
+        let eventTitle = app.textFields["event-editor-title"]
+        XCTAssertTrue(eventTitle.waitForExistence(timeout: 3))
+        replaceText(eventTitle, with: "Coffee updated")
+        dismissKeyboard(in: app)
+        app.buttons["event-editor-save"].tap()
+        XCTAssertEqual(eventTitle.value as? String, "Coffee updated")
+        let eventRetry = app.buttons["event-save-retry"]
+        scrollToHittable(eventRetry, in: app)
+        eventRetry.tap()
+        XCTAssertTrue(app.staticTexts["Coffee updated"].waitForExistence(timeout: 3))
+
+        app.tabBars.buttons["Tasks"].tap()
+        app.buttons["task-open-demo-task"].tap()
+        let taskTitle = app.textFields["task-editor-title"]
+        XCTAssertTrue(taskTitle.waitForExistence(timeout: 3))
+        replaceText(taskTitle, with: "Buy oat milk")
+        dismissKeyboard(in: app)
+        app.buttons["task-editor-save"].tap()
+        XCTAssertEqual(taskTitle.value as? String, "Buy oat milk")
+        let taskRetry = app.buttons["task-save-retry"]
+        scrollToHittable(taskRetry, in: app)
+        taskRetry.tap()
+        XCTAssertTrue(app.staticTexts["Buy oat milk"].waitForExistence(timeout: 3))
+    }
+
+    func testEventAndTaskDeleteRetryRequireFreshConfirmation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-event-delete-fails-once", "-task-delete-fails-once"]
+        app.launch()
+
+        app.buttons["agenda-open-event-demo-event"].tap()
+        let eventDelete = app.buttons["event-editor-delete"]
+        scrollToHittable(eventDelete, in: app)
+        eventDelete.tap()
+        let firstEventConfirm = app.buttons.matching(identifier: "event-editor-confirm-delete").firstMatch
+        XCTAssertTrue(firstEventConfirm.waitForExistence(timeout: 3))
+        firstEventConfirm.tap()
+        let eventRetry = app.buttons["event-delete-retry"]
+        scrollToHittable(eventRetry, in: app)
+        eventRetry.tap()
+        let eventConfirm = app.buttons.matching(identifier: "event-editor-confirm-delete").firstMatch
+        XCTAssertTrue(eventConfirm.waitForExistence(timeout: 3))
+        eventConfirm.tap()
+        XCTAssertFalse(app.buttons["agenda-open-event-demo-event"].waitForExistence(timeout: 3))
+
+        app.tabBars.buttons["Tasks"].tap()
+        app.buttons["task-open-demo-task"].tap()
+        let taskDelete = app.buttons["task-editor-delete"]
+        scrollToHittable(taskDelete, in: app)
+        taskDelete.tap()
+        let firstTaskConfirm = app.buttons.matching(identifier: "task-editor-confirm-delete").firstMatch
+        XCTAssertTrue(firstTaskConfirm.waitForExistence(timeout: 3))
+        firstTaskConfirm.tap()
+        let taskRetry = app.buttons["task-delete-retry"]
+        scrollToHittable(taskRetry, in: app)
+        taskRetry.tap()
+        let taskConfirm = app.buttons.matching(identifier: "task-editor-confirm-delete").firstMatch
+        XCTAssertTrue(taskConfirm.waitForExistence(timeout: 3))
+        taskConfirm.tap()
+        XCTAssertFalse(app.buttons["task-open-demo-task"].waitForExistence(timeout: 3))
+    }
+
+    func testEventEditorActionsRemainScrollableAndHittableAtAccessibilityXXXL() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-recurring", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+
+        app.buttons["Expand day"].tap()
+        let recurringEvent = app.buttons["agenda-open-event-demo-event-recurring"]
+        scrollToHittable(recurringEvent, in: app)
+        recurringEvent.tap()
+        let scope = app.descendants(matching: .any)["event-editor-recurrence-scope"]
+        scrollToHittable(scope, in: app)
+        let delete = app.buttons["event-editor-delete"]
+        scrollToHittable(delete, in: app)
+    }
+
+    func testTaskEditorActionsAndRecurringDeletionCopyRemainAccessibleAtAccessibilityXXXL() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-recurring", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+
+        app.buttons["Expand day"].tap()
+        let recurringTask = app.buttons["agenda-open-task-demo-task-recurring"]
+        scrollToHittable(recurringTask, in: app)
+        recurringTask.tap()
+
+        let schedule = app.descendants(matching: .any)["task-editor-schedule-intent"]
+        scrollToHittable(schedule, in: app)
+        let recurrence = app.descendants(matching: .any)["task-editor-recurrence-intent"]
+        scrollToHittable(recurrence, in: app)
+        let recurringDeleteCopy = app.staticTexts["Deleting this task removes the repeating reminder."]
+        scrollToHittable(recurringDeleteCopy, in: app)
+
+        let save = app.buttons["task-editor-save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertTrue(save.isHittable)
+        let delete = app.buttons["task-editor-delete"]
+        scrollToHittable(delete, in: app)
+    }
+
     private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 3) {
         let expectation = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
         wait(for: [expectation], timeout: timeout)
@@ -455,8 +760,25 @@ final class FoundationFlowUITests: XCTestCase {
     }
 
     private func scrollToHittable(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        for _ in 0..<6 where !element.isHittable { app.swipeUp() }
+        for _ in 0..<12 where !element.isHittable { app.swipeUp() }
         XCTAssertTrue(element.isHittable, "Expected \(element) to be reachable and hittable", file: file, line: line)
+    }
+
+    private func scrollToExistence(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<8 where !element.exists { app.swipeUp() }
+        XCTAssertTrue(element.exists, "Expected \(element) to be present after scrolling", file: file, line: line)
+    }
+
+    private func replaceText(_ field: XCUIElement, with text: String) {
+        field.tap()
+        let current = field.value as? String ?? ""
+        for _ in current { field.typeText(XCUIKeyboardKey.delete.rawValue) }
+        field.typeText(text)
+    }
+
+    private func dismissKeyboard(in app: XCUIApplication) {
+        let returnKey = app.keyboards.buttons["Return"]
+        if returnKey.exists { returnKey.tap() }
     }
 
     private func routineAction(_ action: String, in app: XCUIApplication) -> XCUIElement { app.buttons["routine-\(action)-00000000-0000-0000-0000-000000000001"] }

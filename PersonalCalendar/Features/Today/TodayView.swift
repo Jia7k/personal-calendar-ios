@@ -2,10 +2,13 @@ import SwiftUI
 
 struct TodayView: View {
     @State private var model: TodayViewModel
+    @State private var editorPresentation: TodayEditorPresentation?
+    private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let revision: Int
 
     init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = {}) {
+        self.environment = environment
         _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings))
         self.openSettings = openSettings
         self.revision = revision
@@ -42,6 +45,15 @@ struct TodayView: View {
             .navigationTitle("Today")
             .task(id: revision) { await model.load() }
             .refreshable { await model.load() }
+            .sheet(item: $editorPresentation) { presentation in
+                switch presentation.content {
+                case let .event(editorModel, calendars):
+                    EventEditorView(model: editorModel, calendars: calendars, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
+                        .task { await editorModel.load() }
+                case let .task(editorModel, lists):
+                    TaskEditorView(model: editorModel, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
+                }
+            }
         }
     }
 
@@ -49,7 +61,7 @@ struct TodayView: View {
         if !items.isEmpty {
             Section(title) {
                 ForEach(items) { item in
-                    AgendaRow(item: item, isMutating: model.mutatingItemIDs.contains(item.id)) { state in
+                    AgendaRow(item: item, isMutating: model.mutatingItemIDs.contains(item.id), open: openAction(for: item)) { state in
                         Task {
                             if item.source == .task {
                                 await model.setTaskCompleted(item, completed: state)
@@ -62,6 +74,61 @@ struct TodayView: View {
             }
         }
     }
+
+    private func openAction(for item: AgendaItem) -> (() -> Void)? {
+        switch item.origin {
+        case .event, .reminder:
+            { openAgendaItem(item.origin) }
+        case .routine, .synthetic:
+            nil
+        }
+    }
+
+    private func openAgendaItem(_ origin: AgendaItemOrigin) {
+        switch origin {
+        case let .event(displayID):
+            let editorModel = EventEditorViewModel.edit(
+                displayID: displayID,
+                service: environment.calendar,
+                onCommitted: { commit in finishEventEditorAndReload(commit) },
+                onReconciliationNeeded: reconcileEditorWithoutDismissing
+            )
+            editorPresentation = .init(content: .event(model: editorModel, calendars: environment.calendar.calendars()))
+        case let .reminder(reminderID):
+            let editorModel = TaskEditorViewModel.editing(
+                reminderID: reminderID,
+                service: environment.reminders,
+                onCommitted: { commit in finishTaskEditorAndReload(commit) },
+                onReconciliationNeeded: reconcileEditorWithoutDismissing
+            )
+            editorPresentation = .init(content: .task(model: editorModel, lists: environment.reminders.lists()))
+        case .routine, .synthetic:
+            break
+        }
+    }
+
+    private func dismissEditor() {
+        editorPresentation = nil
+    }
+
+    private func reconcileEditorWithoutDismissing() {
+        Task { @MainActor in await model.load() }
+    }
+
+    private func finishEventEditorAndReload(_ commit: EventEditorCommit) {
+        Task { @MainActor in
+            editorPresentation = nil
+            await model.refreshAfterEventEditorCommit(commit)
+        }
+    }
+
+    private func finishTaskEditorAndReload(_ commit: TaskEditorCommit) {
+        Task { @MainActor in
+            editorPresentation = nil
+            await model.refreshAfterTaskEditorCommit(commit)
+        }
+    }
+
     @ViewBuilder private func errorRow(_ message: String?, source: String) -> some View {
         if let message {
             Section {
@@ -92,4 +159,14 @@ struct TodayView: View {
             }
         }
     }
+}
+
+private struct TodayEditorPresentation: Identifiable {
+    enum Content {
+        case event(model: EventEditorViewModel, calendars: [CalendarDescriptor])
+        case task(model: TaskEditorViewModel, lists: [ReminderListDescriptor])
+    }
+
+    let id = UUID()
+    let content: Content
 }

@@ -3,9 +3,52 @@ import SwiftUI
 struct AgendaRow: View {
     let item: AgendaItem
     let isMutating: Bool
+    let open: (() -> Void)?
     let complete: (Bool) -> Void
 
+    init(item: AgendaItem, isMutating: Bool, open: (() -> Void)? = nil, complete: @escaping (Bool) -> Void) {
+        self.item = item
+        self.isMutating = isMutating
+        self.open = open
+        self.complete = complete
+    }
+
     var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            if let open, let metadata = openMetadata {
+                Button(action: open) {
+                    primaryContent
+                }
+                .buttonStyle(.borderless)
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier(metadata.identifier)
+                .accessibilityLabel(metadata.label)
+            } else {
+                primaryContent
+                    .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
+            }
+            if item.source == .task || item.source == .routine {
+                if item.allowsModification {
+                    Button { complete(!item.isCompleted) } label: {
+                        Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .frame(width: CalendarTheme.minimumTapSize, height: CalendarTheme.minimumTapSize)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isMutating)
+                    .accessibilityLabel(item.isCompleted ? "Mark \(item.title) incomplete" : "Mark \(item.title) complete")
+                    .accessibilityValue(item.isCompleted ? "Completed" : "Not completed")
+                    .accessibilityIdentifier(completionIdentifier)
+                } else {
+                    Text("Read-only").font(.caption).foregroundStyle(.secondary)
+                        .accessibilityLabel("Read-only task")
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var primaryContent: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Image(systemName: sourceSymbol)
                 .foregroundStyle(sourceColor)
@@ -14,25 +57,29 @@ struct AgendaRow: View {
                 Text(item.title).font(.body).strikethrough(item.isCompleted)
                 Text(timeDescription).font(.caption).foregroundStyle(.secondary)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(Self.sourceDescription(item.source)), \(item.title), \(timeDescription)")
             Spacer(minLength: 8)
-            if item.source == .task || item.source == .routine {
-                if item.allowsModification {
-                    Button { complete(!item.isCompleted) } label: {
-                        Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .frame(width: CalendarTheme.minimumTapSize, height: CalendarTheme.minimumTapSize)
-                    }
-                    .disabled(isMutating)
-                    .accessibilityLabel(item.isCompleted ? "Mark \(item.title) incomplete" : "Mark \(item.title) complete")
-                    .accessibilityValue(item.isCompleted ? "Completed" : "Not completed")
-                } else {
-                    Text("Read-only").font(.caption).foregroundStyle(.secondary)
-                        .accessibilityLabel("Read-only task")
-                }
-            }
         }
-        .padding(.vertical, 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(Self.sourceDescription(item.source)), \(item.title), \(timeDescription)")
+    }
+
+    private var openMetadata: (identifier: String, label: String)? {
+        switch item.origin {
+        case let .event(id):
+            ("agenda-open-event-\(id)", "Open event \(item.title), \(timeDescription)")
+        case let .reminder(id):
+            ("agenda-open-task-\(id)", "Open task \(item.title), \(timeDescription)")
+        case .routine, .synthetic:
+            nil
+        }
+    }
+
+    private var completionIdentifier: String {
+        switch item.origin {
+        case let .reminder(id): "agenda-complete-task-\(id)"
+        case let .routine(id, day): "agenda-complete-routine-\(id.uuidString)-\(day.year)-\(day.month)-\(day.day)"
+        case .event, .synthetic: "agenda-complete-\(item.id)"
+        }
     }
 
     private var sourceSymbol: String { switch item.source { case .event: "calendar"; case .task: "checkmark.circle"; case .routine: "repeat" } }

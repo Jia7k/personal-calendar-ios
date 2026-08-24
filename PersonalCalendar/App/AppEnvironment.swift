@@ -42,7 +42,10 @@ struct AppEnvironment {
             failFirstCreate: arguments.contains("-event-save-fails-once"),
             failFirstUpdate: arguments.contains("-event-update-fails-once"),
             failFirstDelete: arguments.contains("-event-delete-fails-once"),
-            multipleSources: arguments.contains("-demo-multiple-sources")
+            multipleSources: arguments.contains("-demo-multiple-sources"),
+            includeReadOnlySource: arguments.contains("-demo-editor-read-only"),
+            includeRecurringItems: arguments.contains("-demo-editor-recurring"),
+            includeUnsupportedItems: arguments.contains("-demo-editor-unsupported")
         )
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
         let reminders = DemoRemindersService(
@@ -50,7 +53,10 @@ struct AppEnvironment {
             failFirstCreate: arguments.contains("-task-save-fails-once"),
             failFirstUpdate: arguments.contains("-task-update-fails-once"),
             failFirstDelete: arguments.contains("-task-delete-fails-once"),
-            multipleSources: arguments.contains("-demo-multiple-sources")
+            multipleSources: arguments.contains("-demo-multiple-sources"),
+            includeReadOnlySource: arguments.contains("-demo-editor-read-only"),
+            includeRecurringItems: arguments.contains("-demo-editor-recurring"),
+            includeUnsupportedItems: arguments.contains("-demo-editor-unsupported")
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)

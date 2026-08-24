@@ -123,6 +123,26 @@ final class TodayViewModel {
         hasLoaded = true
     }
 
+    /// Host-owned post-editor refresh. A failed refresh never asks the editor to repeat its write.
+    func refreshAfterEventEditorCommit(_ commit: EventEditorCommit) async {
+        await load()
+        guard calendarError != nil else { return }
+        calendarError = switch commit {
+        case .deleted: "Your event was deleted, but calendar events could not be refreshed. Pull to try again."
+        case .created, .updated: "Your event was saved, but calendar events could not be refreshed. Pull to try again."
+        }
+    }
+
+    /// Host-owned post-editor refresh. A failed refresh never asks the editor to repeat its write.
+    func refreshAfterTaskEditorCommit(_ commit: TaskEditorCommit) async {
+        await load()
+        guard remindersError != nil else { return }
+        remindersError = switch commit {
+        case .deleted: "Your task was deleted, but tasks could not be refreshed. Pull to try again."
+        case .created, .updated: "Your task was saved, but tasks could not be refreshed. Pull to try again."
+        }
+    }
+
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
         reconcileReminderState()
         guard case let .reminder(id) = item.origin,

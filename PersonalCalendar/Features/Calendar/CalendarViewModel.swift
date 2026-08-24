@@ -6,6 +6,19 @@ enum TrayState: Equatable {
     case expanded
 }
 
+enum CalendarEditorRefreshOperation: Equatable {
+    case eventSaved, eventDeleted, taskSaved, taskDeleted
+
+    var failureMessage: String {
+        switch self {
+        case .eventSaved: "Your event was saved, but your schedule could not be refreshed. Pull to try again."
+        case .eventDeleted: "Your event was deleted, but your schedule could not be refreshed. Pull to try again."
+        case .taskSaved: "Your task was saved, but your schedule could not be refreshed. Pull to try again."
+        case .taskDeleted: "Your task was deleted, but your schedule could not be refreshed. Pull to try again."
+        }
+    }
+}
+
 struct SourceAccessNotice: Equatable, Identifiable, Sendable {
     enum Source: Hashable, Sendable {
         case calendar
@@ -72,9 +85,9 @@ final class CalendarViewModel {
     private(set) var agenda = DayAgenda(allDay: [], scheduled: [], priority: [])
     private(set) var visibleAgendas: [LocalDay: DayAgenda] = [:]
     private(set) var errorMessage: String?
-    private(set) var eventDraftOnFailure: EventDraft?
     private(set) var isLoading = false
     private(set) var sourceAccessNotices: [SourceAccessNotice] = []
+    private(set) var mutatingItemIDs: Set<String> = []
 
     private var cachedEvents: [CalendarEventSnapshot] = []
     private var cachedReminders: [ReminderSnapshot] = []
@@ -179,14 +192,27 @@ final class CalendarViewModel {
         await load()
     }
 
-    func createEvent(_ draft: EventDraft) async {
+    /// Host-owned post-editor refresh.  A successful editor write is never retried here.
+    func refreshAfterEditorCommit(_ operation: CalendarEditorRefreshOperation) async {
+        await load()
+        if errorMessage != nil { errorMessage = operation.failureMessage }
+    }
+
+    func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
+        guard case let .reminder(id) = item.origin,
+              item.allowsModification,
+              !mutatingItemIDs.contains(item.id),
+              cachedReminders.contains(where: { $0.id == id && $0.allowsModification })
+        else { return }
+        mutatingItemIDs.insert(item.id)
+        defer { mutatingItemIDs.remove(item.id) }
         do {
-            _ = try calendarService.createEvent(draft)
-            eventDraftOnFailure = nil
+            try remindersService.setCompleted(id: id, completed: completed)
+            cachedReminders = cachedReminders.map { $0.id == id ? $0.withCompletion(completed) : $0 }
+            rebuildVisibleAgendas()
             await load()
         } catch {
-            eventDraftOnFailure = draft
-            errorMessage = "Your event was not saved. You can try again."
+            errorMessage = "This task could not be updated. Pull to try again."
         }
     }
 

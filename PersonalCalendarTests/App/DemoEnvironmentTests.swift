@@ -154,7 +154,7 @@ final class DemoEnvironmentTests: XCTestCase {
 
     func testDemoCalendarReturnsViewOnlyDetailByDisplayIDButNeverMutatesIt() throws {
         let subject = DemoCalendarService(access: .granted, includeReadOnlySource: true)
-        let viewOnly = try XCTUnwrap(try subject.fetchEvents(in: DateInterval(start: .distantPast, end: .distantFuture), calendarIDs: ["demo-calendar-read-only"]).first)
+        let viewOnly = try XCTUnwrap(subject.event(id: "demo-event-nonaddressable"))
         let draft = EventDraft(title: "Changed", start: viewOnly.start, end: viewOnly.end.addingTimeInterval(60), isAllDay: viewOnly.isAllDay, calendarID: nil)
 
         XCTAssertNil(viewOnly.mutationID)
@@ -164,6 +164,73 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertThrowsError(try subject.deleteEvent(id: viewOnly.id, scope: .thisOccurrence))
         XCTAssertEqual(subject.event(id: viewOnly.id), viewOnly)
         XCTAssertEqual(subject.successfulWriteCount, 0)
+    }
+
+    func testDemoEditorFixturesSeparateReadOnlyAndNonaddressableEvents() throws {
+        let environment = AppEnvironment.demo(
+            container: makeContainer(),
+            arguments: ["-demo-editor-read-only"]
+        )
+
+        let readOnly = try XCTUnwrap(environment.calendar.event(id: "demo-event-read-only"))
+        let nonaddressable = try XCTUnwrap(environment.calendar.event(id: "demo-event-nonaddressable"))
+
+        XCTAssertEqual(readOnly.mutationID, "demo-event-read-only")
+        XCTAssertFalse(readOnly.allowsModification)
+        XCTAssertNil(nonaddressable.mutationID)
+        XCTAssertFalse(nonaddressable.allowsModification)
+        XCTAssertNotEqual(readOnly.id, nonaddressable.id)
+    }
+
+    func testDemoUnsupportedEditorFixturesPreserveProviderValuesOnTitleOnlyEdit() throws {
+        let environment = AppEnvironment.demo(
+            container: makeContainer(),
+            arguments: ["-demo-editor-unsupported"]
+        )
+        let event = try XCTUnwrap(environment.calendar.event(id: "demo-event-unsupported"))
+        let eventMutationID = try XCTUnwrap(event.mutationID)
+        let reminder = try XCTUnwrap(environment.reminders.reminder(id: "demo-task-unsupported"))
+
+        XCTAssertEqual(event.alarms, .unsupported(summary: "Provider-defined alerts"))
+        XCTAssertEqual(event.recurrence, .unsupported(summary: "Provider-defined repeat"))
+        XCTAssertEqual(reminder.alarm, .unsupported(summary: "Provider-defined alert"))
+        XCTAssertEqual(reminder.recurrence, .unsupported(summary: "Provider-defined repeat"))
+
+        try environment.calendar.updateEvent(
+            id: eventMutationID,
+            draft: .init(
+                title: "Renamed provider event",
+                start: event.start,
+                end: event.end,
+                isAllDay: event.isAllDay,
+                calendarID: nil,
+                notes: event.notes,
+                location: event.location,
+                url: event.url
+            ),
+            scope: .thisOccurrence
+        )
+        var reminderDraft = ReminderDraft(
+            title: "Renamed provider task",
+            notes: reminder.notes,
+            dueDate: reminder.dueDate,
+            dueHasTime: reminder.dueHasTime,
+            priority: reminder.priority,
+            listID: nil
+        )
+        reminderDraft.schedule = .preserve(
+            current: reminder.dueDate.map { .init(date: $0, hasTime: reminder.dueHasTime) }
+        )
+        try environment.reminders.updateReminder(id: reminder.id, draft: reminderDraft)
+
+        let savedEvent = try XCTUnwrap(environment.calendar.event(id: event.id))
+        let savedReminder = try XCTUnwrap(environment.reminders.reminder(id: reminder.id))
+        XCTAssertEqual(savedEvent.title, "Renamed provider event")
+        XCTAssertEqual(savedEvent.alarms, event.alarms)
+        XCTAssertEqual(savedEvent.recurrence, event.recurrence)
+        XCTAssertEqual(savedReminder.title, "Renamed provider task")
+        XCTAssertEqual(savedReminder.alarm, reminder.alarm)
+        XCTAssertEqual(savedReminder.recurrence, reminder.recurrence)
     }
 
     func testDemoReminderUpdatePreservesScheduleAndAppliesAlarmAndRecurrence() throws {

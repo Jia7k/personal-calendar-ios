@@ -190,15 +190,30 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
 
-    func testFailedEventSaveRetainsExactDraftForRetry() async {
-        let service = FakeCalendarService(access: .granted, descriptors: [.init(id: "calendar", title: "Calendar", colorHex: "#000", allowsContentModifications: true)], createError: TestError.failed)
+    func testPostEditorRefreshFailureUsesActionSpecificWarningAndARegularRefreshClearsIt() async {
+        let service = FakeCalendarService(access: .granted)
         let model = makeModel(calendarService: service)
-        let draft = EventDraft(title: "Dentist", start: today.startDate(in: calendar).addingTimeInterval(3_600), end: today.startDate(in: calendar).addingTimeInterval(7_200), isAllDay: false, calendarID: "calendar")
+        service.fetchError = TestError.failed
 
-        await model.createEvent(draft)
+        await model.refreshAfterEditorCommit(.eventDeleted)
 
-        XCTAssertEqual(model.eventDraftOnFailure, draft)
-        XCTAssertNotNil(model.errorMessage)
+        XCTAssertEqual(model.errorMessage, "Your event was deleted, but your schedule could not be refreshed. Pull to try again.")
+        service.fetchError = nil
+        await model.load()
+        XCTAssertNil(model.errorMessage)
+    }
+
+    func testCalendarTaskCompletionUsesOneProviderWriteAndDoesNotOpenAnEditor() async {
+        let due = today.startDate(in: calendar).addingTimeInterval(3_600)
+        let reminder = ReminderSnapshot(id: "opaque|task", title: "Task", notes: nil, dueDate: due, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let reminders = FakeRemindersService(access: .granted, reminders: [reminder])
+        let model = makeModel(reminders: reminders)
+        await model.load()
+        let item = try! XCTUnwrap(model.agenda.scheduled.first { $0.origin == .reminder(id: reminder.id) })
+
+        await model.setTaskCompleted(item, completed: true)
+
+        XCTAssertEqual(reminders.completedCalls, [.init(id: reminder.id, completed: true)])
     }
 
     func testVisibleAgendasIncludeNonselectedDaySourceItems() async {
@@ -227,37 +242,6 @@ final class CalendarViewModelTests: XCTestCase {
 
         XCTAssertTrue(model.agenda.priority.contains { $0.title == "Old reminder" })
         XCTAssertTrue(model.agenda.scheduled.contains { $0.title == "New event" })
-    }
-
-    func testRetryAfterFailedEventSaveClearsDraftAfterSuccess() async {
-        let service = FakeCalendarService(access: .granted, descriptors: [.init(id: "calendar", title: "Calendar", colorHex: "#000", allowsContentModifications: true)], createError: TestError.failed)
-        let model = makeModel(calendarService: service)
-        let draft = EventDraft(title: "Dentist", start: today.startDate(in: calendar).addingTimeInterval(3_600), end: today.startDate(in: calendar).addingTimeInterval(7_200), isAllDay: false, calendarID: "calendar")
-        await model.createEvent(draft)
-        service.createError = nil
-
-        await model.createEvent(model.eventDraftOnFailure!)
-
-        XCTAssertNil(model.eventDraftOnFailure)
-        XCTAssertEqual(service.createdDrafts, [draft])
-    }
-
-    // Break caught: a confirmed create without an addressable EventKit identifier could be retried and duplicate the event.
-    func testNilEventMutationIDAfterConfirmedRetryClearsDraftWithoutSecondWrite() async {
-        let service = NilIDCalendarCreateService()
-        let model = makeModel(calendarService: service)
-        let draft = EventDraft(title: "Dentist", start: today.startDate(in: calendar).addingTimeInterval(3_600), end: today.startDate(in: calendar).addingTimeInterval(7_200), isAllDay: false, calendarID: nil)
-        service.createError = TestError.failed
-
-        await model.createEvent(draft)
-        XCTAssertEqual(model.eventDraftOnFailure, draft)
-
-        service.createError = nil
-        await model.createEvent(draft)
-
-        XCTAssertNil(model.eventDraftOnFailure)
-        XCTAssertEqual(service.confirmedCreateCount, 1)
-        XCTAssertEqual(service.createAttemptCount, 2)
     }
 
     func testRestingTraySelectorsUseCorrectSourcesAndPriorityAcrossSections() {
@@ -309,24 +293,3 @@ final class CalendarViewModelTests: XCTestCase {
 }
 
 private enum TestError: Error { case failed }
-
-@MainActor
-private final class NilIDCalendarCreateService: CalendarServicing {
-    var accessState: AccessState = .granted
-    var createError: Error?
-    private(set) var createAttemptCount = 0
-    private(set) var confirmedCreateCount = 0
-
-    func requestFullAccess() async -> AccessState { accessState }
-    func calendars() -> [CalendarDescriptor] { [] }
-    func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] { [] }
-    func createEvent(_ draft: EventDraft) throws -> String? {
-        createAttemptCount += 1
-        if let createError { throw createError }
-        confirmedCreateCount += 1
-        return nil
-    }
-    func event(id: String) -> CalendarEventSnapshot? { nil }
-    func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws {}
-    func deleteEvent(id: String, scope: RecurrenceEditScope) throws {}
-}

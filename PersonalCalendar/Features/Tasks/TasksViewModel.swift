@@ -9,13 +9,10 @@ final class TasksViewModel {
     private(set) var upcoming: [ReminderSnapshot] = []
     private(set) var completed: [ReminderSnapshot] = []
     private(set) var refreshErrorMessage: String?
-    private(set) var createErrorMessage: String?
     private(set) var mutationErrorMessage: String?
     private(set) var failedMutationOperation: TaskMutationOperation?
-    var errorMessage: String? { mutationErrorMessage ?? createErrorMessage ?? refreshErrorMessage }
-    private(set) var draftOnFailure: ReminderDraft?
+    var errorMessage: String? { mutationErrorMessage ?? refreshErrorMessage }
     private(set) var isLoading = false
-    private(set) var isSaving = false
     private(set) var mutatingIDs: Set<String> = []
 
     private let service: any RemindersServicing
@@ -38,13 +35,6 @@ final class TasksViewModel {
         }
     }
 
-    var writableLists: [ReminderListDescriptor] { SourceDescriptorOrdering.reminderLists(service.lists().filter(\.allowsContentModifications)) }
-    var defaultWritableListID: String? {
-        let lists = writableLists
-        if let saved = settings.defaultReminderListID, lists.contains(where: { $0.id == saved }) { return saved }
-        return lists.first?.id
-    }
-
     func load() async {
         loadGeneration += 1; let generation = loadGeneration
         guard service.accessState == .granted else { confirmed = []; publish(); reconcileMutationRecovery(authoritativeFetch: true); refreshErrorMessage = nil; isLoading = false; return }
@@ -63,19 +53,13 @@ final class TasksViewModel {
         }
     }
 
-    func create(_ draft: ReminderDraft) async -> Bool {
-        guard !isSaving else { return false }
-        guard service.accessState == .granted else { createErrorMessage = "Allow Reminders access before creating a task."; return false }
-        guard isValid(draft), let listID = resolvedListID(for: draft) else { createErrorMessage = "Enter a title and choose a writable reminder list."; return false }
-        isSaving = true; defer { isSaving = false }
-        var saved = draft; saved.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines); saved.listID = listID
-        do {
-            _ = try service.createReminder(saved); draftOnFailure = nil; createErrorMessage = nil
-            await load()
-            if refreshErrorMessage != nil { refreshErrorMessage = "Your task was saved, but tasks could not be refreshed. Pull to try again." }
-            return true
-        } catch {
-            draftOnFailure = saved; createErrorMessage = "Your task was not saved. Edit it and try again."; return false
+    /// Host-owned post-editor refresh. The editor has already completed its single provider write.
+    func refreshAfterEditorCommit(_ commit: TaskEditorCommit) async {
+        await load()
+        guard refreshErrorMessage != nil else { return }
+        refreshErrorMessage = switch commit {
+        case .deleted: "Your task was deleted, but tasks could not be refreshed. Pull to try again."
+        case .created, .updated: "Your task was saved, but tasks could not be refreshed. Pull to try again."
         }
     }
 
@@ -131,10 +115,5 @@ final class TasksViewModel {
         switch (lhs.dueDate, rhs.dueDate) { case let (a?, b?): if a != b { return a < b }; case (_?, nil): return true; case (nil, _?): return false; case (nil, nil): break }
         let titleOrder = lhs.title.localizedCaseInsensitiveCompare(rhs.title); return titleOrder == .orderedSame ? lhs.id < rhs.id : titleOrder == .orderedAscending
     }
-    private func resolvedListID(for draft: ReminderDraft) -> String? {
-        if let chosen = draft.listID { return writableLists.contains(where: { $0.id == chosen }) ? chosen : nil }
-        return defaultWritableListID
-    }
-    private func isValid(_ draft: ReminderDraft) -> Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (0...9).contains(draft.priority) && !draft.hasInvalidLegacyDueTimeWithoutDate && (draft.dueDate != nil || !draft.dueHasTime) }
     private func replacing(_ item: ReminderSnapshot, completed: Bool) -> ReminderSnapshot { item.withCompletion(completed) }
 }

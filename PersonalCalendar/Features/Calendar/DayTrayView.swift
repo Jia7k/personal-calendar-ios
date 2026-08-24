@@ -11,6 +11,8 @@ struct DayTrayView: View {
     let openSettings: @MainActor () -> Void
     let onSetState: (TrayState) -> Void
     let onRetry: () -> Void
+    let onOpenItem: @MainActor (AgendaItemOrigin) -> Void
+    let onSetTaskCompleted: @MainActor (AgendaItem, Bool) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -73,7 +75,41 @@ struct DayTrayView: View {
         }
     }
 
-    private func trayRow(_ item: AgendaItem, label: String?) -> some View {
+    @ViewBuilder private func trayRow(_ item: AgendaItem, label: String?) -> some View {
+        switch item.origin {
+        case let .event(displayID):
+            Button { onOpenItem(.event(id: displayID)) } label: { trayRowContent(item, label: label) }
+                .buttonStyle(.borderless)
+                .frame(minHeight: CalendarTheme.minimumTapSize)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("agenda-open-event-\(displayID)")
+                .accessibilityLabel("Open event \(item.title)")
+        case let .reminder(reminderID):
+            HStack(spacing: 8) {
+                Button { onOpenItem(.reminder(id: reminderID)) } label: { trayRowContent(item, label: label) }
+                    .buttonStyle(.borderless)
+                    .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                    .contentShape(Rectangle())
+                    .accessibilityIdentifier("agenda-open-task-\(reminderID)")
+                    .accessibilityLabel("Open task \(item.title)")
+                if item.allowsModification {
+                    Button { onSetTaskCompleted(item, !item.isCompleted) } label: {
+                        Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .frame(width: CalendarTheme.minimumTapSize, height: CalendarTheme.minimumTapSize)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityIdentifier("agenda-complete-task-\(reminderID)")
+                    .accessibilityLabel(item.isCompleted ? "Mark \(item.title) incomplete" : "Mark \(item.title) complete")
+                    .accessibilityValue(item.isCompleted ? "Completed" : "Not completed")
+                }
+            }
+        case .routine, .synthetic:
+            trayRowContent(item, label: label)
+                .frame(minHeight: CalendarTheme.minimumTapSize)
+        }
+    }
+
+    private func trayRowContent(_ item: AgendaItem, label: String?) -> some View {
         HStack(spacing: 8) {
             Image(systemName: item.source == .event ? "calendar" : item.source == .task ? "checkmark.circle" : "repeat")
                 .foregroundStyle(CalendarTheme.accent)
@@ -83,5 +119,6 @@ struct DayTrayView: View {
             }
             Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

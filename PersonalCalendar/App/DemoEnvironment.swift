@@ -16,14 +16,18 @@ final class DemoCalendarService: CalendarServicing {
     private var shouldFailNextDelete: Bool
     private let multipleSources: Bool
     private let includeReadOnlySource: Bool
+    private let includeRecurringItems: Bool
+    private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
         shouldFailNextDelete = failFirstDelete
         self.multipleSources = multipleSources
         self.includeReadOnlySource = includeReadOnlySource
+        self.includeRecurringItems = includeRecurringItems
+        self.includeUnsupportedItems = includeUnsupportedItems
         let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
         events = [
             .init(
@@ -43,7 +47,47 @@ final class DemoCalendarService: CalendarServicing {
             events.append(.init(id: "demo-event-work", mutationID: "demo-event-work", title: "Planning", start: start.addingTimeInterval(1_800), end: start.addingTimeInterval(5_400), isAllDay: false, calendarID: "demo-calendar-work", calendarTitle: "Work", allowsModification: true, hasRecurrence: false))
         }
         if includeReadOnlySource {
-            events.append(.init(id: "demo-event-read-only", mutationID: nil, title: "Read-only event", start: start.addingTimeInterval(2_700), end: start.addingTimeInterval(4_500), isAllDay: false, calendarID: "demo-calendar-read-only", calendarTitle: "Read Only", allowsModification: false, hasRecurrence: false))
+            events.append(.init(id: "demo-event-read-only", mutationID: "demo-event-read-only", title: "Read-only event", start: start.addingTimeInterval(2_700), end: start.addingTimeInterval(4_500), isAllDay: false, calendarID: "demo-calendar-read-only", calendarTitle: "Read Only", allowsModification: false, hasRecurrence: false))
+            events.append(.init(id: "demo-event-nonaddressable", mutationID: nil, title: "Event without editing ID", start: start.addingTimeInterval(5_400), end: start.addingTimeInterval(6_300), isAllDay: false, calendarID: "demo-calendar-read-only", calendarTitle: "Read Only", allowsModification: false, hasRecurrence: false))
+        }
+        if includeRecurringItems {
+            let endDate = Calendar.current.date(byAdding: .day, value: 30, to: start)
+            let recurrence = RecurrenceRuleDraft(frequency: .weekly, interval: 2, weekdays: [2, 4], endDate: endDate)
+            events.append(
+                .init(
+                    id: "demo-event-recurring",
+                    mutationID: "demo-event-recurring",
+                    title: "Biweekly planning",
+                    start: start.addingTimeInterval(7_200),
+                    end: start.addingTimeInterval(10_800),
+                    isAllDay: false,
+                    calendarID: "demo-calendar",
+                    calendarTitle: "Personal",
+                    allowsModification: true,
+                    hasRecurrence: true,
+                    alarms: .editable([-900, -3_600]),
+                    recurrence: .editable(recurrence)
+                )
+            )
+        }
+        if includeUnsupportedItems {
+            events.append(
+                .init(
+                    id: "demo-event-unsupported",
+                    mutationID: "demo-event-unsupported",
+                    title: "Provider-defined event",
+                    start: start.addingTimeInterval(14_400),
+                    end: start.addingTimeInterval(18_000),
+                    isAllDay: false,
+                    calendarID: "demo-calendar",
+                    calendarTitle: "Personal",
+                    allowsModification: true,
+                    hasRecurrence: true,
+                    notes: "Provider metadata must survive ordinary edits.",
+                    alarms: .unsupported(summary: "Provider-defined alerts"),
+                    recurrence: .unsupported(summary: "Provider-defined repeat")
+                )
+            )
         }
     }
 
@@ -187,14 +231,77 @@ final class DemoRemindersService: RemindersServicing {
     private var shouldFailNextDelete: Bool
     private let multipleSources: Bool
     private let includeReadOnlySource: Bool
+    private let includeRecurringItems: Bool
+    private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
         shouldFailNextDelete = failFirstDelete
         self.multipleSources = multipleSources
         self.includeReadOnlySource = includeReadOnlySource
+        self.includeRecurringItems = includeRecurringItems
+        self.includeUnsupportedItems = includeUnsupportedItems
+        if includeReadOnlySource {
+            values.append(
+                .init(
+                    id: "demo-task-read-only",
+                    title: "Read-only task",
+                    notes: "Provider-managed",
+                    dueDate: Calendar.current.date(bySettingHour: 15, minute: 0, second: 0, of: .now),
+                    dueHasTime: true,
+                    priority: 3,
+                    listID: "demo-list-read-only",
+                    listTitle: "Read Only",
+                    isCompleted: false,
+                    allowsModification: false,
+                    hasRecurrence: false
+                )
+            )
+        }
+        if includeUnsupportedItems {
+            let due = Calendar.current.date(bySettingHour: 17, minute: 45, second: 0, of: .now)!
+            values.append(
+                .init(
+                    id: "demo-task-unsupported",
+                    title: "Provider-defined task",
+                    notes: "Provider metadata must survive ordinary edits.",
+                    dueDate: due,
+                    dueHasTime: true,
+                    priority: 4,
+                    listID: "demo-list",
+                    listTitle: "Tasks",
+                    isCompleted: false,
+                    allowsModification: true,
+                    hasRecurrence: true,
+                    alarm: .unsupported(summary: "Provider-defined alert"),
+                    recurrence: .unsupported(summary: "Provider-defined repeat")
+                )
+            )
+        }
+        if includeRecurringItems {
+            let due = Calendar.current.date(bySettingHour: 16, minute: 30, second: 0, of: .now)!
+            let endDate = Calendar.current.date(byAdding: .day, value: 30, to: due)
+            let recurrence = RecurrenceRuleDraft(frequency: .weekly, interval: 2, weekdays: [2, 4], endDate: endDate)
+            values.append(
+                .init(
+                    id: "demo-task-recurring",
+                    title: "Biweekly review",
+                    notes: nil,
+                    dueDate: due,
+                    dueHasTime: true,
+                    priority: 7,
+                    listID: "demo-list",
+                    listTitle: "Tasks",
+                    isCompleted: false,
+                    allowsModification: true,
+                    hasRecurrence: true,
+                    alarm: .editable(due.addingTimeInterval(-1_800)),
+                    recurrence: .editable(recurrence)
+                )
+            )
+        }
     }
 
     func requestFullAccess() async -> AccessState {

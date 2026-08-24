@@ -103,6 +103,34 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(subject.latestTaskUndo?.rawID, "task")
     }
 
+    func testTodayPostEventEditorRefreshFailureUsesSavedWarningThenClears() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+        let calendars = FakeCalendarService(access: .granted)
+        let subject = TodayViewModel(calendar: calendars, reminders: FakeRemindersService(access: .granted), routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        calendars.fetchError = TestError.failed
+
+        await subject.refreshAfterEventEditorCommit(.updated)
+
+        XCTAssertEqual(subject.calendarError, "Your event was saved, but calendar events could not be refreshed. Pull to try again.")
+        calendars.fetchError = nil
+        await subject.load()
+        XCTAssertNil(subject.calendarError)
+    }
+
+    func testTaskEditorRefreshFailureUsesDeletedWarningThenClearsWithoutAWrite() async {
+        let service = FakeRemindersService(access: .granted)
+        let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar)
+        service.fetchError = TestError.failed
+
+        await subject.refreshAfterEditorCommit(.deleted)
+
+        XCTAssertEqual(subject.refreshErrorMessage, "Your task was deleted, but tasks could not be refreshed. Pull to try again.")
+        XCTAssertTrue(service.completedCalls.isEmpty)
+        service.fetchError = nil
+        await subject.load()
+        XCTAssertNil(subject.refreshErrorMessage)
+    }
+
     func testTodaySuspendedCompletionRefreshCannotOverwriteNewerSelectedList() async {
         let fixture = makeTodayReminderRaceFixture()
         await fixture.subject.load()
@@ -539,30 +567,6 @@ final class FeatureViewModelTests: XCTestCase {
         await allowed.load(); XCTAssertEqual(allowed.today.map(\.id), ["opaque"])
     }
 
-    func testTaskCreateUsesWritableFallbackRetainsEditedRetryAndDoesNotDuplicateAfterRefreshFailure() async {
-        let writable = ReminderListDescriptor(id: "write", title: "Writable", colorHex: "#000000", allowsContentModifications: true)
-        let readonly = ReminderListDescriptor(id: "read", title: "Read", colorHex: "#000000", allowsContentModifications: false)
-        let settings = AppSettingsStore(defaults: .ephemeral); settings.setDefaultReminderListID("read", descriptors: [readonly], access: .granted)
-        let service = FakeRemindersService(access: .granted, descriptors: [readonly, writable]); service.createError = TestError.failed
-        let subject = TasksViewModel(service: service, settings: settings, calendar: calendar)
-        let explicitReadOnly = ReminderDraft(title: "Explicit", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: "read")
-        let rejected = await subject.create(explicitReadOnly); XCTAssertFalse(rejected); XCTAssertTrue(service.createdDrafts.isEmpty)
-        let first = ReminderDraft(title: "  First  ", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)
-        let failed = await subject.create(first); XCTAssertFalse(failed); XCTAssertEqual(subject.draftOnFailure?.title, "First")
-        service.createError = nil
-        let edited = ReminderDraft(title: "Edited", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)
-        service.fetchErrorAfterCreate = TestError.failed
-        let saved = await subject.create(edited); XCTAssertTrue(saved); XCTAssertEqual(service.createdDrafts.map(\.title), ["Edited"]); XCTAssertEqual(service.createdDrafts.first?.listID, "write")
-        XCTAssertEqual(service.createdDrafts.count, 1); XCTAssertNotNil(subject.errorMessage)
-    }
-
-    func testTaskCreateRejectsMissingListAndNoWritableDestination() async {
-        let readOnly = ReminderListDescriptor(id: "read", title: "Read", colorHex: "#000", allowsContentModifications: false)
-        let service = FakeRemindersService(access: .granted, descriptors: [readOnly]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
-        let missing = await subject.create(.init(title: "Task", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: "missing")); XCTAssertFalse(missing)
-        let none = await subject.create(.init(title: "Task", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: nil)); XCTAssertFalse(none); XCTAssertTrue(service.createdDrafts.isEmpty)
-    }
-
     func testTaskCompletionUsesOpaqueIDAndPreservesConfirmedChangeAcrossRefreshFailure() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
         let item = ReminderSnapshot(id: "opaque|raw|id", title: "Task", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
@@ -661,15 +665,6 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(subject.today.map(\.id), ["fresh"]); XCTAssertNil(subject.errorMessage)
     }
 
-    func testSuspendedTaskCreatePreventsSecondCreateAndShowsSaving() async {
-        let service = FakeRemindersService(access: .granted, descriptors: [.init(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
-        let draft = ReminderDraft(title: "One", notes: nil, dueDate: nil, dueHasTime: false, priority: 5, listID: "list")
-        service.suspendNextFetch = true; let first = Task { await subject.create(draft) }
-        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
-        XCTAssertTrue(subject.isSaving); let second = await subject.create(draft); XCTAssertFalse(second); XCTAssertEqual(service.createdDrafts.count, 1)
-        service.resumeSuspendedFetch(); let firstResult = await first.value; XCTAssertTrue(firstResult)
-    }
-
     func testSuspendedTaskCompletionPreventsDuplicateMutation() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let item = reminder(id: "same", title: "Same", due: now, hasTime: true)
         let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
@@ -700,65 +695,11 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertNotNil(subject.mutationErrorMessage)
     }
 
-    func testTaskValidationRejectsInvalidDraftsWithoutCreating() async {
-        let list = ReminderListDescriptor(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)
-        let service = FakeRemindersService(access: .granted, descriptors: [list]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
-        let invalid = [
-            ReminderDraft(title: " ", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list"),
-            ReminderDraft(title: "Bad priority", notes: nil, dueDate: nil, dueHasTime: false, priority: -1, listID: "list"),
-            ReminderDraft(title: "Bad priority", notes: nil, dueDate: nil, dueHasTime: false, priority: 10, listID: "list"),
-            ReminderDraft(title: "Bad time", notes: nil, dueDate: nil, dueHasTime: true, priority: 0, listID: "list")
-        ]
-        for draft in invalid { let result = await subject.create(draft); XCTAssertFalse(result) }
-        XCTAssertTrue(service.createdDrafts.isEmpty)
-    }
-
-    func testTaskExplicitWritableDestinationWinsAndSavedWritableDefaultWins() async {
-        let a = ReminderListDescriptor(id: "a", title: "A", colorHex: "#000", allowsContentModifications: true); let b = ReminderListDescriptor(id: "b", title: "B", colorHex: "#000", allowsContentModifications: true)
-        let settings = AppSettingsStore(defaults: .ephemeral); settings.setDefaultReminderListID("b", descriptors: [b, a], access: .granted); let service = FakeRemindersService(access: .granted, descriptors: [b, a]); let subject = TasksViewModel(service: service, settings: settings)
-        let explicit = await subject.create(.init(title: "Explicit", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "a")); let fallback = await subject.create(.init(title: "Default", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: nil))
-        XCTAssertTrue(explicit); XCTAssertTrue(fallback); XCTAssertEqual(service.createdDrafts.map(\.listID), ["a", "b"])
-    }
-
     func testDeniedTaskLoadInvalidatesSuspendedGrantedFetch() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "task", title: "Task", due: now, hasTime: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now })
         service.suspendNextFetch = true; let old = Task { await subject.load() }; for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
         service.accessState = .denied; await subject.load(); XCTAssertTrue(subject.today.isEmpty); XCTAssertNotNil(subject.accessExplanation); service.resumeSuspendedFetch(); await old.value
         XCTAssertTrue(subject.today.isEmpty); XCTAssertNil(subject.refreshErrorMessage)
-    }
-
-    func testTaskCreateAndMutationErrorsRemainIndependent() async {
-        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!; let item = ReminderSnapshot(id: "opaque", title: "Task", notes: nil, dueDate: now, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
-        let service = FakeRemindersService(access: .granted, reminders: [item], descriptors: [.init(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar, now: { now }); service.createError = TestError.failed
-        let createResult = await subject.create(.init(title: "  Draft  ", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list")); XCTAssertFalse(createResult); let createError = subject.createErrorMessage; await subject.load(); XCTAssertEqual(subject.createErrorMessage, createError); XCTAssertEqual(subject.draftOnFailure?.title, "Draft")
-        service.completionError = TestError.failed; await subject.setCompleted(id: "opaque", completed: true); XCTAssertNotNil(subject.mutationErrorMessage); XCTAssertEqual(subject.failedMutationOperation, .init(id: "opaque", completed: true)); XCTAssertNotNil(subject.createErrorMessage)
-        service.completionError = nil; await subject.retryFailedMutation(); XCTAssertNil(subject.mutationErrorMessage); XCTAssertNil(subject.failedMutationOperation); XCTAssertNotNil(subject.createErrorMessage)
-    }
-
-    func testConfirmedTaskCreateRefreshFailureHasOnlyRefreshErrorAndNeverDuplicates() async {
-        let service = FakeRemindersService(access: .granted, descriptors: [.init(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral)); service.fetchErrorAfterCreate = TestError.failed
-        let saved = await subject.create(.init(title: "Saved", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list")); XCTAssertTrue(saved); XCTAssertEqual(service.createdDrafts.count, 1); XCTAssertNil(subject.createErrorMessage); XCTAssertNil(subject.draftOnFailure); XCTAssertNotNil(subject.refreshErrorMessage)
-        service.fetchErrorAfterCreate = nil; await subject.load(); XCTAssertNil(subject.refreshErrorMessage); XCTAssertEqual(service.createdDrafts.count, 1)
-    }
-
-    // Break caught: a confirmed create without an addressable EventKit identifier could be retried and duplicate the task.
-    func testNilReminderMutationIDAfterConfirmedRetryReturnsSuccessClearsDraftWithoutSecondWrite() async {
-        let service = NilIDReminderCreateService()
-        let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar)
-        let draft = ReminderDraft(title: "Task", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list")
-        service.createError = TestError.failed
-
-        let failed = await subject.create(draft)
-        XCTAssertFalse(failed)
-        XCTAssertEqual(subject.draftOnFailure, draft)
-
-        service.createError = nil
-        let saved = await subject.create(draft)
-        XCTAssertTrue(saved)
-
-        XCTAssertNil(subject.draftOnFailure)
-        XCTAssertEqual(service.confirmedCreateCount, 1)
-        XCTAssertEqual(service.createAttemptCount, 2)
     }
 
     func testRoutineSecondHistoryFailureKeepsPriorRowsAndCompletedCacheAtomic() async {
@@ -995,13 +936,6 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertNil(subject.resolveDeleteRetryTarget()); XCTAssertNil(subject.failedActionOperation); XCTAssertNil(subject.actionErrorMessage); XCTAssertTrue(repository.deleteCalls.isEmpty); XCTAssertNil(subject.refreshErrorMessage)
     }
 
-    func testTaskCreateForwardsEventKitPriorityChoicesExactly() async {
-        let service = FakeRemindersService(access: .granted, descriptors: [.init(id: "list", title: "Tasks", colorHex: "#0088FF", allowsContentModifications: true)])
-        let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar)
-        for priority in [0, 1, 5, 9] { let saved = await subject.create(.init(title: "P\(priority)", notes: nil, dueDate: nil, dueHasTime: false, priority: priority, listID: "list")); XCTAssertTrue(saved) }
-        XCTAssertEqual(service.createdDrafts.map(\.priority), [0, 1, 5, 9])
-    }
-
     func testRoutineSuccessfulSameTargetActionClearsRecoveryButUnrelatedSuccessPreservesIt() {
         let a = RoutineSnapshot(id: UUID(), title: "A", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
         let b = RoutineSnapshot(id: UUID(), title: "B", weekdays: [1], window: .anytime, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
@@ -1018,17 +952,6 @@ final class FeatureViewModelTests: XCTestCase {
         repository.updateError = TestError.failed; XCTAssertFalse(subject.update(id: a.id, draft: .init(title: "Failed", weekdays: [2], window: .morning, reminderHour: nil, reminderMinute: nil)))
         repository.updateError = nil; XCTAssertTrue(subject.update(id: b.id, draft: .init(title: "Saved", weekdays: [3], window: .evening, reminderHour: nil, reminderMinute: nil)))
         XCTAssertEqual(subject.failedEditorOperation, .update(a.id)); XCTAssertEqual(subject.draftOnFailure?.title, "Failed")
-    }
-
-    func testTaskPriorityChoicesAndFormSavePredicate() {
-        XCTAssertEqual(TaskPriorityChoice.allCases.map { "\($0.label)=\($0.value)" }, ["None=0", "High=1", "Medium=5", "Low=9"])
-        let writable = ReminderListDescriptor(id: "write", title: "Write", colorHex: "#000", allowsContentModifications: true)
-        XCTAssertTrue(TaskFormValidation.canSave(title: "Task", isSaving: false, listID: "write", writableLists: [writable]))
-        XCTAssertFalse(TaskFormValidation.canSave(title: " ", isSaving: false, listID: "write", writableLists: [writable]))
-        XCTAssertFalse(TaskFormValidation.canSave(title: "Task", isSaving: true, listID: "write", writableLists: [writable]))
-        XCTAssertFalse(TaskFormValidation.canSave(title: "Task", isSaving: false, listID: "missing", writableLists: [writable]))
-        let readOnly = ReminderListDescriptor(id: "read", title: "Read", colorHex: "#000", allowsContentModifications: false)
-        XCTAssertFalse(TaskFormValidation.canSave(title: "Task", isSaving: false, listID: "read", writableLists: [readOnly]))
     }
 
     func testRoutineDeleteErrorIsScopedToDeleteTargetOnly() {
@@ -1191,25 +1114,3 @@ final class FeatureViewModelTests: XCTestCase {
 }
 
 private enum TestError: Error { case failed }
-
-@MainActor
-private final class NilIDReminderCreateService: RemindersServicing {
-    var accessState: AccessState = .granted
-    var createError: Error?
-    private(set) var createAttemptCount = 0
-    private(set) var confirmedCreateCount = 0
-
-    func requestFullAccess() async -> AccessState { accessState }
-    func lists() -> [ReminderListDescriptor] { [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)] }
-    func fetchReminders(listIDs: Set<String>) async throws -> [ReminderSnapshot] { [] }
-    func createReminder(_ draft: ReminderDraft) throws -> String? {
-        createAttemptCount += 1
-        if let createError { throw createError }
-        confirmedCreateCount += 1
-        return nil
-    }
-    func setCompleted(id: String, completed: Bool) throws {}
-    func reminder(id: String) -> ReminderSnapshot? { nil }
-    func updateReminder(id: String, draft: ReminderDraft) throws {}
-    func deleteReminder(id: String) throws {}
-}

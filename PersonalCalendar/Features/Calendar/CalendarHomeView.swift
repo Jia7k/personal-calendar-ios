@@ -3,7 +3,7 @@ import SwiftUI
 struct CalendarHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: CalendarViewModel
-    @State private var showingNewEvent = false
+    @State private var editorPresentation: CalendarEditorPresentation?
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let revision: Int
@@ -23,7 +23,7 @@ struct CalendarHomeView: View {
                 VStack(spacing: 16) {
                     monthHeader
                     grid
-                    DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } })
+                    DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } }, onOpenItem: openAgendaItem, onSetTaskCompleted: { item, completed in Task { await viewModel.setTaskCompleted(item, completed: completed) } })
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -31,13 +31,17 @@ struct CalendarHomeView: View {
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
-                ToolbarItem(placement: .topBarTrailing) { Button("New Event", systemImage: "plus") { showingNewEvent = true }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
+                ToolbarItem(placement: .topBarTrailing) { Button("New Event", systemImage: "plus", action: presentNewEvent).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             }
             .task(id: revision) { await viewModel.load() }
-            .sheet(isPresented: $showingNewEvent) {
-                NewEventSheet(selectedDay: viewModel.selectedDay, calendarService: environment.calendar, settings: environment.settings, systemCalendar: calendar, isSaving: viewModel.isLoading, failedDraft: viewModel.eventDraftOnFailure, saveErrorMessage: viewModel.eventDraftOnFailure == nil ? nil : viewModel.errorMessage, onSave: { draft in
-                    Task { await viewModel.createEvent(draft); if viewModel.eventDraftOnFailure == nil { showingNewEvent = false } }
-                }, onRetry: { draft in Task { await viewModel.createEvent(draft); if viewModel.eventDraftOnFailure == nil { showingNewEvent = false } } })
+            .sheet(item: $editorPresentation) { presentation in
+                switch presentation.content {
+                case let .event(model, calendars, nilDestinationLabel, showsDelete):
+                    EventEditorView(model: model, calendars: calendars, nilDestinationLabel: nilDestinationLabel, showsDelete: showsDelete, onDismiss: dismissEditor)
+                        .task { await model.load() }
+                case let .task(model, lists):
+                    TaskEditorView(model: model, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
+                }
             }
         }
     }
@@ -75,4 +79,75 @@ struct CalendarHomeView: View {
         if reduceMotion || environment.reduceMotionOverride { viewModel.setTray(state) }
         else { withAnimation(.easeInOut(duration: 0.2)) { viewModel.setTray(state) } }
     }
+
+    private func presentNewEvent() {
+        let dayStart = viewModel.selectedDay.startDate(in: calendar)
+        let start = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: dayStart) ?? dayStart
+        let end = calendar.date(byAdding: .hour, value: 1, to: start) ?? start.addingTimeInterval(3_600)
+        let model = EventEditorViewModel.create(
+            service: environment.calendar,
+            savedDefaultCalendarID: environment.settings.defaultCalendarID,
+            initialStart: start,
+            initialEnd: end,
+            onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) }
+        )
+        let writable = environment.calendar.calendars().filter(\.allowsContentModifications)
+        editorPresentation = .init(content: .event(model: model, calendars: writable, nilDestinationLabel: "System Default", showsDelete: false))
+    }
+
+    private func openAgendaItem(_ origin: AgendaItemOrigin) {
+        switch origin {
+        case let .event(displayID):
+            let model = EventEditorViewModel.edit(
+                displayID: displayID,
+                service: environment.calendar,
+                onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
+                onReconciliationNeeded: reconcileEditorWithoutDismissing
+            )
+            editorPresentation = .init(content: .event(model: model, calendars: environment.calendar.calendars(), nilDestinationLabel: "Preserve Current", showsDelete: true))
+        case let .reminder(reminderID):
+            let model = TaskEditorViewModel.editing(
+                reminderID: reminderID,
+                service: environment.reminders,
+                onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
+                onReconciliationNeeded: reconcileEditorWithoutDismissing
+            )
+            editorPresentation = .init(content: .task(model: model, lists: environment.reminders.lists()))
+        case .routine, .synthetic:
+            break
+        }
+    }
+
+    private func dismissEditor() {
+        editorPresentation = nil
+    }
+
+    private func reconcileEditorWithoutDismissing() {
+        Task { @MainActor in await viewModel.load() }
+    }
+
+    private func finishEditorAndReload(operation: CalendarEditorRefreshOperation) {
+        Task { @MainActor in
+            editorPresentation = nil
+            await viewModel.refreshAfterEditorCommit(operation)
+        }
+    }
+
+    private func calendarOperation(for commit: EventEditorCommit) -> CalendarEditorRefreshOperation {
+        switch commit { case .deleted: .eventDeleted; case .created, .updated: .eventSaved }
+    }
+
+    private func calendarOperation(for commit: TaskEditorCommit) -> CalendarEditorRefreshOperation {
+        switch commit { case .deleted: .taskDeleted; case .created, .updated: .taskSaved }
+    }
+}
+
+private struct CalendarEditorPresentation: Identifiable {
+    enum Content {
+        case event(model: EventEditorViewModel, calendars: [CalendarDescriptor], nilDestinationLabel: String, showsDelete: Bool)
+        case task(model: TaskEditorViewModel, lists: [ReminderListDescriptor])
+    }
+
+    let id = UUID()
+    let content: Content
 }
