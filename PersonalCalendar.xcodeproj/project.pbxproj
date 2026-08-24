@@ -10,14 +10,19 @@
 		0326E0C3B09C29FD9F233CE4 /* Drafts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8609613CA7D41FBA9F361D /* Drafts.swift */; };
 		0BC46EE714C5B96DF10D5167 /* EventKitMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 682D2D6896B3FC8506DC0440 /* EventKitMapping.swift */; };
 		101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */; };
+		24417F7F5F60897AAE27CA48 /* SwiftDataRoutineRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */; };
 		26924EB8B191A5E28AA0674E /* PermissionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */; };
+		2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */; };
+		2D98665810C521F28F1AE1CD /* RoutineRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E02776B6366CB5D539044404 /* RoutineRepository.swift */; };
 		33AF2479A22CB20B095AB8BA /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */; };
 		3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */; };
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
 		58E1C3B01A2B6D9F004B69D9 /* RemindersServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E9B9D6B59D700174A556740 /* RemindersServicing.swift */; };
 		67F5EBBB97AD60FF649FAFA6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2FC04E5363299D6D14B5C06 /* Assets.xcassets */; };
+		71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */; };
 		75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */; };
 		76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0F4CAF444E648C867C92FD /* Fakes.swift */; };
+		85AB5DCA3D670D2D1B4F7F5C /* RoutineRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */; };
 		92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 579876904A537535665E94EB /* LocalDayTests.swift */; };
 		A3677D3E1B137DED57141F64 /* EventKitCalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91EF6FEBDD3C20D483D57C42 /* EventKitCalendarService.swift */; };
 		AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */; };
@@ -50,9 +55,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRecord.swift; sourceTree = "<group>"; };
 		0E9B9D6B59D700174A556740 /* RemindersServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersServicing.swift; sourceTree = "<group>"; };
 		22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationFlowUITests.swift; sourceTree = "<group>"; };
+		29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineCompletionRecord.swift; sourceTree = "<group>"; };
 		3133012C2D91DDD347CFA0A7 /* PersonalCalendarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalCalendarApp.swift; sourceTree = "<group>"; };
+		42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepositoryTests.swift; sourceTree = "<group>"; };
 		4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		579876904A537535665E94EB /* LocalDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDayTests.swift; sourceTree = "<group>"; };
 		5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinator.swift; sourceTree = "<group>"; };
@@ -69,9 +77,11 @@
 		9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventSnapshot.swift; sourceTree = "<group>"; };
 		A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitServiceMappingTests.swift; sourceTree = "<group>"; };
 		A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineSnapshot.swift; sourceTree = "<group>"; };
+		B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataRoutineRepository.swift; sourceTree = "<group>"; };
 		B2FC04E5363299D6D14B5C06 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B766A1797C82BCFBE072693F /* CalendarTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTheme.swift; sourceTree = "<group>"; };
 		CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServicing.swift; sourceTree = "<group>"; };
+		E02776B6366CB5D539044404 /* RoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepository.swift; sourceTree = "<group>"; };
 		F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSnapshot.swift; sourceTree = "<group>"; };
 		F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinatorTests.swift; sourceTree = "<group>"; };
 		FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitRemindersService.swift; sourceTree = "<group>"; };
@@ -107,6 +117,17 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		1408ECFFC93C03F7761EE391 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */,
+				0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */,
+				E02776B6366CB5D539044404 /* RoutineRepository.swift */,
+				B267C94338427F3F66A88179 /* SwiftDataRoutineRepository.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
 		20A4F773CF101B9A848791D6 /* Permissions */ = {
 			isa = PBXGroup;
 			children = (
@@ -128,6 +149,7 @@
 			isa = PBXGroup;
 			children = (
 				999C6D16F3BC740167D13382 /* Domain */,
+				A046FAA6FEE48A933D2B3224 /* Persistence */,
 				00F143C07124C0AD86FAFF7A /* Services */,
 				4CEEB798C6042A639AFD4F96 /* Support */,
 			);
@@ -211,12 +233,21 @@
 			path = Domain;
 			sourceTree = "<group>";
 		};
+		A046FAA6FEE48A933D2B3224 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
 		D80D049F436AFB752259519D /* PersonalCalendar */ = {
 			isa = PBXGroup;
 			children = (
 				69BCD908F842D519A24822D2 /* App */,
 				44D0828E7A82B21D50F8E270 /* DesignSystem */,
 				5F490C24CAF5F73049D54D36 /* Domain */,
+				1408ECFFC93C03F7761EE391 /* Persistence */,
 				80EDA8A334C696E0E731B672 /* Resources */,
 				0143E00823F6E13E83A672D5 /* Services */,
 			);
@@ -364,7 +395,11 @@
 				D71F641DFE696D96353013AB /* ReminderSnapshot.swift in Sources */,
 				58E1C3B01A2B6D9F004B69D9 /* RemindersServicing.swift in Sources */,
 				3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */,
+				71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */,
+				85AB5DCA3D670D2D1B4F7F5C /* RoutineRecord.swift in Sources */,
+				2D98665810C521F28F1AE1CD /* RoutineRepository.swift in Sources */,
 				F87E7C5DE0847CD2644D39EF /* RoutineSnapshot.swift in Sources */,
+				24417F7F5F60897AAE27CA48 /* SwiftDataRoutineRepository.swift in Sources */,
 				50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -377,6 +412,7 @@
 				76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */,
 				92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */,
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
+				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

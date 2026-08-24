@@ -43,6 +43,74 @@ struct CompletionCall: Equatable {
     let completed: Bool
 }
 
+struct RoutineCompletionCall: Equatable {
+    let id: UUID
+    let day: LocalDay
+    let completed: Bool
+}
+
+extension RoutineSnapshot {
+    static let sampleRoutine = RoutineSnapshot(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        title: "Read",
+        weekdays: [1, 2, 3, 4, 5, 6, 7],
+        window: .evening,
+        reminderHour: nil,
+        reminderMinute: nil,
+        isPaused: false,
+        isArchived: false
+    )
+}
+
+@MainActor
+final class FakeRoutineRepository: RoutineRepository {
+    var routines: [RoutineSnapshot]
+    var createdDrafts: [RoutineDraft] = []
+    var completionCalls: [RoutineCompletionCall] = []
+    private var completions: [UUID: Set<LocalDay>] = [:]
+
+    init(routines: [RoutineSnapshot] = []) {
+        self.routines = routines
+    }
+
+    func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
+        includeArchived ? routines : routines.filter { !$0.isArchived }
+    }
+
+    func create(_ draft: RoutineDraft) throws -> UUID {
+        createdDrafts.append(draft)
+        return UUID()
+    }
+
+    func update(id: UUID, draft: RoutineDraft) throws { }
+
+    func setPaused(id: UUID, paused: Bool) throws { }
+
+    func setArchived(id: UUID, archived: Bool) throws { }
+
+    func delete(id: UUID) throws {
+        routines.removeAll { $0.id == id }
+        completions[id] = nil
+    }
+
+    func setCompleted(routineID: UUID, day: LocalDay, completed: Bool) throws {
+        completionCalls.append(.init(id: routineID, day: day, completed: completed))
+        if completed {
+            completions[routineID, default: []].insert(day)
+        } else {
+            completions[routineID]?.remove(day)
+        }
+    }
+
+    func isCompleted(routineID: UUID, day: LocalDay) throws -> Bool {
+        completions[routineID, default: []].contains(day)
+    }
+
+    func completedDays(routineID: UUID) throws -> Set<LocalDay> {
+        completions[routineID, default: []]
+    }
+}
+
 @MainActor
 final class FakeRemindersService: RemindersServicing {
     var accessState: AccessState
