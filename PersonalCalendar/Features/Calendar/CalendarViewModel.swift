@@ -13,6 +13,7 @@ final class CalendarViewModel {
     var selectedDay: LocalDay
     var trayState: TrayState = .resting
     private(set) var agenda = DayAgenda(allDay: [], scheduled: [], priority: [])
+    private(set) var visibleAgendas: [LocalDay: DayAgenda] = [:]
     private(set) var errorMessage: String?
     private(set) var eventDraftOnFailure: EventDraft?
     private(set) var isLoading = false
@@ -68,14 +69,14 @@ final class CalendarViewModel {
         do { cachedRoutines = try routines.list(includeArchived: false) }
         catch { encounteredFailure = true }
 
-        do { try rebuildSelectedAgenda() }
+        do { try rebuildVisibleAgendas() }
         catch { encounteredFailure = true }
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }
 
     func select(_ day: LocalDay) async {
         selectedDay = day
-        do { try rebuildSelectedAgenda() }
+        do { try rebuildVisibleAgendas() }
         catch { errorMessage = "Your schedule could not be refreshed. Try again." }
     }
 
@@ -104,8 +105,12 @@ final class CalendarViewModel {
         }
     }
 
-    private func rebuildSelectedAgenda() throws {
-        let completed = Set(try cachedRoutines.filter { try routines.isCompleted(routineID: $0.id, day: selectedDay) }.map(\.id))
-        agenda = composer.compose(day: selectedDay, events: cachedEvents, reminders: cachedReminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: selectedDay == today, calendar: systemCalendar)
+    private func rebuildVisibleAgendas() throws {
+        let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
+        visibleAgendas = try Dictionary(uniqueKeysWithValues: days.map { day in
+            let completed = Set(try cachedRoutines.filter { try routines.isCompleted(routineID: $0.id, day: day) }.map(\.id))
+            return (day, composer.compose(day: day, events: cachedEvents, reminders: cachedReminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: day == today, calendar: systemCalendar))
+        })
+        agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
     }
 }

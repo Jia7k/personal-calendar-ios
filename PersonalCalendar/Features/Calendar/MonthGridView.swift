@@ -34,7 +34,8 @@ struct MonthGridView: View {
     }
 
     private func dayButton(_ cell: CalendarCell) -> some View {
-        let itemCount = itemCount(for: cell.day)
+        let items = items(for: cell.day)
+        let itemCount = items.count
         let isSelected = cell.day == selectedDay
         let isToday = cell.day == today
         return Button {
@@ -44,14 +45,14 @@ struct MonthGridView: View {
                 Text(cell.day.day, format: .number)
                     .font(.body.weight(isSelected ? .bold : .regular))
                 HStack(spacing: 3) {
-                    ForEach(0..<min(3, itemCount), id: \.self) { index in
-                        Image(systemName: indicatorSymbol(index))
+                    ForEach(Array(items.prefix(3))) { item in
+                        Image(systemName: indicatorSymbol(for: item))
                             .font(.caption2)
                     }
                     if itemCount > 3 { Text("+\(itemCount - 3)").font(.caption2) }
                 }
                 .foregroundStyle(CalendarTheme.accent)
-                .frame(height: 12)
+                .frame(minHeight: 12)
             }
             .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
             .background(isSelected ? CalendarTheme.accent.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
@@ -64,12 +65,20 @@ struct MonthGridView: View {
         .accessibilityValue(accessibilityValue(isToday: isToday, isSelected: isSelected, itemCount: itemCount))
     }
 
-    private func itemCount(for day: LocalDay) -> Int {
-        guard let agenda = agendaByDay[day] else { return 0 }
-        return agenda.allDay.count + agenda.scheduled.count + agenda.priority.count
+    private func items(for day: LocalDay) -> [AgendaItem] {
+        guard let agenda = agendaByDay[day] else { return [] }
+        return agenda.allDay + agenda.scheduled + agenda.priority
     }
 
-    private func indicatorSymbol(_ index: Int) -> String { ["circle.fill", "diamond.fill", "square.fill"][index] }
+    private func indicatorSymbol(for item: AgendaItem) -> String {
+        switch (item.source, item.placement) {
+        case (.event, .allDay): "calendar.badge.clock"
+        case (.event, .timed): "calendar"
+        case (.task, _): "checkmark.circle"
+        case (.routine, .window): "repeat"
+        default: "circle"
+        }
+    }
 
     private func accessibilityDateLabel(for day: LocalDay) -> String {
         day.startDate(in: calendar).formatted(.dateTime.weekday(.wide).month(.wide).day().year())

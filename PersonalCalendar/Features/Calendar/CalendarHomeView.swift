@@ -31,20 +31,22 @@ struct CalendarHomeView: View {
             }
             .task { await viewModel.load() }
             .sheet(isPresented: $showingNewEvent) {
-                NewEventSheet(selectedDay: viewModel.selectedDay, calendarService: environment.calendar, settings: environment.settings, systemCalendar: calendar, isSaving: viewModel.isLoading, failedDraft: viewModel.eventDraftOnFailure, onSave: { draft in
+                NewEventSheet(selectedDay: viewModel.selectedDay, calendarService: environment.calendar, settings: environment.settings, systemCalendar: calendar, isSaving: viewModel.isLoading, failedDraft: viewModel.eventDraftOnFailure, saveErrorMessage: viewModel.eventDraftOnFailure == nil ? nil : viewModel.errorMessage, onSave: { draft in
                     Task { await viewModel.createEvent(draft); if viewModel.eventDraftOnFailure == nil { showingNewEvent = false } }
-                })
+                }, onRetry: { draft in Task { await viewModel.createEvent(draft); if viewModel.eventDraftOnFailure == nil { showingNewEvent = false } } })
             }
         }
     }
 
     private var monthHeader: some View {
-        HStack(spacing: 8) {
-            Button("Previous month", systemImage: "chevron.left") { Task { await viewModel.moveMonth(by: -1) } }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+            Button { Task { await viewModel.moveMonth(by: -1) } } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Previous month").frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
             Spacer()
             Text(viewModel.displayedMonth.startDate(in: calendar).formatted(.dateTime.month(.wide).year())).font(.title2.weight(.semibold))
             Spacer()
-            Button("Next month", systemImage: "chevron.right") { Task { await viewModel.moveMonth(by: 1) } }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            Button { Task { await viewModel.moveMonth(by: 1) } } label: { Image(systemName: "chevron.right") }.accessibilityLabel("Next month").frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            }
             Button("Today") { Task { await viewModel.showToday() } }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
         }
     }
@@ -54,11 +56,14 @@ struct CalendarHomeView: View {
         let cells = viewModel.trayState == .expanded
             ? builder.week(containing: viewModel.selectedDay, displayedMonth: viewModel.displayedMonth)
             : builder.days(containing: viewModel.displayedMonth)
-        return MonthGridView(cells: cells, displayedMonth: viewModel.displayedMonth, selectedDay: viewModel.selectedDay, today: LocalDay(date: .now, calendar: calendar), agendaByDay: [viewModel.selectedDay: viewModel.agenda], calendar: calendar, onSelect: { day in Task { await viewModel.select(day) } })
+        return MonthGridView(cells: cells, displayedMonth: viewModel.displayedMonth, selectedDay: viewModel.selectedDay, today: LocalDay(date: .now, calendar: calendar), agendaByDay: viewModel.visibleAgendas, calendar: calendar, onSelect: { day in Task { await viewModel.select(day) } })
             .accessibilityIdentifier(viewModel.trayState == .expanded ? "selected-week-strip" : "month-grid")
             .gesture(DragGesture(minimumDistance: 20).onEnded { value in
-                guard abs(value.translation.height) >= 60 else { return }
-                setTray(value.translation.height < 0 ? .expanded : .resting)
+                if abs(value.translation.width) > abs(value.translation.height), abs(value.translation.width) >= 60 {
+                    Task { await viewModel.moveMonth(by: value.translation.width < 0 ? 1 : -1) }
+                } else if abs(value.translation.height) >= 60 {
+                    setTray(value.translation.height < 0 ? .expanded : .resting)
+                }
             })
     }
 

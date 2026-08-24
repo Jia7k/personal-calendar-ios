@@ -21,7 +21,7 @@ struct DayTrayView: View {
                     .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
             }
             if isLoading { ProgressView("Loading your day") }
-            if let errorMessage { Label(errorMessage, systemImage: "exclamationmark.triangle"); Button("Retry", action: onRetry) }
+            if let errorMessage { Label(errorMessage, systemImage: "exclamationmark.triangle"); Button("Retry", action: onRetry).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             ForEach(deniedSourceMessages, id: \.self) { message in
                 Label(message, systemImage: "lock.fill").font(.footnote).foregroundStyle(.secondary).padding(8).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
             }
@@ -34,9 +34,9 @@ struct DayTrayView: View {
 
     private var restingContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let event = agenda.scheduled.first(where: { if case .timed = $0.placement { true } else { false } }) { trayRow(event, label: "Next") }
-            if let task = agenda.priority.filter({ $0.source == .task }).sorted(by: AgendaItem.prioritySort).first { trayRow(task, label: "Priority") }
-            if let routine = agenda.scheduled.first(where: { $0.source == .routine && !$0.isCompleted }) ?? agenda.priority.first(where: { $0.source == .routine && !$0.isCompleted }) { trayRow(routine, label: "Routine") }
+            if let event = Self.nextEvent(in: agenda) { trayRow(event, label: "Next") }
+            if let task = Self.highestPriorityTask(in: agenda) { trayRow(task, label: "Priority") }
+            if let routine = Self.nextIncompleteRoutine(in: agenda) { trayRow(routine, label: "Routine") }
             if agenda.allDay.isEmpty && agenda.scheduled.isEmpty && agenda.priority.isEmpty { Text("Nothing planned yet.").foregroundStyle(.secondary) }
         }
     }
@@ -48,6 +48,10 @@ struct DayTrayView: View {
             section("Priority", items: agenda.priority)
         }
     }
+
+    static func nextEvent(in agenda: DayAgenda) -> AgendaItem? { agenda.scheduled.filter { $0.source == .event }.sorted(by: AgendaItem.stableSort).first }
+    static func highestPriorityTask(in agenda: DayAgenda) -> AgendaItem? { (agenda.scheduled + agenda.priority).filter { $0.source == .task && !$0.isCompleted }.sorted(by: AgendaItem.prioritySort).first }
+    static func nextIncompleteRoutine(in agenda: DayAgenda) -> AgendaItem? { (agenda.scheduled + agenda.priority).filter { $0.source == .routine && !$0.isCompleted }.sorted(by: AgendaItem.stableSort).first }
 
     private func section(_ title: String, items: [AgendaItem]) -> some View {
         VStack(alignment: .leading, spacing: 6) {

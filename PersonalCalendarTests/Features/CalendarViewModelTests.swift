@@ -88,6 +88,59 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertNotNil(model.errorMessage)
     }
 
+    func testVisibleAgendasIncludeNonselectedDaySourceItems() async {
+        let other = LocalDay(year: 2026, month: 8, day: 25)
+        let start = other.startDate(in: calendar).addingTimeInterval(3_600)
+        let event = CalendarEventSnapshot(id: "other", title: "Other day", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "calendar", calendarTitle: "Calendar", allowsModification: true, hasRecurrence: false)
+        let model = makeModel(calendarService: FakeCalendarService(access: .granted, events: [event]))
+        await model.load()
+
+        XCTAssertEqual(model.visibleAgendas[other]?.scheduled.map(\.source), [.event])
+        XCTAssertEqual(model.visibleAgendas[other]?.scheduled.map(\.title), ["Other day"])
+    }
+
+    func testThrowingReminderRefreshKeepsConfirmedRemindersWhileOtherSourcesRefresh() async {
+        let due = today.startDate(in: calendar)
+        let reminder = ReminderSnapshot(id: "old", title: "Old reminder", notes: nil, dueDate: due, priority: 3, listID: "tasks", listTitle: "Tasks", isCompleted: false, allowsModification: true, hasRecurrence: false)
+        let reminders = FakeRemindersService(access: .granted, reminders: [reminder])
+        let events = FakeCalendarService(access: .granted)
+        let routines = FakeRoutineRepository()
+        let model = makeModel(calendarService: events, reminders: reminders, routines: routines)
+        await model.load()
+        events.events = [CalendarEventSnapshot(id: "new", title: "New event", start: due.addingTimeInterval(3_600), end: due.addingTimeInterval(7_200), isAllDay: false, calendarID: "calendar", calendarTitle: "Calendar", allowsModification: true, hasRecurrence: false)]
+        reminders.fetchError = TestError.failed
+
+        await model.load()
+
+        XCTAssertTrue(model.agenda.priority.contains { $0.title == "Old reminder" })
+        XCTAssertTrue(model.agenda.scheduled.contains { $0.title == "New event" })
+    }
+
+    func testRetryAfterFailedEventSaveClearsDraftAfterSuccess() async {
+        let service = FakeCalendarService(access: .granted, createError: TestError.failed)
+        let model = makeModel(calendarService: service)
+        let draft = EventDraft(title: "Dentist", start: today.startDate(in: calendar).addingTimeInterval(3_600), end: today.startDate(in: calendar).addingTimeInterval(7_200), isAllDay: false, calendarID: "calendar")
+        await model.createEvent(draft)
+        service.createError = nil
+
+        await model.createEvent(model.eventDraftOnFailure!)
+
+        XCTAssertNil(model.eventDraftOnFailure)
+        XCTAssertEqual(service.createdDrafts, [draft])
+    }
+
+    func testRestingTraySelectorsUseCorrectSourcesAndPriorityAcrossSections() {
+        let earlyTask = AgendaItem(id: "task-early", title: "Timed task", source: .task, placement: .timed(Date(timeIntervalSince1970: 1)), sortDate: Date(timeIntervalSince1970: 1), priority: 2, isCompleted: false, allowsModification: true)
+        let event = AgendaItem(id: "event", title: "Event", source: .event, placement: .timed(Date(timeIntervalSince1970: 2)), sortDate: Date(timeIntervalSince1970: 2), priority: 0, isCompleted: false, allowsModification: true)
+        let highTask = AgendaItem(id: "task-high", title: "High task", source: .task, placement: .unscheduled, sortDate: nil, priority: 9, isCompleted: false, allowsModification: true)
+        let routine = AgendaItem(id: "routine", title: "Routine", source: .routine, placement: .window(.anytime), sortDate: nil, priority: 0, isCompleted: false, allowsModification: true)
+        let agenda = DayAgenda(allDay: [], scheduled: [earlyTask, event], priority: [highTask, routine])
+
+        XCTAssertEqual(DayTrayView.nextEvent(in: agenda)?.title, "Event")
+        XCTAssertEqual(DayTrayView.highestPriorityTask(in: agenda)?.title, "High task")
+        XCTAssertEqual(DayTrayView.nextIncompleteRoutine(in: agenda)?.title, "Routine")
+    }
+
     private func makeModel(calendarService: FakeCalendarService = FakeCalendarService(access: .granted), reminders: FakeRemindersService = FakeRemindersService(access: .granted), routines: FakeRoutineRepository = FakeRoutineRepository(), settings: AppSettingsStore = AppSettingsStore(defaults: .ephemeral)) -> CalendarViewModel {
         CalendarViewModel(today: today, calendarService: calendarService, remindersService: reminders, routines: routines, composer: AgendaComposer(), settings: settings, systemCalendar: calendar)
     }
