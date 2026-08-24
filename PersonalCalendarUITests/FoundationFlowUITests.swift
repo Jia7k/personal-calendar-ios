@@ -135,8 +135,10 @@ final class FoundationFlowUITests: XCTestCase {
         app.launchArguments = ["-ui-testing", "-calendar-denied"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Calendar events are unavailable"].waitForExistence(timeout: 3))
-        app.buttons["calendar-permission-settings"].tap()
+        XCTAssertTrue(app.staticTexts["Calendar access is unavailable. Calendar events are hidden."].waitForExistence(timeout: 3))
+        let settings = app.buttons["calendar-permission-settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 3))
+        settings.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
     }
 
@@ -146,8 +148,10 @@ final class FoundationFlowUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Step 1 of 3"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Continue"].isHittable)
-        app.buttons["Continue"].tap()
+        let primary = app.buttons["onboarding-primary"]
+        for _ in 0..<4 where !primary.isHittable { app.swipeUp() }
+        XCTAssertTrue(primary.isHittable)
+        primary.tap()
         XCTAssertTrue(app.staticTexts["Reminders"].waitForExistence(timeout: 3))
     }
 
@@ -157,7 +161,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Calendar events are unavailable"].exists)
+        XCTAssertTrue(app.staticTexts["Calendar access is unavailable. Calendar events are hidden."].waitForExistence(timeout: 3))
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
     }
@@ -184,14 +188,19 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Planning"].exists)
         app.buttons["Settings"].tap()
         XCTAssertTrue(app.switches["Work"].waitForExistence(timeout: 3))
-        app.switches["Work"].tap()
+        let work = app.switches["Work"]
+        work.tap()
+        XCTAssertEqual(work.value as? String, "0")
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.staticTexts["Coffee"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.staticTexts["Planning"].exists)
+        XCTAssertTrue(app.otherElements["selected-week-strip"].waitForExistence(timeout: 3))
+        waitForDisappearance(app.staticTexts["Planning"])
+        XCTAssertTrue(app.staticTexts["Coffee"].exists)
 
         app.tabBars.buttons["Today"].tap()
-        XCTAssertTrue(app.staticTexts["Coffee"].waitForExistence(timeout: 3))
-        XCTAssertFalse(app.staticTexts["Planning"].exists)
+        XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["Schedule"].waitForExistence(timeout: 3))
+        waitForDisappearance(app.staticTexts["Planning"])
+        XCTAssertTrue(app.staticTexts["Coffee"].exists)
     }
 
     func testTodayTaskCompletionCanBeUndone() {

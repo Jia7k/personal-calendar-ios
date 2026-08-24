@@ -1,12 +1,11 @@
 import SwiftUI
-import UIKit
 
 struct TodayView: View {
     @State private var model: TodayViewModel
     private let openSettings: @MainActor () -> Void
     private let revision: Int
 
-    init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = TodayView.defaultOpenSettings) {
+    init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = {}) {
         _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings))
         self.openSettings = openSettings
         self.revision = revision
@@ -81,7 +80,7 @@ struct TodayView: View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 Label(title, systemImage: "lock")
-                Text(restricted ? "This access is controlled by your device or account." : "Allow access in System Settings to include this source.")
+                Text(restricted ? "This access is controlled by your device or account." : "Open Settings to manage this source.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                 if !restricted {
@@ -93,5 +92,4 @@ struct TodayView: View {
             }
         }
     }
-    @MainActor private static func defaultOpenSettings() { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
 }
