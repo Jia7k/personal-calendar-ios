@@ -15,6 +15,7 @@ final class RoutinesViewModel {
     private(set) var draftOnFailure: RoutineDraft?
     private(set) var failedEditorOperation: RoutineEditorOperation?
     private(set) var failedActionOperation: RoutineActionOperation?
+    private(set) var deleteRetryTarget: RoutineRowState?
     private(set) var isLoading = false
     private(set) var mutatingIDs: Set<UUID> = []
     private let repository: any RoutineRepository; private let calendar: Calendar; private let now: () -> Date
@@ -61,7 +62,7 @@ final class RoutinesViewModel {
     }
     func setPaused(id: UUID, paused: Bool) { mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }) { try repository.setPaused(id: id, paused: paused) } }
     func setArchived(id: UUID, archived: Bool) { mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }) { try repository.setArchived(id: id, archived: archived) } }
-    @discardableResult func delete(id: UUID) -> Bool { guard !mutatingIDs.contains(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); failedActionOperation = nil; active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true); return true } catch { failedActionOperation = .delete(id); errorMessage = "Your routine was not deleted. Try again."; return false } }
+    @discardableResult func delete(id: UUID) -> Bool { guard !mutatingIDs.contains(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }; do { try repository.delete(id: id); failedActionOperation = nil; deleteRetryTarget = nil; active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil; reload(savedMutation: true); return true } catch { failedActionOperation = .delete(id); deleteRetryTarget = row(id); errorMessage = "Your routine was not deleted. Try again."; return false } }
     func retryFailedAction() {
         guard let operation = failedActionOperation else { return }
         failedActionOperation = nil
@@ -69,7 +70,7 @@ final class RoutinesViewModel {
         case let .pause(id, value): setPaused(id: id, paused: value)
         case let .archive(id, value): setArchived(id: id, archived: value)
         case let .completion(id, day, value): retryCompletion(id: id, day: day, completed: value)
-        case let .delete(id): _ = delete(id: id)
+        case .delete: break
         }
     }
 
