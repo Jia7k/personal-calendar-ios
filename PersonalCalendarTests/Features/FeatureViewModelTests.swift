@@ -392,6 +392,26 @@ final class FeatureViewModelTests: XCTestCase {
         service.resumeSuspendedFetch(); await first.value
     }
 
+    func testTaskValidationRejectsInvalidDraftsWithoutCreating() async {
+        let list = ReminderListDescriptor(id: "list", title: "List", colorHex: "#000", allowsContentModifications: true)
+        let service = FakeRemindersService(access: .granted, descriptors: [list]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral))
+        let invalid = [
+            ReminderDraft(title: " ", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list"),
+            ReminderDraft(title: "Bad priority", notes: nil, dueDate: nil, dueHasTime: false, priority: -1, listID: "list"),
+            ReminderDraft(title: "Bad priority", notes: nil, dueDate: nil, dueHasTime: false, priority: 10, listID: "list"),
+            ReminderDraft(title: "Bad time", notes: nil, dueDate: nil, dueHasTime: true, priority: 0, listID: "list")
+        ]
+        for draft in invalid { let result = await subject.create(draft); XCTAssertFalse(result) }
+        XCTAssertTrue(service.createdDrafts.isEmpty)
+    }
+
+    func testTaskExplicitWritableDestinationWinsAndSavedWritableDefaultWins() async {
+        let a = ReminderListDescriptor(id: "a", title: "A", colorHex: "#000", allowsContentModifications: true); let b = ReminderListDescriptor(id: "b", title: "B", colorHex: "#000", allowsContentModifications: true)
+        let settings = AppSettingsStore(defaults: .ephemeral); settings.defaultReminderListID = "b"; let service = FakeRemindersService(access: .granted, descriptors: [b, a]); let subject = TasksViewModel(service: service, settings: settings)
+        let explicit = await subject.create(.init(title: "Explicit", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "a")); let fallback = await subject.create(.init(title: "Default", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: nil))
+        XCTAssertTrue(explicit); XCTAssertTrue(fallback); XCTAssertEqual(service.createdDrafts.map(\.listID), ["a", "b"])
+    }
+
     private func reminder(id: String, title: String, due: Date?, hasTime: Bool) -> ReminderSnapshot {
         .init(id: id, title: title, notes: nil, dueDate: due, dueHasTime: hasTime, priority: 5, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)
     }
