@@ -129,9 +129,9 @@ final class CalendarViewModelTests: XCTestCase {
     }
 
     func testRestingTraySelectorsUseCorrectSourcesAndPriorityAcrossSections() {
-        let earlyTask = AgendaItem(id: "task-early", title: "Timed task", source: .task, placement: .timed(Date(timeIntervalSince1970: 1)), sortDate: Date(timeIntervalSince1970: 1), priority: 2, isCompleted: false, allowsModification: true)
+        let earlyTask = AgendaItem(id: "task-early", title: "Timed task", source: .task, placement: .timed(Date(timeIntervalSince1970: 1)), sortDate: Date(timeIntervalSince1970: 1), priority: 5, isCompleted: false, allowsModification: true)
         let event = AgendaItem(id: "event", title: "Event", source: .event, placement: .timed(Date(timeIntervalSince1970: 2)), sortDate: Date(timeIntervalSince1970: 2), priority: 0, isCompleted: false, allowsModification: true)
-        let highTask = AgendaItem(id: "task-high", title: "High task", source: .task, placement: .unscheduled, sortDate: nil, priority: 9, isCompleted: false, allowsModification: true)
+        let highTask = AgendaItem(id: "task-high", title: "High task", source: .task, placement: .unscheduled, sortDate: nil, priority: 1, isCompleted: false, allowsModification: true)
         let routine = AgendaItem(id: "routine", title: "Routine", source: .routine, placement: .window(.anytime), sortDate: nil, priority: 0, isCompleted: false, allowsModification: true)
         let agenda = DayAgenda(allDay: [], scheduled: [earlyTask, event], priority: [highTask, routine])
 
