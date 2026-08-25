@@ -27,6 +27,7 @@ enum RefreshStep: Equatable {
 @MainActor
 final class RefreshCallRecorder {
     private(set) var steps: [RefreshStep] = []
+    var agendaOperation: (@MainActor () async -> Void)?
 
     var completedRefreshes: Int {
         steps.filter { $0 == .notifications }.count
@@ -36,10 +37,27 @@ final class RefreshCallRecorder {
         .init(
             refreshPermissions: { self.steps.append(.permissions) },
             refreshSources: { self.steps.append(.sources) },
-            refreshAgenda: { self.steps.append(.agenda) },
+            refreshAgenda: {
+                self.steps.append(.agenda)
+                await self.agendaOperation?()
+            },
             cleanCategoryLinks: { self.steps.append(.categoryCleanup) },
             rescheduleNotifications: { self.steps.append(.notifications) }
         )
+    }
+}
+
+@MainActor
+final class FakeRefreshGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 

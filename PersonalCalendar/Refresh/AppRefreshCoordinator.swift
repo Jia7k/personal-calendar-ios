@@ -1,4 +1,4 @@
-import Observation
+import Foundation
 
 enum RefreshReason: Equatable {
     case launch
@@ -42,11 +42,21 @@ final class AppRefreshCoordinator {
 }
 
 @MainActor
-@Observable
-final class AgendaRefreshPublisher {
-    private(set) var revision = 0
+final class AgendaRefreshRegistry {
+    private var refreshers: [UUID: @MainActor () async -> Void] = [:]
 
-    func publish() {
-        revision &+= 1
+    func register(id: UUID, refresh: @escaping @MainActor () async -> Void) {
+        refreshers[id] = refresh
+    }
+
+    func unregister(id: UUID) {
+        refreshers[id] = nil
+    }
+
+    func refreshAll() async {
+        let currentRefreshers = Array(refreshers.values)
+        for refresh in currentRefreshers {
+            await refresh()
+        }
     }
 }

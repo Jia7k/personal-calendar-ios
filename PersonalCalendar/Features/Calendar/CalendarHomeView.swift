@@ -4,6 +4,7 @@ struct CalendarHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var viewModel: CalendarViewModel
     @State private var editorPresentation: CalendarEditorPresentation?
+    @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let revision: Int
@@ -39,7 +40,7 @@ struct CalendarHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             }
-            .task(id: revision) { await viewModel.refreshForExternalChange() }
+            .task(id: revision) { await viewModel.load() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
                 await viewModel.refreshAfterQuickEntry(quickEntryRefresh.outcome)
@@ -53,6 +54,14 @@ struct CalendarHomeView: View {
                     TaskEditorView(model: model, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
                 }
             }
+        }
+        .onAppear {
+            environment.agendaRefreshRegistry.register(id: refreshRegistrationID) { [weak viewModel] in
+                await viewModel?.refreshForExternalChange()
+            }
+        }
+        .onDisappear {
+            environment.agendaRefreshRegistry.unregister(id: refreshRegistrationID)
         }
     }
 

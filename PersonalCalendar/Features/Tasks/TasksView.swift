@@ -3,6 +3,7 @@ import SwiftUI
 struct TasksView: View {
     @State private var model: TasksViewModel
     @State private var editorPresentation: TasksEditorPresentation?
+    @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let revision: Int
     private let quickEntryRefresh: QuickEntryRefreshSignal?
@@ -38,13 +39,21 @@ struct TasksView: View {
                     onDismiss: dismissEditor
                 )
             }
-            .task(id: revision) { await model.refreshForExternalChange() }
+            .task(id: revision) { await model.load() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh,
                       case .task = quickEntryRefresh.outcome else { return }
                 await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)
             }
             .refreshable { await model.load() }
+        }
+        .onAppear {
+            environment.agendaRefreshRegistry.register(id: refreshRegistrationID) { [weak model] in
+                await model?.refreshForExternalChange()
+            }
+        }
+        .onDisappear {
+            environment.agendaRefreshRegistry.unregister(id: refreshRegistrationID)
         }
     }
 

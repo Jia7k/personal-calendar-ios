@@ -3,6 +3,7 @@ import SwiftUI
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var editorPresentation: TodayEditorPresentation?
+    @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let revision: Int
@@ -50,7 +51,7 @@ struct TodayView: View {
             }
             .overlay { if model.isLoading && !model.hasLoaded { ProgressView() } }
             .navigationTitle("Today")
-            .task(id: revision) { await model.refreshForExternalChange() }
+            .task(id: revision) { await model.load() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
                 await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)
@@ -65,6 +66,14 @@ struct TodayView: View {
                     TaskEditorView(model: editorModel, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
                 }
             }
+        }
+        .onAppear {
+            environment.agendaRefreshRegistry.register(id: refreshRegistrationID) { [weak model] in
+                await model?.refreshForExternalChange()
+            }
+        }
+        .onDisappear {
+            environment.agendaRefreshRegistry.unregister(id: refreshRegistrationID)
         }
     }
 
