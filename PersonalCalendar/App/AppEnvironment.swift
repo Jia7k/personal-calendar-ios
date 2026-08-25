@@ -58,7 +58,6 @@ struct AppEnvironment {
             reminders: reminders
         )
         let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
-        let backup = BackupService(context: container.mainContext, settings: settings)
         try! categories.seedDefaultsIfNeeded(settings: settings)
         let permissions = PermissionCoordinator(
             calendar: calendar,
@@ -80,6 +79,17 @@ struct AppEnvironment {
             builder: TimetableSnapshotBuilder(calendar: localCalendar),
             writer: timetableWriter,
             reloader: SystemTimetableWidgetReloader()
+        )
+        let backup = BackupService(
+            context: container.mainContext,
+            settings: settings,
+            profileMigration: profileMigration,
+            onRestored: {
+                let restoredIdentity = settings.activeProfileIdentity
+                try? profileSelection.reloadProfiles()
+                try? profileSelection.select(restoredIdentity)
+                _ = try? timetableSnapshotCoordinator.refresh()
+            }
         )
         let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
             driver: SystemTimetableActivityDriver(),
@@ -183,7 +193,6 @@ struct AppEnvironment {
             reminders: reminders
         )
         let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
-        let backup = BackupService(context: container.mainContext, settings: settings)
         settings.didCompleteOnboarding = !arguments.contains("-show-onboarding")
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
         try! categories.seedDefaultsIfNeeded(settings: settings)
@@ -210,6 +219,17 @@ struct AppEnvironment {
                     .appendingPathComponent("demo-timetable-\(UUID().uuidString).json")
             ),
             reloader: NoopTimetableWidgetReloader()
+        )
+        let backup = BackupService(
+            context: container.mainContext,
+            settings: settings,
+            profileMigration: profileMigration,
+            onRestored: {
+                let restoredIdentity = settings.activeProfileIdentity
+                try? profileSelection.reloadProfiles()
+                try? profileSelection.select(restoredIdentity)
+                _ = try? timetableSnapshotCoordinator.refresh()
+            }
         )
         let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
             driver: NoopTimetableActivityDriver(),

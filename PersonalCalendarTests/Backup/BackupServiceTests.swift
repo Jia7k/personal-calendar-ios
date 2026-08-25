@@ -11,12 +11,14 @@ final class BackupServiceTests: XCTestCase {
             RoutineCompletionRecord.self,
             CategoryRecord.self,
             ExternalCategoryLinkRecord.self,
+            ProfileRecord.self,
             configurations: configuration
         )
         let context = container.mainContext
         let settings = AppSettingsStore(defaults: .ephemeral)
         let routines = SwiftDataRoutineRepository(context: context)
         let categories = SwiftDataCategoryRepository(context: context)
+        let profiles = SwiftDataProfileRepository(context: context)
         let categoryID = try categories.create(name: "Personal", colorHex: "#3A8D7C")
         let routineID = try routines.create(.init(
             title: "Read",
@@ -28,6 +30,16 @@ final class BackupServiceTests: XCTestCase {
         ))
         let completedDay = LocalDay(year: 2026, month: 8, day: 25)
         try routines.setCompleted(routineID: routineID, day: completedDay, completed: true)
+        _ = try profiles.create(.init(
+            name: "Personal",
+            colorHex: "#3A8D7C",
+            symbolName: "person.fill",
+            calendarIDs: ["calendar-1"],
+            reminderListIDs: ["list-1"],
+            routineIDs: [routineID],
+            defaultCalendarID: nil,
+            defaultReminderListID: nil
+        ))
         settings.replaceSelectedCalendarIDs(["calendar-1"], availableIDs: ["calendar-1"])
         settings.replaceSelectedReminderListIDs(["list-1"], availableIDs: ["list-1"])
         settings.didSeedCategories = true
@@ -52,6 +64,7 @@ final class BackupServiceTests: XCTestCase {
 
         XCTAssertEqual(try routines.list(includeArchived: true).map(\.title), ["Read"])
         XCTAssertEqual(try categories.list().map(\.name), ["Personal"])
+        XCTAssertEqual(try profiles.list().map(\.name), ["Personal"])
         XCTAssertTrue(try routines.isCompleted(routineID: routineID, day: completedDay))
         XCTAssertEqual(try routines.list(includeArchived: true).first?.categoryID, categoryID)
         XCTAssertEqual(settings.selectedCalendarIDs, ["calendar-1"])

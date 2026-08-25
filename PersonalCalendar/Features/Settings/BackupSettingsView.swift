@@ -22,7 +22,7 @@ struct BackupSettingsView: View {
             }
             Section("Restore") {
                 Button("Import backup") { isImporting = true }
-                Text("Importing replaces your existing routines, completions, categories, and category links. Calendar events and reminders are never included.")
+                Text("Importing replaces your existing profiles, routines, completions, categories, and category links. Calendar events and reminders are never included.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -39,7 +39,7 @@ struct BackupSettingsView: View {
             Button("Replace", role: .destructive) { restorePendingImport() }
         } message: {
             if let pendingSummary {
-                Text("This backup contains \(pendingSummary.routines) routines, \(pendingSummary.completions) completions, \(pendingSummary.categories) categories, and \(pendingSummary.categoryLinks) category links. Existing local data will be replaced.")
+                Text("This backup contains \(pendingSummary.profiles) profiles, \(pendingSummary.routines) routines, \(pendingSummary.completions) completions, \(pendingSummary.categories) categories, and \(pendingSummary.categoryLinks) category links. Existing local data will be replaced.")
             }
         }
     }

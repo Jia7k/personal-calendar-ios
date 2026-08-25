@@ -22,7 +22,7 @@ struct LegacyProfileSelectionSnapshot: Equatable, Sendable {
     let reminderSelectionWasExplicit: Bool
 }
 
-enum ProfileMigrationPart: String, CaseIterable, Hashable, Sendable {
+enum ProfileMigrationPart: String, CaseIterable, Codable, Hashable, Sendable {
     case records
     case calendar
     case reminders
@@ -227,13 +227,21 @@ final class AppSettingsStore {
         )
     }
 
-    func applyBackupValue(_ value: SettingsBackup) {
+    func applyBackupValue(_ value: SettingsBackupV1) {
         selectedCalendarIDs = Set(value.selectedCalendarIDs)
         selectedReminderListIDs = Set(value.selectedReminderListIDs)
         defaultCalendarID = value.defaultCalendarID
         defaultReminderListID = value.defaultReminderListID
         calendarSelectionIsExplicit = value.calendarSelectionIsExplicit
         reminderSelectionIsExplicit = value.reminderSelectionIsExplicit
+        legacyProfileSelection = LegacyProfileSelectionSnapshot(
+            calendarIDs: selectedCalendarIDs,
+            reminderListIDs: selectedReminderListIDs,
+            defaultCalendarID: defaultCalendarID,
+            defaultReminderListID: defaultReminderListID,
+            calendarSelectionWasExplicit: calendarSelectionIsExplicit,
+            reminderSelectionWasExplicit: reminderSelectionIsExplicit
+        )
         morningSummaryEnabled = value.morningSummaryEnabled
         morningSummaryHour = value.morningSummaryHour
         morningSummaryMinute = value.morningSummaryMinute
@@ -244,6 +252,31 @@ final class AppSettingsStore {
         persistReminderSelection()
         defaults.set(defaultCalendarID, forKey: Key.defaultCalendar)
         defaults.set(defaultReminderListID, forKey: Key.defaultList)
+    }
+
+    func applyBackupValue(_ value: SettingsBackupV2, validProfileIDs: Set<UUID>) {
+        applyBackupValue(value.legacy)
+
+        activeProfileIdentity = switch value.activeProfileIdentity {
+        case .everything:
+            .everything
+        case let .saved(id) where validProfileIDs.contains(id):
+            .saved(id)
+        case .saved:
+            .everything
+        }
+        lastActiveSavedProfileID = value.lastActiveSavedProfileID.flatMap {
+            validProfileIDs.contains($0) ? $0 : nil
+        }
+        if case let .saved(id) = activeProfileIdentity {
+            lastActiveSavedProfileID = id
+        }
+
+        completedProfileMigrationParts = Set(value.completedProfileMigrationParts)
+        for part in ProfileMigrationPart.allCases {
+            defaults.set(completedProfileMigrationParts.contains(part), forKey: Key.profileMigration(part))
+        }
+        persistProfileSelection()
     }
 
     private func toggle(id: String, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) {
