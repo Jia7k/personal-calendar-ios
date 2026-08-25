@@ -58,6 +58,7 @@
 		4C4875701620A6BBD29869D2 /* TasksViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46669A23593638D5CF76617F /* TasksViewModel.swift */; };
 		4E4B858AA6FEA43F2D9F234B /* TimetableSnapshotCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E71C223A2E9BE6D9406931E /* TimetableSnapshotCoordinatorTests.swift */; };
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
+		5127168AFE41F44051868BCA /* ProfileSourceFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001D5986F74C36854A8AAC97 /* ProfileSourceFetcher.swift */; };
 		52413F5AB0E60AAE5BB6E487 /* QuickEntrySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4F7DA21F62D15A2377160A /* QuickEntrySheet.swift */; };
 		52F2EB3488323A3419FE4748 /* PermissionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E5A68FE9293E4CA53E0168 /* PermissionCard.swift */; };
 		5507919C00277E8FA55CB5FC /* DayTrayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB967637C56AFC66EA20405A /* DayTrayView.swift */; };
@@ -84,8 +85,10 @@
 		700C19B52F5FAE04E330F889 /* TaskEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5198B0025A74BC69D26436 /* TaskEditorView.swift */; };
 		71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */; };
 		726B66EC743013D8005ABD54 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0770789ED63BFC148EAAA1F /* NotificationSettingsView.swift */; };
+		74EA730A820E02C3F32F13EB /* ProfileScopeResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32CC702375F43746D741C41 /* ProfileScopeResolver.swift */; };
 		754B0BE7ECF0AC3ADA488C51 /* CategorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5325E23DF35D3A1A134CE9 /* CategorySettingsView.swift */; };
 		75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */; };
+		76E514CD05CC1523AC34E364 /* ProfileSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE28E0A658CE59A9394D9931 /* ProfileSelectionController.swift */; };
 		76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0F4CAF444E648C867C92FD /* Fakes.swift */; };
 		7B827146780BA97C16A5E130 /* TimetableLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2CDC00CC8E0B0C1093DC330 /* TimetableLiveActivity.swift */; };
 		7BC4A396299E8CB6229A40DE /* FeatureViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */; };
@@ -124,6 +127,7 @@
 		B86E720D087E56010028276A /* RuleBasedQuickEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B52C8A386EC9982A48F656 /* RuleBasedQuickEntryParser.swift */; };
 		BB5CBCDF43C332E840CB627B /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B88E152BB724F5C32324CEE /* NotificationCoordinator.swift */; };
 		BB782DCDAC7E289308C76830 /* SaveRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 794AFAEBD26BCA485FAAFB90 /* SaveRouterTests.swift */; };
+		BB93192B8A47DEC76AEA7CA2 /* ProfileScopeResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */; };
 		BE0859C06D71A802C54EFC7F /* AppSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 012FE84C82D1D4E773C4F71F /* AppSettingsStore.swift */; };
 		BF56EE421471C1333A63F5F6 /* AppRefreshCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19A10ECC0DFBDA03D6DB5073 /* AppRefreshCoordinator.swift */; };
 		BF8AE8405E98A3E6621831F7 /* PersonalCalendarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3133012C2D91DDD347CFA0A7 /* PersonalCalendarApp.swift */; };
@@ -150,6 +154,7 @@
 		F1704C48BA3F9879BCE607A0 /* TimetableSnapshotBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AF9D2AE7BAB037674FF06C2 /* TimetableSnapshotBuilder.swift */; };
 		F611FB9A1AE5A2672B306F0F /* ProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C0E124762C7E50A80F0ECF /* ProfileRepository.swift */; };
 		F6DF516226B8DAE7C32266C1 /* CalendarTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B766A1797C82BCFBE072693F /* CalendarTheme.swift */; };
+		F7BFE8179FBD374DFF96896B /* ProfileSelectionControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98D0B42FE22A2EBACDFAB6C8 /* ProfileSelectionControllerTests.swift */; };
 		F87E7C5DE0847CD2644D39EF /* RoutineSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */; };
 		FA07FD39EF715E47C715B7F7 /* AppRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36BFD56120650C8D2F986B9F /* AppRefreshCoordinatorTests.swift */; };
 /* End PBXBuildFile section */
@@ -193,6 +198,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		001D5986F74C36854A8AAC97 /* ProfileSourceFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSourceFetcher.swift; sourceTree = "<group>"; };
 		012FE84C82D1D4E773C4F71F /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
 		01CC220EB378608FB0F557D8 /* CategorySettingsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorySettingsModelTests.swift; sourceTree = "<group>"; };
 		01FBA66B8E35DDC840528CC3 /* TimetableActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableActivityAttributes.swift; sourceTree = "<group>"; };
@@ -212,6 +218,7 @@
 		21CF8CCD7580E44563AEAF52 /* PersonalCalendar.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PersonalCalendar.entitlements; sourceTree = "<group>"; };
 		21D017321CA955E63572169C /* SaveRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveRouter.swift; sourceTree = "<group>"; };
 		22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationFlowUITests.swift; sourceTree = "<group>"; };
+		258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScopeResolverTests.swift; sourceTree = "<group>"; };
 		25F0A60B0C7A912BDC3C453B /* AgendaAccessibilityDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaAccessibilityDescription.swift; sourceTree = "<group>"; };
 		29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineCompletionRecord.swift; sourceTree = "<group>"; };
 		29E5A68FE9293E4CA53E0168 /* PermissionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCard.swift; sourceTree = "<group>"; };
@@ -287,6 +294,7 @@
 		937AF9948796D74A6142B26F /* EventKitMutationBacking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMutationBacking.swift; sourceTree = "<group>"; };
 		94F43A03F235594E97C87F1C /* MonthGridBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridBuilderTests.swift; sourceTree = "<group>"; };
 		9635321CC649FEA69B57A29F /* PersonalCalendar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PersonalCalendar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		98D0B42FE22A2EBACDFAB6C8 /* ProfileSelectionControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSelectionControllerTests.swift; sourceTree = "<group>"; };
 		9973371F0AA676DA761CC601 /* BackupSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsView.swift; sourceTree = "<group>"; };
 		99B52C8A386EC9982A48F656 /* RuleBasedQuickEntryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleBasedQuickEntryParser.swift; sourceTree = "<group>"; };
 		99CD5638BB582030245CBBD2 /* EventKitMappingContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMappingContractTests.swift; sourceTree = "<group>"; };
@@ -329,9 +337,11 @@
 		E97BCFF23F6E67827A782E2A /* RoutineEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineEditorView.swift; sourceTree = "<group>"; };
 		E982605EFFB1AD12838972FF /* AgendaComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaComposer.swift; sourceTree = "<group>"; };
 		EDE1DE5ADE2762E80CEDD282 /* TimeRailsLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeRailsLayout.swift; sourceTree = "<group>"; };
+		EE28E0A658CE59A9394D9931 /* ProfileSelectionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSelectionController.swift; sourceTree = "<group>"; };
 		F0AF4020FD69A4B8730D2241 /* MonthGridBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridBuilder.swift; sourceTree = "<group>"; };
 		F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderSnapshot.swift; sourceTree = "<group>"; };
 		F1C577F2D32A0F22D8B27D82 /* CalendarHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarHomeView.swift; sourceTree = "<group>"; };
+		F32CC702375F43746D741C41 /* ProfileScopeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScopeResolver.swift; sourceTree = "<group>"; };
 		F647A85B6C60046288ECF3B7 /* TaskEditorViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditorViewModelTests.swift; sourceTree = "<group>"; };
 		F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinatorTests.swift; sourceTree = "<group>"; };
 		F9616056D0CC8106E6AB292D /* SystemEventKitStoreDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemEventKitStoreDriver.swift; sourceTree = "<group>"; };
@@ -479,6 +489,9 @@
 			children = (
 				34B1EF745D7EF0408F7EABCB /* ProfileMigrationCoordinator.swift */,
 				843CB757F25E1E255B6A3243 /* ProfileModels.swift */,
+				F32CC702375F43746D741C41 /* ProfileScopeResolver.swift */,
+				EE28E0A658CE59A9394D9931 /* ProfileSelectionController.swift */,
+				001D5986F74C36854A8AAC97 /* ProfileSourceFetcher.swift */,
 			);
 			path = Profiles;
 			sourceTree = "<group>";
@@ -710,6 +723,8 @@
 			children = (
 				B92CB7D40732AC4D6A34CC88 /* ProfileMigrationCoordinatorTests.swift */,
 				FC4216599AFDC4F9B31CA748 /* ProfileRepositoryTests.swift */,
+				258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */,
+				98D0B42FE22A2EBACDFAB6C8 /* ProfileSelectionControllerTests.swift */,
 				62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */,
 			);
 			path = Profiles;
@@ -1076,6 +1091,9 @@
 				C5EC2C33490866CD1F0FADB1 /* ProfileModels.swift in Sources */,
 				D5090A4CCA8720B4F8D0EB1B /* ProfileRecord.swift in Sources */,
 				F611FB9A1AE5A2672B306F0F /* ProfileRepository.swift in Sources */,
+				74EA730A820E02C3F32F13EB /* ProfileScopeResolver.swift in Sources */,
+				76E514CD05CC1523AC34E364 /* ProfileSelectionController.swift in Sources */,
+				5127168AFE41F44051868BCA /* ProfileSourceFetcher.swift in Sources */,
 				DE6499CAB15E7D8E13625667 /* QuickEntryParsing.swift in Sources */,
 				AF7C9FF4EC19C5921E08DF6A /* QuickEntryPreview.swift in Sources */,
 				52413F5AB0E60AAE5BB6E487 /* QuickEntrySheet.swift in Sources */,
@@ -1152,6 +1170,8 @@
 				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
 				3579609AC6B39AB3B25A5D5F /* ProfileMigrationCoordinatorTests.swift in Sources */,
 				91304125657CFA0AD48974B9 /* ProfileRepositoryTests.swift in Sources */,
+				BB93192B8A47DEC76AEA7CA2 /* ProfileScopeResolverTests.swift in Sources */,
+				F7BFE8179FBD374DFF96896B /* ProfileSelectionControllerTests.swift in Sources */,
 				5DB55CBEA8727BFCC3C1F050 /* ProfileSettingsStateTests.swift in Sources */,
 				DD4D840C121A997E6864D136 /* QuickEntryViewModelTests.swift in Sources */,
 				874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */,
