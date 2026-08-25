@@ -2,5 +2,6 @@
 .superpowers/
 .worktrees/
 DerivedData/
+simulator-screenshots/
 *.xcuserstate
 xcuserdata/
