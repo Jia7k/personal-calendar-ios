@@ -5,21 +5,32 @@ struct TimeRailsView: View {
     let now: Date
     let showsStatusStrip: Bool
 
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
     private let weekdayLabels = ["M", "T", "W", "T", "F"]
+    private let railStartHour = 9
+    private let railEndHour = 18
 
     var body: some View {
         VStack(spacing: 4) {
             HStack {
-                Text("SCHOOL WEEK").font(.caption2.weight(.bold))
+                Text("SCHOOL WEEK")
+                    .font(.caption2.weight(.bold))
                 Spacer()
                 Text(snapshot.weekStart, format: .dateTime.month(.abbreviated).day())
                     .font(.caption2)
             }
+
             HStack(spacing: 4) {
-                ForEach(0..<5, id: \.self) { index in
-                    dayRail(index: index)
+                timeScale
+                    .frame(width: 20)
+                HStack(spacing: 3) {
+                    ForEach(0..<5, id: \.self) { index in
+                        dayRail(index: index)
+                    }
                 }
             }
+
             if showsStatusStrip {
                 statusStrip
             }
@@ -29,21 +40,33 @@ struct TimeRailsView: View {
 
     private func dayRail(index: Int) -> some View {
         VStack(spacing: 2) {
-            Text(weekdayLabels[index]).font(.caption2.weight(.semibold))
+            Text(weekdayLabels[index])
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(index == todayIndex ? railAccent : .white.opacity(0.72))
             GeometryReader { proxy in
                 ZStack(alignment: .top) {
-                    RoundedRectangle(cornerRadius: 5).fill(.white.opacity(0.08))
-                    ForEach(entries(for: index)) { entry in
-                        let geometry = railGeometry(for: entry, height: proxy.size.height)
-                        Text(entry.shortTitle)
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(.white.opacity(isLuminanceReduced ? 0.02 : 0.08))
+                    ForEach(placements(for: index), id: \.entry.id) { placement in
+                        let height = max(proxy.size.height * placement.heightFraction, 10)
+                        Text(placement.entry.shortTitle)
                             .font(.system(size: 8, weight: .bold, design: .rounded))
                             .minimumScaleFactor(0.7)
-                            .frame(maxWidth: .infinity, minHeight: max(geometry.height, 10), alignment: .top)
+                            .frame(maxWidth: .infinity, minHeight: height, alignment: .top)
                             .padding(.top, 2)
-                            .background(Color.teal.opacity(isCurrent(entry) ? 0.95 : 0.55))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                            .offset(y: geometry.offset)
+                            .background {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(blockFill(for: placement.entry))
+                                    .overlay {
+                                        if isLuminanceReduced {
+                                            RoundedRectangle(cornerRadius: 4)
+                                                .stroke(.white, lineWidth: isCurrent(placement.entry) ? 2 : 1)
+                                        }
+                                    }
+                            }
+                            .offset(y: proxy.size.height * placement.startFraction)
                     }
+                    currentTimeLine(height: proxy.size.height, index: index)
                 }
             }
         }
@@ -55,9 +78,9 @@ struct TimeRailsView: View {
             case .none:
                 Text("No more classes today")
             case let .current(entry):
-                Text("NOW  \(entry.shortTitle) · until \(entry.end.formatted(date: .omitted, time: .shortened))")
+                statusText(prefix: "NOW", entry: entry, boundary: entry.end, boundaryWord: "until")
             case let .next(entry), let .gap(entry):
-                Text("NEXT  \(entry.shortTitle) · \(entry.start.formatted(date: .omitted, time: .shortened))")
+                statusText(prefix: "NEXT", entry: entry, boundary: entry.start, boundaryWord: "at")
             }
         }
         .font(.caption2.weight(.semibold))
@@ -65,28 +88,91 @@ struct TimeRailsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func entries(for index: Int) -> [TimetableEntry] {
-        snapshot.entries.filter { entry in
-            let weekday = localCalendar.component(.weekday, from: entry.start)
-            return (weekday + 5) % 7 == index
+    private var timeScale: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: 14)
+            GeometryReader { proxy in
+                ZStack(alignment: .topTrailing) {
+                    Text("09").offset(y: -4)
+                    Text("13").offset(y: proxy.size.height * (4.0 / 9.0) - 4)
+                    Text("18").offset(y: proxy.size.height - 8)
+                }
+                .font(.system(size: 7, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.56))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
         }
     }
 
-    private func railGeometry(for entry: TimetableEntry, height: CGFloat) -> (offset: CGFloat, height: CGFloat) {
-        let dayStart = localCalendar.startOfDay(for: entry.start)
-        let railStart = localCalendar.date(bySettingHour: 9, minute: 0, second: 0, of: dayStart) ?? dayStart
-        let railEnd = localCalendar.date(bySettingHour: 18, minute: 0, second: 0, of: dayStart)
-            ?? railStart.addingTimeInterval(9 * 3_600)
-        let clippedStart = max(entry.start, railStart)
-        let clippedEnd = min(entry.end, railEnd)
-        let total = railEnd.timeIntervalSince(railStart)
-        let offset = max(0, clippedStart.timeIntervalSince(railStart) / total)
-        let duration = max(0, clippedEnd.timeIntervalSince(clippedStart) / total)
-        return (CGFloat(offset) * height, CGFloat(duration) * height)
+    private func placements(for index: Int) -> [TimeRailPlacement] {
+        TimeRailsLayout(calendar: localCalendar, startHour: railStartHour, endHour: railEndHour)
+            .placements(snapshot: snapshot)
+            .filter { $0.weekdayIndex == index }
     }
 
     private func isCurrent(_ entry: TimetableEntry) -> Bool {
         entry.start <= now && now < entry.end
+    }
+
+    @ViewBuilder
+    private func currentTimeLine(height: CGFloat, index: Int) -> some View {
+        if index == todayIndex, let fraction = currentTimeFraction {
+            Rectangle()
+                .fill(.white)
+                .frame(height: isLuminanceReduced ? 2 : 1)
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .offset(y: height * fraction)
+        }
+    }
+
+    private func statusText(
+        prefix: String,
+        entry: TimetableEntry,
+        boundary: Date,
+        boundaryWord: String
+    ) -> Text {
+        let location = entry.location.map { " · \($0)" } ?? ""
+        return Text(
+            "\(prefix)  \(entry.shortTitle) · \(entry.title) · \(boundaryWord) "
+                + boundary.formatted(date: .omitted, time: .shortened)
+                + location
+        )
+    }
+
+    private func blockFill(for entry: TimetableEntry) -> Color {
+        guard !isLuminanceReduced else { return .clear }
+        return railAccent.opacity(isCurrent(entry) ? 1 : 0.62)
+    }
+
+    private var todayIndex: Int? {
+        let value = (localCalendar.component(.weekday, from: now) + 5) % 7
+        return (0..<5).contains(value) ? value : nil
+    }
+
+    private var currentTimeFraction: CGFloat? {
+        let dayStart = localCalendar.startOfDay(for: now)
+        guard
+            let railStart = localCalendar.date(
+                bySettingHour: railStartHour,
+                minute: 0,
+                second: 0,
+                of: dayStart
+            ),
+            let railEnd = localCalendar.date(
+                bySettingHour: railEndHour,
+                minute: 0,
+                second: 0,
+                of: dayStart
+            ),
+            railStart <= now,
+            now <= railEnd
+        else { return nil }
+
+        return CGFloat(now.timeIntervalSince(railStart) / railEnd.timeIntervalSince(railStart))
+    }
+
+    private var railAccent: Color {
+        Color(red: 0.38, green: 0.73, blue: 0.68)
     }
 
     private var localCalendar: Calendar {
