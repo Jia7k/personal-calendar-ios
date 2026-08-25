@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+struct AppContentRevision: Hashable {
+    let lifecycle: Int
+    let profileScope: Int
+}
+
 @MainActor
 protocol PermissionRefreshing: AnyObject {
     func refresh() async

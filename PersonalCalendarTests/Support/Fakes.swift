@@ -18,7 +18,9 @@ final class FakeRefreshDebouncer: RefreshDebouncing {
 
 enum RefreshStep: Equatable {
     case permissions
+    case profiles
     case sources
+    case profileCatalog
     case agenda
     case categoryCleanup
     case timetable
@@ -38,7 +40,9 @@ final class RefreshCallRecorder {
     var actions: RefreshActions {
         .init(
             refreshPermissions: { self.steps.append(.permissions) },
+            migrateProfiles: { self.steps.append(.profiles) },
             refreshSources: { self.steps.append(.sources) },
+            reloadProfiles: { self.steps.append(.profileCatalog) },
             refreshAgenda: {
                 self.steps.append(.agenda)
                 await self.agendaOperation?()

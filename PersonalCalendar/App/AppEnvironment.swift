@@ -8,6 +8,10 @@ struct AppEnvironment {
     let reminders: any RemindersServicing
     let routines: any RoutineRepository
     let categories: any CategoryRepository
+    let profiles: any ProfileRepository
+    let profileScopes: ProfileScopeResolver
+    let profileSelection: ProfileSelectionController
+    let profileMigration: ProfileMigrationCoordinator
     let notificationAuthorization: any NotificationAuthorizing
     let permissions: PermissionCoordinator
     let agendaComposer: AgendaComposer
@@ -32,6 +36,22 @@ struct AppEnvironment {
         let settings = AppSettingsStore()
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
         let routines = SwiftDataRoutineRepository(context: container.mainContext)
+        let profiles = SwiftDataProfileRepository(context: container.mainContext)
+        let profileMigration = ProfileMigrationCoordinator(
+            profiles: profiles,
+            calendar: calendar,
+            reminders: reminders,
+            routines: routines,
+            settings: settings
+        )
+        try! profileMigration.run()
+        let profileSelection = ProfileSelectionController(repository: profiles, settings: settings)
+        try! profileSelection.reloadProfiles()
+        let profileScopes = ProfileScopeResolver(
+            profiles: profiles,
+            calendar: calendar,
+            reminders: reminders
+        )
         let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
         let backup = BackupService(context: container.mainContext, settings: settings)
         try! categories.seedDefaultsIfNeeded(settings: settings)
@@ -60,9 +80,10 @@ struct AppEnvironment {
             driver: SystemTimetableActivityDriver(),
             calendar: localCalendar
         )
-        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator)
+        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, profileScopes: profileScopes, authorization: notifications, coordinator: notificationCoordinator)
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
+            migrateProfiles: { try? profileMigration.run() },
             refreshSources: {
                 settings.reconcileSources(
                     calendarAccess: calendar.accessState,
@@ -71,6 +92,7 @@ struct AppEnvironment {
                     lists: reminders.lists()
                 )
             },
+            reloadProfiles: { try? profileSelection.refreshScope() },
             refreshAgenda: { await agendaRefreshRegistry.refreshAll() },
             // EventKit currently exposes no authoritative all-item inventory. Never prune links from visible-range snapshots.
             cleanCategoryLinks: {},
@@ -85,6 +107,10 @@ struct AppEnvironment {
             reminders: reminders,
             routines: routines,
             categories: categories,
+            profiles: profiles,
+            profileScopes: profileScopes,
+            profileSelection: profileSelection,
+            profileMigration: profileMigration,
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
@@ -130,6 +156,22 @@ struct AppEnvironment {
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let settings = AppSettingsStore(defaults: .ephemeral)
         let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"))
+        let profiles = SwiftDataProfileRepository(context: container.mainContext)
+        let profileMigration = ProfileMigrationCoordinator(
+            profiles: profiles,
+            calendar: calendar,
+            reminders: reminders,
+            routines: routines,
+            settings: settings
+        )
+        try! profileMigration.run()
+        let profileSelection = ProfileSelectionController(repository: profiles, settings: settings)
+        try! profileSelection.reloadProfiles()
+        let profileScopes = ProfileScopeResolver(
+            profiles: profiles,
+            calendar: calendar,
+            reminders: reminders
+        )
         let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
         let backup = BackupService(context: container.mainContext, settings: settings)
         settings.didCompleteOnboarding = !arguments.contains("-show-onboarding")
@@ -163,9 +205,10 @@ struct AppEnvironment {
             driver: NoopTimetableActivityDriver(),
             calendar: localCalendar
         )
-        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator)
+        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, profileScopes: profileScopes, authorization: notifications, coordinator: notificationCoordinator)
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
+            migrateProfiles: { try? profileMigration.run() },
             refreshSources: {
                 settings.reconcileSources(
                     calendarAccess: calendar.accessState,
@@ -174,6 +217,7 @@ struct AppEnvironment {
                     lists: reminders.lists()
                 )
             },
+            reloadProfiles: { try? profileSelection.refreshScope() },
             refreshAgenda: { await agendaRefreshRegistry.refreshAll() },
             cleanCategoryLinks: {},
             refreshTimetable: {
@@ -187,6 +231,10 @@ struct AppEnvironment {
             reminders: reminders,
             routines: routines,
             categories: categories,
+            profiles: profiles,
+            profileScopes: profileScopes,
+            profileSelection: profileSelection,
+            profileMigration: profileMigration,
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
@@ -226,6 +274,7 @@ struct AppEnvironment {
         routines: any RoutineRepository,
         composer: AgendaComposer,
         settings: AppSettingsStore,
+        profileScopes: ProfileScopeResolver,
         authorization: any NotificationAuthorizing,
         coordinator: NotificationCoordinator
     ) -> @MainActor @Sendable () async -> Void {
@@ -255,7 +304,10 @@ struct AppEnvironment {
                 summaryDay = LocalDay(date: localCalendar.date(byAdding: .day, value: 1, to: today.startDate(in: localCalendar))!, calendar: localCalendar)
             }
 
-            let routineSnapshots = (try? routines.list(includeArchived: false)) ?? []
+            let everythingScope = try? profileScopes.resolve(.everything)
+            let routineSnapshots = ((try? routines.list(includeArchived: false)) ?? []).filter {
+                everythingScope?.routineIDs.contains($0.id) == true
+            }
             var completedDays: [UUID: Set<LocalDay>] = [:]
             for routine in routineSnapshots {
                 completedDays[routine.id] = (try? routines.completedDays(routineID: routine.id)) ?? []
@@ -264,18 +316,19 @@ struct AppEnvironment {
             let start = summaryDay.startDate(in: localCalendar)
             let interval = DateInterval(start: start, end: localCalendar.date(byAdding: .day, value: 1, to: start)!)
             let events: [CalendarEventSnapshot]
-            if calendar.accessState == .granted {
-                let availableIDs = Set(calendar.calendars().map(\.id))
-                let selectedIDs = availableIDs.isEmpty ? settings.selectedCalendarIDs : settings.visibleCalendarIDs(availableIDs: availableIDs)
-                events = settings.calendarSelectionIsExplicit && selectedIDs.isEmpty ? [] : (try? calendar.fetchEvents(in: interval, calendarIDs: selectedIDs)) ?? []
+            if let everythingScope, !everythingScope.calendarIDs.isEmpty {
+                events = (try? calendar.fetchEvents(
+                    in: interval,
+                    calendarIDs: everythingScope.calendarIDs
+                )) ?? []
             } else {
                 events = []
             }
             let taskSnapshots: [ReminderSnapshot]
-            if reminders.accessState == .granted {
-                let availableIDs = Set(reminders.lists().map(\.id))
-                let selectedIDs = availableIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: availableIDs)
-                taskSnapshots = settings.reminderSelectionIsExplicit && selectedIDs.isEmpty ? [] : (try? await reminders.fetchReminders(listIDs: selectedIDs)) ?? []
+            if let everythingScope, !everythingScope.reminderListIDs.isEmpty {
+                taskSnapshots = (try? await reminders.fetchReminders(
+                    listIDs: everythingScope.reminderListIDs
+                )) ?? []
             } else {
                 taskSnapshots = []
             }

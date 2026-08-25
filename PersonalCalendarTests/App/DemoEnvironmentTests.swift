@@ -451,6 +451,7 @@ final class DemoEnvironmentTests: XCTestCase {
             RoutineCompletionRecord.self,
             CategoryRecord.self,
             ExternalCategoryLinkRecord.self,
+            ProfileRecord.self,
             configurations: configuration
         )
     }

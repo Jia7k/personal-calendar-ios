@@ -10,7 +10,9 @@ enum RefreshReason: Equatable {
 @MainActor
 struct RefreshActions {
     let refreshPermissions: @MainActor () async -> Void
+    let migrateProfiles: @MainActor () async -> Void
     let refreshSources: @MainActor () async -> Void
+    let reloadProfiles: @MainActor () async -> Void
     let refreshAgenda: @MainActor () async -> Void
     let cleanCategoryLinks: @MainActor () async -> Void
     let refreshTimetable: @MainActor () async -> Void
@@ -35,7 +37,9 @@ final class AppRefreshCoordinator {
 
     func refreshNow(reason: RefreshReason) async {
         await actions.refreshPermissions()
+        await actions.migrateProfiles()
         await actions.refreshSources()
+        await actions.reloadProfiles()
         await actions.refreshAgenda()
         await actions.cleanCategoryLinks()
         await actions.refreshTimetable()

@@ -29,6 +29,14 @@ final class ProfileSelectionController {
         fallBackIfActiveProfileIsMissing()
     }
 
+    func refreshScope() throws {
+        let revisionBeforeReload = scopeRevision
+        try reloadProfiles()
+        if scopeRevision == revisionBeforeReload {
+            scopeRevision += 1
+        }
+    }
+
     func select(_ identity: ProfileIdentity) throws {
         if case let .saved(id) = identity,
            !profiles.contains(where: { $0.id == id }) {

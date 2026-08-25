@@ -24,28 +24,40 @@ final class AppRefreshCoordinatorTests: XCTestCase {
         subject.eventStoreDidChange()
         subject.eventStoreDidChange()
         let refresh = Task { await debouncer.fire() }
-        for _ in 0..<100 where calls.steps != [.permissions, .sources, .agenda] {
-            await Task.yield()
-        }
-
-        XCTAssertEqual(calls.steps, [.permissions, .sources, .agenda])
-        agendaGate.release()
         for _ in 0..<100 where calls.steps != [
-            .permissions, .sources, .agenda, .categoryCleanup, .timetable
+            .permissions, .profiles, .sources, .profileCatalog, .agenda
         ] {
             await Task.yield()
         }
 
         XCTAssertEqual(
             calls.steps,
-            [.permissions, .sources, .agenda, .categoryCleanup, .timetable]
+            [.permissions, .profiles, .sources, .profileCatalog, .agenda]
+        )
+        agendaGate.release()
+        for _ in 0..<100 where calls.steps != [
+            .permissions, .profiles, .sources, .profileCatalog, .agenda,
+            .categoryCleanup, .timetable
+        ] {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            calls.steps,
+            [
+                .permissions, .profiles, .sources, .profileCatalog, .agenda,
+                .categoryCleanup, .timetable
+            ]
         )
         timetableGate.release()
         await refresh.value
 
         XCTAssertEqual(
             calls.steps,
-            [.permissions, .sources, .agenda, .categoryCleanup, .timetable, .notifications]
+            [
+                .permissions, .profiles, .sources, .profileCatalog, .agenda,
+                .categoryCleanup, .timetable, .notifications
+            ]
         )
         XCTAssertEqual(calls.completedRefreshes, 1)
     }

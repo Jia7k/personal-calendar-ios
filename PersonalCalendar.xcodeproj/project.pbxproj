@@ -157,6 +157,7 @@
 		F7BFE8179FBD374DFF96896B /* ProfileSelectionControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98D0B42FE22A2EBACDFAB6C8 /* ProfileSelectionControllerTests.swift */; };
 		F87E7C5DE0847CD2644D39EF /* RoutineSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */; };
 		FA07FD39EF715E47C715B7F7 /* AppRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36BFD56120650C8D2F986B9F /* AppRefreshCoordinatorTests.swift */; };
+		FE3ED8F126EC1EBB03C563B7 /* ProfileEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D90F9802186D2EC7A9B23A /* ProfileEnvironmentTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -255,6 +256,7 @@
 		62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingsStateTests.swift; sourceTree = "<group>"; };
 		653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		654046F51502ACBECF9AAD7F /* PersonalCalendarWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PersonalCalendarWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		66D90F9802186D2EC7A9B23A /* ProfileEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEnvironmentTests.swift; sourceTree = "<group>"; };
 		6701BC3732DB260CE0FB7AB0 /* PermissionOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingView.swift; sourceTree = "<group>"; };
 		682D2D6896B3FC8506DC0440 /* EventKitMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMapping.swift; sourceTree = "<group>"; };
 		6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaItem.swift; sourceTree = "<group>"; };
@@ -721,6 +723,7 @@
 		9796FC7A788F303BD87177AC /* Profiles */ = {
 			isa = PBXGroup;
 			children = (
+				66D90F9802186D2EC7A9B23A /* ProfileEnvironmentTests.swift */,
 				B92CB7D40732AC4D6A34CC88 /* ProfileMigrationCoordinatorTests.swift */,
 				FC4216599AFDC4F9B31CA748 /* ProfileRepositoryTests.swift */,
 				258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */,
@@ -1168,6 +1171,7 @@
 				5757806677B03BAD1F403ABC /* NotificationCoordinatorTests.swift in Sources */,
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
 				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
+				FE3ED8F126EC1EBB03C563B7 /* ProfileEnvironmentTests.swift in Sources */,
 				3579609AC6B39AB3B25A5D5F /* ProfileMigrationCoordinatorTests.swift in Sources */,
 				91304125657CFA0AD48974B9 /* ProfileRepositoryTests.swift in Sources */,
 				BB93192B8A47DEC76AEA7CA2 /* ProfileScopeResolverTests.swift in Sources */,
