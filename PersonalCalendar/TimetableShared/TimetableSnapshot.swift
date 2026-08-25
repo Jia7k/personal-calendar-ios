@@ -3,7 +3,11 @@ import Foundation
 enum TimetableAvailability: String, Codable, Hashable, Sendable {
     case ready
     case calendarAccessRequired
+    case emptyProfile
+    case noClasses
 }
+
+typealias TimetableProfileAvailability = TimetableAvailability
 
 struct TimetableEntry: Codable, Hashable, Identifiable, Sendable {
     let id: String

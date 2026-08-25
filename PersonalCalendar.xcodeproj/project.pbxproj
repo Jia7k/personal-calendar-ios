@@ -29,6 +29,7 @@
 		113257C9C6CA7C6B0E63E1FD /* EventKitMutationBacking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 937AF9948796D74A6142B26F /* EventKitMutationBacking.swift */; };
 		12FFD28EA0A2029E104D7C7E /* TimetableSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EBA6F5D46317158C80AAD66 /* TimetableSnapshot.swift */; };
 		15EF16E7B765D36522FC34DF /* TaskEditorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F647A85B6C60046288ECF3B7 /* TaskEditorViewModelTests.swift */; };
+		16EF809136E32BECA28DC6E5 /* TimetableWidgetSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F846BE1685F7C962E72885E9 /* TimetableWidgetSelectionTests.swift */; };
 		19BD7BEDDB638B07996D027F /* CategoryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9440C3EFC013DC6EE2087E /* CategoryRecord.swift */; };
 		202A93927B5D075E9D2B5149 /* EventEditorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B60543E56C451F8E67ED4B /* EventEditorViewModelTests.swift */; };
 		20E706C8EE6E7BB69C4C9ABB /* TimetableTimelineBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72723E7F08DD006CC0C532CA /* TimetableTimelineBuilderTests.swift */; };
@@ -56,9 +57,11 @@
 		3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */; };
 		40A97BA22DC691CA07AED6D0 /* QuickEntryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8FA88A0DB8FF36DCFA1F7B5 /* QuickEntryViewModel.swift */; };
 		425318B7558612515C9DA01C /* EventKitStoreDriving.swift in Sources */ = {isa = PBXBuildFile; fileRef = 792CF047FFCC3C20ED265ADD /* EventKitStoreDriving.swift */; };
+		43BA97DAC1890A43FE7888BA /* TimetableWidgetCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A5519E33A981E727A926B4 /* TimetableWidgetCatalogTests.swift */; };
 		462C510B5AE56227CAB94287 /* ProfileBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9EC6C20EED2B5894119DB18 /* ProfileBackupTests.swift */; };
 		46CFA3CF00AC1220693040B0 /* EventKitMappingContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99CD5638BB582030245CBBD2 /* EventKitMappingContractTests.swift */; };
 		47B170E351047751A2E2E7F8 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8F1D75CF739246732E16F1 /* TodayView.swift */; };
+		497F43F01C7CE841B2BA4161 /* TimetableWidgetSelectionResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558F7D13F00F3F1EBA38D49F /* TimetableWidgetSelectionResolver.swift */; };
 		4C4875701620A6BBD29869D2 /* TasksViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46669A23593638D5CF76617F /* TasksViewModel.swift */; };
 		4E4B858AA6FEA43F2D9F234B /* TimetableSnapshotCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E71C223A2E9BE6D9406931E /* TimetableSnapshotCoordinatorTests.swift */; };
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
@@ -87,6 +90,7 @@
 		6A7B348C357EF23BA707A5E6 /* BackupEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5646B7D434881EE1DFD8AEBD /* BackupEnvelope.swift */; };
 		6B2D0A6D3F8D748AF707A1C2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A90E041D77D826E579974FA /* SettingsView.swift */; };
 		6B92A96ECD46D36DC7183AA9 /* CalendarHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C577F2D32A0F22D8B27D82 /* CalendarHomeView.swift */; };
+		6F46CC5B366E2F2E1446F1DD /* TimetableWidgetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C3FD6F38D9C3D3BE1E313E /* TimetableWidgetCatalog.swift */; };
 		700C19B52F5FAE04E330F889 /* TaskEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5198B0025A74BC69D26436 /* TaskEditorView.swift */; };
 		71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */; };
 		726B66EC743013D8005ABD54 /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0770789ED63BFC148EAAA1F /* NotificationSettingsView.swift */; };
@@ -96,6 +100,7 @@
 		75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */; };
 		76E514CD05CC1523AC34E364 /* ProfileSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE28E0A658CE59A9394D9931 /* ProfileSelectionController.swift */; };
 		76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0F4CAF444E648C867C92FD /* Fakes.swift */; };
+		77549AB1E4769E4D46ED54C0 /* TimetableWidgetCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28C3FD6F38D9C3D3BE1E313E /* TimetableWidgetCatalog.swift */; };
 		7B827146780BA97C16A5E130 /* TimetableLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2CDC00CC8E0B0C1093DC330 /* TimetableLiveActivity.swift */; };
 		7BC4A396299E8CB6229A40DE /* FeatureViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */; };
 		82C670AC2DB052F951B3731E /* SystemEventKitMutationBacking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54516BE84D8002D324917B88 /* SystemEventKitMutationBacking.swift */; };
@@ -122,6 +127,7 @@
 		A4B42576ACAAE963E5B6B2CB /* TimetableActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01FBA66B8E35DDC840528CC3 /* TimetableActivityAttributes.swift */; };
 		A5228BE273FBFD509181940B /* SwiftDataCategoryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9227EB5684B6167116F04A6 /* SwiftDataCategoryRepository.swift */; };
 		A5D2ABC7FBD7D42D877DA362 /* TimetableTimelineBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D97B653770B9C8FE9A44B65 /* TimetableTimelineBuilder.swift */; };
+		A90E2840D2688F7B5FCC1120 /* TimetableWidgetSelectionResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558F7D13F00F3F1EBA38D49F /* TimetableWidgetSelectionResolver.swift */; };
 		AA7579728621DFA3CC6D5A2B /* CalendarThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39DEB9D09F85BA1046226D46 /* CalendarThemeTests.swift */; };
 		AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */; };
 		AB57F885EA061E153FAC0167 /* SaveRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21D017321CA955E63572169C /* SaveRouter.swift */; };
@@ -233,6 +239,7 @@
 		22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationFlowUITests.swift; sourceTree = "<group>"; };
 		258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScopeResolverTests.swift; sourceTree = "<group>"; };
 		25F0A60B0C7A912BDC3C453B /* AgendaAccessibilityDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgendaAccessibilityDescription.swift; sourceTree = "<group>"; };
+		28C3FD6F38D9C3D3BE1E313E /* TimetableWidgetCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidgetCatalog.swift; sourceTree = "<group>"; };
 		29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineCompletionRecord.swift; sourceTree = "<group>"; };
 		29E5A68FE9293E4CA53E0168 /* PermissionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCard.swift; sourceTree = "<group>"; };
 		2D97B653770B9C8FE9A44B65 /* TimetableTimelineBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableTimelineBuilder.swift; sourceTree = "<group>"; };
@@ -258,6 +265,7 @@
 		4E4B4CFCD8B7986A7F737CED /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		4FA9B8C2A2CC62D244DE2CD8 /* TimetableSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableSettingsView.swift; sourceTree = "<group>"; };
 		54516BE84D8002D324917B88 /* SystemEventKitMutationBacking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemEventKitMutationBacking.swift; sourceTree = "<group>"; };
+		558F7D13F00F3F1EBA38D49F /* TimetableWidgetSelectionResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidgetSelectionResolver.swift; sourceTree = "<group>"; };
 		55C0E124762C7E50A80F0ECF /* ProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepository.swift; sourceTree = "<group>"; };
 		5646B7D434881EE1DFD8AEBD /* BackupEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupEnvelope.swift; sourceTree = "<group>"; };
 		579876904A537535665E94EB /* LocalDayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDayTests.swift; sourceTree = "<group>"; };
@@ -339,6 +347,7 @@
 		C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureViewModelTests.swift; sourceTree = "<group>"; };
 		C2747FB88388E16E398FE474 /* TimetableLiveActivityCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableLiveActivityCoordinatorTests.swift; sourceTree = "<group>"; };
 		C4915ADDAF699A819650A494 /* FakesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakesTests.swift; sourceTree = "<group>"; };
+		C8A5519E33A981E727A926B4 /* TimetableWidgetCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidgetCatalogTests.swift; sourceTree = "<group>"; };
 		CB967637C56AFC66EA20405A /* DayTrayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTrayView.swift; sourceTree = "<group>"; };
 		CE194D5D8177DBC3B3BBB94E /* RoutineProfileMutationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineProfileMutationCoordinatorTests.swift; sourceTree = "<group>"; };
 		CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServicing.swift; sourceTree = "<group>"; };
@@ -367,6 +376,7 @@
 		F32CC702375F43746D741C41 /* ProfileScopeResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScopeResolver.swift; sourceTree = "<group>"; };
 		F647A85B6C60046288ECF3B7 /* TaskEditorViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditorViewModelTests.swift; sourceTree = "<group>"; };
 		F68B5BAD5027EFA7A57C796B /* PermissionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinatorTests.swift; sourceTree = "<group>"; };
+		F846BE1685F7C962E72885E9 /* TimetableWidgetSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidgetSelectionTests.swift; sourceTree = "<group>"; };
 		F9616056D0CC8106E6AB292D /* SystemEventKitStoreDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemEventKitStoreDriver.swift; sourceTree = "<group>"; };
 		FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitRemindersService.swift; sourceTree = "<group>"; };
 		FC4216599AFDC4F9B31CA748 /* ProfileRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRepositoryTests.swift; sourceTree = "<group>"; };
@@ -789,6 +799,8 @@
 				5B118E633BA21B7BD5EBB303 /* TimetableSnapshotBuilderTests.swift */,
 				1E71C223A2E9BE6D9406931E /* TimetableSnapshotCoordinatorTests.swift */,
 				72723E7F08DD006CC0C532CA /* TimetableTimelineBuilderTests.swift */,
+				C8A5519E33A981E727A926B4 /* TimetableWidgetCatalogTests.swift */,
+				F846BE1685F7C962E72885E9 /* TimetableWidgetSelectionTests.swift */,
 			);
 			path = Timetable;
 			sourceTree = "<group>";
@@ -853,6 +865,8 @@
 				1EBA6F5D46317158C80AAD66 /* TimetableSnapshot.swift */,
 				1008A1F56F8A1FD12DDE16B1 /* TimetableSnapshotStore.swift */,
 				2D97B653770B9C8FE9A44B65 /* TimetableTimelineBuilder.swift */,
+				28C3FD6F38D9C3D3BE1E313E /* TimetableWidgetCatalog.swift */,
+				558F7D13F00F3F1EBA38D49F /* TimetableWidgetSelectionResolver.swift */,
 			);
 			path = TimetableShared;
 			sourceTree = "<group>";
@@ -1081,7 +1095,9 @@
 				12FFD28EA0A2029E104D7C7E /* TimetableSnapshot.swift in Sources */,
 				5D898AC859448124EB0809E1 /* TimetableSnapshotStore.swift in Sources */,
 				A5D2ABC7FBD7D42D877DA362 /* TimetableTimelineBuilder.swift in Sources */,
+				77549AB1E4769E4D46ED54C0 /* TimetableWidgetCatalog.swift in Sources */,
 				EDA3E28A2B9595DD7DF8047A /* TimetableWidgetProvider.swift in Sources */,
+				A90E2840D2688F7B5FCC1120 /* TimetableWidgetSelectionResolver.swift in Sources */,
 				56176A1C9ED66D25D8CFD3A9 /* WeekTimetableWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1186,6 +1202,8 @@
 				3D2FA62B71C613D89BC5A677 /* TimetableSnapshotCoordinator.swift in Sources */,
 				032149074EA2CB93A8B69D80 /* TimetableSnapshotStore.swift in Sources */,
 				2B917ED168D00EDEA7665E65 /* TimetableTimelineBuilder.swift in Sources */,
+				6F46CC5B366E2F2E1446F1DD /* TimetableWidgetCatalog.swift in Sources */,
+				497F43F01C7CE841B2BA4161 /* TimetableWidgetSelectionResolver.swift in Sources */,
 				47B170E351047751A2E2E7F8 /* TodayView.swift in Sources */,
 				952A0B4306645ECF687FC8E1 /* TodayViewModel.swift in Sources */,
 				A2CF6BE636BD248498B7E0E4 /* UniversalQuickEntryModifier.swift in Sources */,
@@ -1242,6 +1260,8 @@
 				B8267D7E960D5A4A2D52D8BE /* TimetableSnapshotBuilderTests.swift in Sources */,
 				4E4B858AA6FEA43F2D9F234B /* TimetableSnapshotCoordinatorTests.swift in Sources */,
 				20E706C8EE6E7BB69C4C9ABB /* TimetableTimelineBuilderTests.swift in Sources */,
+				43BA97DAC1890A43FE7888BA /* TimetableWidgetCatalogTests.swift in Sources */,
+				16EF809136E32BECA28DC6E5 /* TimetableWidgetSelectionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -82,7 +82,7 @@ final class ProfilesSettingsModel {
     private let calendar: any CalendarServicing
     private let reminders: any RemindersServicing
     private let routines: any RoutineRepository
-    private let profileDidChange: @MainActor (UUID, Bool) throws -> Void
+    private let profileDidChange: @MainActor (UUID, Bool, Bool) throws -> Void
     private let profileWasDeleted: @MainActor (UUID) throws -> Void
 
     private(set) var profiles: [ProfileSnapshot] = []
@@ -99,7 +99,25 @@ final class ProfilesSettingsModel {
         self.calendar = calendar
         self.reminders = reminders
         self.routines = routines
-        self.profileDidChange = profileDidChange
+        self.profileDidChange = { id, visibilityChanged, _ in
+            try profileDidChange(id, visibilityChanged)
+        }
+        self.profileWasDeleted = profileWasDeleted
+    }
+
+    init(
+        repository: any ProfileRepository,
+        calendar: any CalendarServicing,
+        reminders: any RemindersServicing,
+        routines: any RoutineRepository,
+        profileImpactDidChange: @escaping @MainActor (UUID, Bool, Bool) throws -> Void,
+        profileWasDeleted: @escaping @MainActor (UUID) throws -> Void
+    ) {
+        self.repository = repository
+        self.calendar = calendar
+        self.reminders = reminders
+        self.routines = routines
+        profileDidChange = profileImpactDidChange
         self.profileWasDeleted = profileWasDeleted
     }
 
@@ -138,21 +156,24 @@ final class ProfilesSettingsModel {
         let draft = editor.validatedDraft
         let id: UUID
         let visibilityChanged: Bool
+        let removedCalendarMembership: Bool
 
         if let profileID = editor.profileID {
             let previous = try repository.profile(id: profileID)
             try repository.update(id: profileID, draft: draft)
             id = profileID
             visibilityChanged = Self.membershipChanged(from: previous, to: draft)
+            removedCalendarMembership = !previous.calendarIDs.subtracting(draft.calendarIDs).isEmpty
         } else {
             id = try repository.create(draft)
             visibilityChanged = !draft.calendarIDs.isEmpty
                 || !draft.reminderListIDs.isEmpty
                 || !draft.routineIDs.isEmpty
+            removedCalendarMembership = false
         }
 
         profiles = try repository.list()
-        try profileDidChange(id, visibilityChanged)
+        try profileDidChange(id, visibilityChanged, removedCalendarMembership)
         return id
     }
 
@@ -160,7 +181,7 @@ final class ProfilesSettingsModel {
         try repository.reorder(ids)
         profiles = try repository.list()
         if let firstID = ids.first {
-            try profileDidChange(firstID, false)
+            try profileDidChange(firstID, false, false)
         }
     }
 

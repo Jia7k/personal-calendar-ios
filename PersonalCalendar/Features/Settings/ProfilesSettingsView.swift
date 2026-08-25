@@ -13,15 +13,32 @@ struct ProfilesSettingsView: View {
 
     init(environment: AppEnvironment) {
         let selection = environment.profileSelection
+        let timetable = environment.timetableSnapshotCoordinator
+        let liveActivity = environment.timetableLiveActivityCoordinator
+        let rescheduleNotifications = environment.rescheduleNotifications
+        let rebuildTimetable: @MainActor (Bool) -> Void = { failClosed in
+            guard let snapshot = try? timetable.refresh(failClosed: failClosed) else { return }
+            Task { await liveActivity.reconcile(snapshot: snapshot) }
+        }
         _model = State(initialValue: ProfilesSettingsModel(
             repository: environment.profiles,
             calendar: environment.calendar,
             reminders: environment.reminders,
             routines: environment.routines,
-            profileDidChange: { id, visibilityChanged in
+            profileImpactDidChange: { id, visibilityChanged, removedCalendarMembership in
+                defer {
+                    rebuildTimetable(removedCalendarMembership)
+                    if visibilityChanged {
+                        Task { await rescheduleNotifications() }
+                    }
+                }
                 try selection.profileDidChange(id: id, visibilityChanged: visibilityChanged)
             },
             profileWasDeleted: { id in
+                defer {
+                    rebuildTimetable(true)
+                    Task { await rescheduleNotifications() }
+                }
                 try selection.profileWasDeleted(id: id)
             }
         ))

@@ -3,24 +3,37 @@ import Foundation
 struct TimetableSnapshotBuilder: Sendable {
     let calendar: Calendar
 
+    private struct EntryCandidate: Hashable {
+        let displayID: String
+        let title: String
+        let start: Date
+        let end: Date
+        let location: String?
+    }
+
     func makeSnapshot(
         access: AccessState,
         events: [CalendarEventSnapshot],
         now: Date
     ) -> TimetableSnapshotV1 {
+        makeSnapshot(
+            availability: access == .granted ? .ready : .calendarAccessRequired,
+            events: events,
+            now: now
+        )
+    }
+
+    func makeSnapshot(
+        availability: TimetableAvailability,
+        events: [CalendarEventSnapshot],
+        now: Date
+    ) -> TimetableSnapshotV1 {
         let interval = weekInterval(containing: now)
-        guard access == .granted else {
-            return TimetableSnapshotV1(
-                version: TimetableSnapshotV1.currentVersion,
-                availability: .calendarAccessRequired,
-                generatedAt: now,
-                weekStart: interval.start,
-                timeZoneIdentifier: calendar.timeZone.identifier,
-                entries: []
-            )
+        guard availability == .ready else {
+            return emptySnapshot(availability: availability, now: now, interval: interval)
         }
 
-        let entries = events
+        let candidates = events
             .filter { event in
                 let weekday = calendar.component(.weekday, from: event.start)
                 return !event.isAllDay
@@ -30,12 +43,17 @@ struct TimetableSnapshotBuilder: Sendable {
                     && event.end.timeIntervalSinceReferenceDate.isFinite
                     && event.start < event.end
             }
-            .map(makeEntry)
-            .sorted(by: entryOrder)
+            .map(entryCandidate)
+            .sorted(by: candidateOrder)
+        var seen = Set<String>()
+        let unique = candidates.filter { seen.insert($0.displayID).inserted }
+        let entries = unique.enumerated().map {
+            makeEntry(ordinal: $0.offset, identity: $0.element)
+        }
 
         return TimetableSnapshotV1(
             version: TimetableSnapshotV1.currentVersion,
-            availability: .ready,
+            availability: entries.isEmpty ? .noClasses : .ready,
             generatedAt: now,
             weekStart: interval.start,
             timeZoneIdentifier: calendar.timeZone.identifier,
@@ -52,21 +70,49 @@ struct TimetableSnapshotBuilder: Sendable {
         return DateInterval(start: monday, end: nextMonday)
     }
 
-    private func makeEntry(_ event: CalendarEventSnapshot) -> TimetableEntry {
-        let title = bounded(event.title.trimmingCharacters(in: .whitespacesAndNewlines), limit: 48)
+    private func emptySnapshot(
+        availability: TimetableAvailability,
+        now: Date,
+        interval: DateInterval
+    ) -> TimetableSnapshotV1 {
+        TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: availability,
+            generatedAt: now,
+            weekStart: interval.start,
+            timeZoneIdentifier: calendar.timeZone.identifier,
+            entries: []
+        )
+    }
+
+    private func entryCandidate(_ event: CalendarEventSnapshot) -> EntryCandidate {
+        let title = bounded(
+            event.title.trimmingCharacters(in: .whitespacesAndNewlines),
+            limit: 48
+        )
         let trimmedLocation = event.location?.trimmingCharacters(in: .whitespacesAndNewlines)
         let location = trimmedLocation.flatMap { value in
             value.isEmpty ? nil : bounded(value, limit: 64)
         }
-        let occurrence = Int(event.start.timeIntervalSince1970)
-
-        return TimetableEntry(
-            id: "\(event.id)|\(occurrence)",
+        return EntryCandidate(
+            displayID: event.id,
             title: title,
-            shortTitle: shortTitle(for: title),
             start: event.start,
             end: event.end,
             location: location
+        )
+    }
+
+    private func makeEntry(ordinal: Int, identity: EntryCandidate) -> TimetableEntry {
+        let milliseconds = Int64((identity.start.timeIntervalSince1970 * 1_000).rounded())
+
+        return TimetableEntry(
+            id: "occurrence:\(milliseconds):\(ordinal)",
+            title: identity.title,
+            shortTitle: shortTitle(for: identity.title),
+            start: identity.start,
+            end: identity.end,
+            location: identity.location
         )
     }
 
@@ -93,9 +139,12 @@ struct TimetableSnapshotBuilder: Sendable {
         String(value.prefix(limit))
     }
 
-    private func entryOrder(_ left: TimetableEntry, _ right: TimetableEntry) -> Bool {
+    private func candidateOrder(_ left: EntryCandidate, _ right: EntryCandidate) -> Bool {
         if left.start != right.start { return left.start < right.start }
         if left.end != right.end { return left.end < right.end }
-        return left.id < right.id
+        if left.title != right.title { return left.title < right.title }
+        let locationOrder = (left.location ?? "").localizedCaseInsensitiveCompare(right.location ?? "")
+        if locationOrder != .orderedSame { return locationOrder == .orderedAscending }
+        return left.displayID < right.displayID
     }
 }

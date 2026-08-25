@@ -67,18 +67,25 @@ struct AppEnvironment {
         let agendaRefreshRegistry = AgendaRefreshRegistry()
         var localCalendar = Calendar.current
         localCalendar.timeZone = .current
-        let timetableWriter: any TimetableSnapshotWriting
+        let timetableWriter: any TimetableWidgetCatalogWriting
         do {
-            timetableWriter = try TimetableSnapshotStore.appGroup()
+            timetableWriter = try TimetableWidgetCatalogStore.appGroup()
         } catch {
-            timetableWriter = UnavailableTimetableSnapshotWriter()
+            timetableWriter = UnavailableTimetableCatalogWriter()
         }
+        let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
+            driver: SystemTimetableActivityDriver(),
+            calendar: localCalendar
+        )
         let timetableSnapshotCoordinator = TimetableSnapshotCoordinator(
             calendar: calendar,
-            settings: settings,
+            profiles: profiles,
             builder: TimetableSnapshotBuilder(calendar: localCalendar),
             writer: timetableWriter,
-            reloader: SystemTimetableWidgetReloader()
+            reloader: SystemTimetableWidgetReloader(),
+            onFailClosed: {
+                Task { await timetableLiveActivityCoordinator.stop() }
+            }
         )
         let backup = BackupService(
             context: container.mainContext,
@@ -88,12 +95,10 @@ struct AppEnvironment {
                 let restoredIdentity = settings.activeProfileIdentity
                 try? profileSelection.reloadProfiles()
                 try? profileSelection.select(restoredIdentity)
-                _ = try? timetableSnapshotCoordinator.refresh()
+                if let snapshot = try? timetableSnapshotCoordinator.refresh(failClosed: true) {
+                    Task { await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot) }
+                }
             }
-        )
-        let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
-            driver: SystemTimetableActivityDriver(),
-            calendar: localCalendar
         )
         let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, profileScopes: profileScopes, authorization: notifications, coordinator: notificationCoordinator)
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
@@ -210,15 +215,22 @@ struct AppEnvironment {
         let agendaRefreshRegistry = AgendaRefreshRegistry()
         var localCalendar = Calendar.current
         localCalendar.timeZone = .current
+        let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
+            driver: NoopTimetableActivityDriver(),
+            calendar: localCalendar
+        )
         let timetableSnapshotCoordinator = TimetableSnapshotCoordinator(
             calendar: calendar,
-            settings: settings,
+            profiles: profiles,
             builder: TimetableSnapshotBuilder(calendar: localCalendar),
-            writer: TimetableSnapshotStore(
+            writer: TimetableWidgetCatalogStore(
                 fileURL: FileManager.default.temporaryDirectory
-                    .appendingPathComponent("demo-timetable-\(UUID().uuidString).json")
+                    .appendingPathComponent("demo-timetable-catalog-\(UUID().uuidString).json")
             ),
-            reloader: NoopTimetableWidgetReloader()
+            reloader: NoopTimetableWidgetReloader(),
+            onFailClosed: {
+                Task { await timetableLiveActivityCoordinator.stop() }
+            }
         )
         let backup = BackupService(
             context: container.mainContext,
@@ -228,12 +240,10 @@ struct AppEnvironment {
                 let restoredIdentity = settings.activeProfileIdentity
                 try? profileSelection.reloadProfiles()
                 try? profileSelection.select(restoredIdentity)
-                _ = try? timetableSnapshotCoordinator.refresh()
+                if let snapshot = try? timetableSnapshotCoordinator.refresh(failClosed: true) {
+                    Task { await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot) }
+                }
             }
-        )
-        let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
-            driver: NoopTimetableActivityDriver(),
-            calendar: localCalendar
         )
         let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, profileScopes: profileScopes, authorization: notifications, coordinator: notificationCoordinator)
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
@@ -396,10 +406,12 @@ struct AppEnvironment {
     }
 }
 
-private struct UnavailableTimetableSnapshotWriter: TimetableSnapshotWriting {
-    func write(_ value: TimetableSnapshotV1) throws {
+private struct UnavailableTimetableCatalogWriter: TimetableWidgetCatalogWriting {
+    func write(_ value: TimetableWidgetCatalogV1) throws {
         throw TimetableSnapshotStoreError.containerUnavailable
     }
+
+    func delete() throws {}
 }
 
 @MainActor
