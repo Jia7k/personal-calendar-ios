@@ -313,28 +313,24 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertEqual(completed.value as? String, "Completed")
     }
 
-    func testSettingsSourceToggleRefreshesCalendarAndTodayWithoutHidingOtherSource() {
+    func testProfileSwitchRefreshesCalendarAndToday() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-demo-multiple-sources"]
+        app.launchArguments = ["-ui-testing", "-demo-profiles"]
         app.launch()
 
         app.buttons["Expand day"].tap()
         XCTAssertTrue(app.staticTexts["Coffee"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["Planning"].exists)
-        app.buttons["Settings"].tap()
-        XCTAssertTrue(app.switches["Work"].waitForExistence(timeout: 3))
-        let work = app.switches["Work"]
-        work.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        waitForValue("0", on: work)
-        app.buttons["Done"].tap()
+        XCTAssertFalse(app.staticTexts["Planning"].exists)
+        app.buttons["profile-selector"].tap()
+        app.buttons["profile-option-everything"].tap()
         XCTAssertTrue(app.otherElements["selected-week-strip"].waitForExistence(timeout: 3))
-        waitForDisappearance(app.staticTexts["Planning"])
+        XCTAssertTrue(app.staticTexts["Planning"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Coffee"].exists)
 
         app.tabBars.buttons["Today"].tap()
         XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Schedule"].waitForExistence(timeout: 3))
-        waitForDisappearance(app.staticTexts["Planning"])
+        XCTAssertTrue(app.staticTexts["Planning"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Coffee"].exists)
     }
 

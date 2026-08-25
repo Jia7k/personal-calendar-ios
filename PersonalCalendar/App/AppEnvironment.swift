@@ -152,6 +152,7 @@ struct AppEnvironment {
     }
 
     static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
+        let usesProfileFixtures = arguments.contains("-demo-profiles")
         let calendarAccess: AccessState = arguments.contains("-calendar-not-determined") ? .notDetermined : arguments.contains("-calendar-restricted") ? .restricted : arguments.contains("-calendar-denied") ? .denied : .granted
         let calendar = DemoCalendarService(
             access: calendarAccess,
@@ -162,7 +163,8 @@ struct AppEnvironment {
             includeReadOnlySource: arguments.contains("-demo-editor-read-only"),
             replacePrimaryEventWithReadOnly: arguments.contains("-read-only-event"),
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
-            includeUnsupportedItems: arguments.contains("-demo-editor-unsupported")
+            includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
+            profileFixtures: usesProfileFixtures
         )
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
         let reminders = DemoRemindersService(
@@ -173,12 +175,13 @@ struct AppEnvironment {
             multipleSources: arguments.contains("-demo-multiple-sources"),
             includeReadOnlySource: arguments.contains("-demo-editor-read-only"),
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
-            includeUnsupportedItems: arguments.contains("-demo-editor-unsupported")
+            includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
+            profileFixtures: usesProfileFixtures
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let settings = AppSettingsStore(defaults: .ephemeral)
-        let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"))
+        let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"), profileFixtures: usesProfileFixtures)
         let profiles = SwiftDataProfileRepository(context: container.mainContext)
         let routineProfileMutations = DemoRoutineProfileMutationAdapter(
             routines: routines,
@@ -192,6 +195,9 @@ struct AppEnvironment {
             settings: settings
         )
         try! profileMigration.run()
+        if usesProfileFixtures {
+            try! DemoProfileFixture.configure(profiles: profiles)
+        }
         let profileSelection = ProfileSelectionController(repository: profiles, settings: settings)
         try! profileSelection.reloadProfiles()
         let profileScopes = ProfileScopeResolver(

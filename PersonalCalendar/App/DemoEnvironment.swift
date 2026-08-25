@@ -1,16 +1,69 @@
 import Foundation
 
+enum DemoProfileFixture {
+    static let homeCalendarID = "demo-calendar-home"
+    static let schoolCalendarID = "demo-calendar-school"
+    static let workCalendarID = "demo-calendar-work"
+    static let birthdaysCalendarID = "demo-calendar-birthdays"
+
+    static let personalListID = "demo-list-personal"
+    static let assignmentsListID = "demo-list-assignments"
+    static let workListID = "demo-list-work"
+
+    static let personalRoutineID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    static let schoolRoutineID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    static let workRoutineID = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+
+    @MainActor
+    static func configure(profiles: any ProfileRepository) throws {
+        try profiles.update(
+            id: SeedProfile.personalID,
+            draft: ProfileDraft(
+                name: "Personal",
+                colorHex: "#3A8D7C",
+                symbolName: "person.fill",
+                calendarIDs: [homeCalendarID],
+                reminderListIDs: [personalListID],
+                routineIDs: [personalRoutineID, schoolRoutineID],
+                defaultCalendarID: homeCalendarID,
+                defaultReminderListID: personalListID
+            )
+        )
+        try profiles.update(
+            id: SeedProfile.schoolID,
+            draft: ProfileDraft(
+                name: "School",
+                colorHex: "#4868A8",
+                symbolName: "graduationcap.fill",
+                calendarIDs: [schoolCalendarID],
+                reminderListIDs: [assignmentsListID],
+                routineIDs: [schoolRoutineID],
+                defaultCalendarID: schoolCalendarID,
+                defaultReminderListID: assignmentsListID
+            )
+        )
+        try profiles.update(
+            id: SeedProfile.workID,
+            draft: ProfileDraft(
+                name: "Work",
+                colorHex: "#CB6B4F",
+                symbolName: "briefcase.fill",
+                calendarIDs: [workCalendarID],
+                reminderListIDs: [workListID],
+                routineIDs: [workRoutineID],
+                defaultCalendarID: workCalendarID,
+                defaultReminderListID: workListID
+            )
+        )
+    }
+}
+
 @MainActor
 final class DemoCalendarService: CalendarServicing {
     var accessState: AccessState
     private(set) var events: [CalendarEventSnapshot]
     private(set) var successfulWriteCount = 0
-    private let descriptor = CalendarDescriptor(
-        id: "demo-calendar",
-        title: "Personal",
-        colorHex: "#3A8D7C",
-        allowsContentModifications: true
-    )
+    private let profileFixtures: Bool
     private var shouldFailNextCreate: Bool
     private var shouldFailNextUpdate: Bool
     private var shouldFailNextDelete: Bool
@@ -20,7 +73,7 @@ final class DemoCalendarService: CalendarServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -30,21 +83,32 @@ final class DemoCalendarService: CalendarServicing {
         self.replacePrimaryEventWithReadOnly = replacePrimaryEventWithReadOnly
         self.includeRecurringItems = includeRecurringItems
         self.includeUnsupportedItems = includeUnsupportedItems
+        self.profileFixtures = profileFixtures
         let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
-        events = [
-            .init(
-                id: "demo-event",
-                mutationID: "demo-event",
-                title: replacePrimaryEventWithReadOnly ? "Public holiday" : "Coffee",
-                start: start,
-                end: start.addingTimeInterval(3_600),
-                isAllDay: false,
-                calendarID: replacePrimaryEventWithReadOnly ? "demo-calendar-read-only" : "demo-calendar",
-                calendarTitle: replacePrimaryEventWithReadOnly ? "Read Only" : "Personal",
-                allowsModification: !replacePrimaryEventWithReadOnly,
-                hasRecurrence: false
-            )
-        ]
+        if profileFixtures {
+            let startOfDay = Calendar.current.startOfDay(for: start)
+            events = [
+                .init(id: "demo-personal-event", mutationID: "demo-personal-event", title: "Coffee", start: start.addingTimeInterval(-3_600), end: start, isAllDay: false, calendarID: DemoProfileFixture.homeCalendarID, calendarTitle: "Home", allowsModification: true, hasRecurrence: false),
+                .init(id: "demo-school-event", mutationID: "demo-school-event", title: "INF 2003 Lecture", start: start, end: start.addingTimeInterval(7_200), isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: true, location: "Online"),
+                .init(id: "demo-work-event", mutationID: "demo-work-event", title: "Planning", start: start.addingTimeInterval(10_800), end: start.addingTimeInterval(14_400), isAllDay: false, calendarID: DemoProfileFixture.workCalendarID, calendarTitle: "Work", allowsModification: true, hasRecurrence: false),
+                .init(id: "demo-birthday-event", mutationID: nil, title: "Birthday", start: startOfDay, end: Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.birthdaysCalendarID, calendarTitle: "Birthdays", allowsModification: false, hasRecurrence: true)
+            ]
+        } else {
+            events = [
+                .init(
+                    id: "demo-event",
+                    mutationID: "demo-event",
+                    title: replacePrimaryEventWithReadOnly ? "Public holiday" : "Coffee",
+                    start: start,
+                    end: start.addingTimeInterval(3_600),
+                    isAllDay: false,
+                    calendarID: replacePrimaryEventWithReadOnly ? "demo-calendar-read-only" : "demo-calendar",
+                    calendarTitle: replacePrimaryEventWithReadOnly ? "Read Only" : "Personal",
+                    allowsModification: !replacePrimaryEventWithReadOnly,
+                    hasRecurrence: false
+                )
+            ]
+        }
         if multipleSources {
             events.append(.init(id: "demo-event-work", mutationID: "demo-event-work", title: "Planning", start: start.addingTimeInterval(1_800), end: start.addingTimeInterval(5_400), isAllDay: false, calendarID: "demo-calendar-work", calendarTitle: "Work", allowsModification: true, hasRecurrence: false))
         }
@@ -194,10 +258,24 @@ final class DemoCalendarService: CalendarServicing {
     private func trimmed(_ title: String) -> String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var descriptors: [CalendarDescriptor] {
+        if profileFixtures {
+            return [
+                .init(id: DemoProfileFixture.homeCalendarID, title: "Home", colorHex: "#3A8D7C", allowsContentModifications: true),
+                .init(id: DemoProfileFixture.schoolCalendarID, title: "Google School", colorHex: "#4868A8", allowsContentModifications: true),
+                .init(id: DemoProfileFixture.workCalendarID, title: "Work", colorHex: "#CB6B4F", allowsContentModifications: true),
+                .init(id: DemoProfileFixture.birthdaysCalendarID, title: "Birthdays", colorHex: "#8A63B8", allowsContentModifications: false)
+            ]
+        }
         var values = [descriptor]
         if multipleSources { values.append(.init(id: "demo-calendar-work", title: "Work", colorHex: "#4868A8", allowsContentModifications: true)) }
         if includeReadOnlySource || replacePrimaryEventWithReadOnly { values.append(.init(id: "demo-calendar-read-only", title: "Read Only", colorHex: "#777777", allowsContentModifications: false)) }
         return values
+    }
+
+    private var descriptor: CalendarDescriptor {
+        profileFixtures
+            ? .init(id: DemoProfileFixture.homeCalendarID, title: "Home", colorHex: "#3A8D7C", allowsContentModifications: true)
+            : .init(id: "demo-calendar", title: "Personal", colorHex: "#3A8D7C", allowsContentModifications: true)
     }
 }
 
@@ -207,27 +285,8 @@ private enum DemoCreateError: Error { case failed }
 final class DemoRemindersService: RemindersServicing {
     var accessState: AccessState
     private(set) var successfulWriteCount = 0
-    private var values = [
-        ReminderSnapshot(
-            id: "demo-task",
-            title: "Buy milk",
-            notes: nil,
-            dueDate: Calendar.current.date(bySettingHour: 14, minute: 0, second: 0, of: .now)!,
-            dueHasTime: true,
-            priority: 5,
-            listID: "demo-list",
-            listTitle: "Tasks",
-            isCompleted: false,
-            allowsModification: true,
-            hasRecurrence: false
-        )
-    ]
-    private let descriptor = ReminderListDescriptor(
-        id: "demo-list",
-        title: "Tasks",
-        colorHex: "#CB6B4F",
-        allowsContentModifications: true
-    )
+    private var values: [ReminderSnapshot]
+    private let profileFixtures: Bool
     private var shouldFailNextCreate: Bool
     private var shouldFailNextUpdate: Bool
     private var shouldFailNextDelete: Bool
@@ -236,7 +295,7 @@ final class DemoRemindersService: RemindersServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -245,6 +304,19 @@ final class DemoRemindersService: RemindersServicing {
         self.includeReadOnlySource = includeReadOnlySource
         self.includeRecurringItems = includeRecurringItems
         self.includeUnsupportedItems = includeUnsupportedItems
+        self.profileFixtures = profileFixtures
+        let due = Calendar.current.date(bySettingHour: 14, minute: 0, second: 0, of: .now)!
+        if profileFixtures {
+            values = [
+                .init(id: "demo-personal-task", title: "Buy milk", notes: nil, dueDate: due, dueHasTime: true, priority: 5, listID: DemoProfileFixture.personalListID, listTitle: "Personal", isCompleted: false, allowsModification: true, hasRecurrence: false),
+                .init(id: "demo-school-task", title: "Assignment 1", notes: nil, dueDate: due.addingTimeInterval(3_600), dueHasTime: true, priority: 7, listID: DemoProfileFixture.assignmentsListID, listTitle: "Assignments", isCompleted: false, allowsModification: true, hasRecurrence: false),
+                .init(id: "demo-work-task", title: "Send report", notes: nil, dueDate: due.addingTimeInterval(7_200), dueHasTime: true, priority: 3, listID: DemoProfileFixture.workListID, listTitle: "Work", isCompleted: false, allowsModification: true, hasRecurrence: false)
+            ]
+        } else {
+            values = [
+                .init(id: "demo-task", title: "Buy milk", notes: nil, dueDate: due, dueHasTime: true, priority: 5, listID: "demo-list", listTitle: "Tasks", isCompleted: false, allowsModification: true, hasRecurrence: false)
+            ]
+        }
         if includeReadOnlySource {
             values.append(
                 .init(
@@ -354,10 +426,23 @@ final class DemoRemindersService: RemindersServicing {
     }
 
     private var descriptors: [ReminderListDescriptor] {
+        if profileFixtures {
+            return [
+                .init(id: DemoProfileFixture.personalListID, title: "Personal", colorHex: "#3A8D7C", allowsContentModifications: true),
+                .init(id: DemoProfileFixture.assignmentsListID, title: "Assignments", colorHex: "#4868A8", allowsContentModifications: true),
+                .init(id: DemoProfileFixture.workListID, title: "Work", colorHex: "#CB6B4F", allowsContentModifications: true)
+            ]
+        }
         var descriptors = [descriptor]
         if multipleSources { descriptors.append(.init(id: "demo-list-alternate", title: "Alternate", colorHex: "#4868A8", allowsContentModifications: true)) }
         if includeReadOnlySource { descriptors.append(.init(id: "demo-list-read-only", title: "Read Only", colorHex: "#777777", allowsContentModifications: false)) }
         return descriptors
+    }
+
+    private var descriptor: ReminderListDescriptor {
+        profileFixtures
+            ? .init(id: DemoProfileFixture.personalListID, title: "Personal", colorHex: "#3A8D7C", allowsContentModifications: true)
+            : .init(id: "demo-list", title: "Tasks", colorHex: "#CB6B4F", allowsContentModifications: true)
     }
 
     func setCompleted(id: String, completed: Bool) throws {
@@ -393,23 +478,27 @@ final class DemoRemindersService: RemindersServicing {
 
 @MainActor
 final class DemoRoutineRepository: RoutineRepository {
-    private var values = [
-        RoutineSnapshot(
-            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            title: "Read",
-            weekdays: [1, 2, 3, 4, 5, 6, 7],
-            window: .evening,
-            reminderHour: nil,
-            reminderMinute: nil,
-            isPaused: false,
-            isArchived: false
-        )
-    ]
+    private var values: [RoutineSnapshot]
     private var completed: [UUID: Set<LocalDay>] = [:]
     private var shouldFailNextDelete: Bool
     private var shouldFailNextCreate: Bool
     private var shouldFailNextUpdate: Bool
-    init(failFirstDelete: Bool = false, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, longTitle: Bool = false) { shouldFailNextDelete = failFirstDelete; shouldFailNextCreate = failFirstCreate; shouldFailNextUpdate = failFirstUpdate; if longTitle { let old = values[0]; values[0] = .init(id: old.id, title: "Read a long and thoughtfully named routine before bed every evening", weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived) } }
+    init(failFirstDelete: Bool = false, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, longTitle: Bool = false, profileFixtures: Bool = false) {
+        shouldFailNextDelete = failFirstDelete
+        shouldFailNextCreate = failFirstCreate
+        shouldFailNextUpdate = failFirstUpdate
+        values = [
+            .init(id: DemoProfileFixture.personalRoutineID, title: "Read", weekdays: [1, 2, 3, 4, 5, 6, 7], window: .evening, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false)
+        ]
+        if profileFixtures {
+            values.append(.init(id: DemoProfileFixture.schoolRoutineID, title: "Review notes", weekdays: [2, 3, 4, 5, 6], window: .evening, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false))
+            values.append(.init(id: DemoProfileFixture.workRoutineID, title: "Plan week", weekdays: [2], window: .morning, reminderHour: nil, reminderMinute: nil, isPaused: false, isArchived: false))
+        }
+        if longTitle {
+            let old = values[0]
+            values[0] = .init(id: old.id, title: "Read a long and thoughtfully named routine before bed every evening", weekdays: old.weekdays, window: old.window, reminderHour: old.reminderHour, reminderMinute: old.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived)
+        }
+    }
 
     func list(includeArchived: Bool) throws -> [RoutineSnapshot] {
         includeArchived ? values : values.filter { !$0.isArchived }

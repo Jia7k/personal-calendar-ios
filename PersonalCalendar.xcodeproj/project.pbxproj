@@ -151,6 +151,7 @@
 		C79693272B1AD1AE438ECD91 /* FoundationFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */; };
 		C869E4B0E227E1AE7625FB02 /* ProfileMigrationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34B1EF745D7EF0408F7EABCB /* ProfileMigrationCoordinator.swift */; };
 		C8986CA8CFA4922425B576A3 /* EventKitRemindersService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD881B9300736A4C5FE571A /* EventKitRemindersService.swift */; };
+		CB52700D76CEADB5C09BDA38 /* ProfileFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6273DDA991A00906B766D1FD /* ProfileFlowUITests.swift */; };
 		D0C17883E2F9826870DD4573 /* ProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD33592D4EDFD1309B04DFAD /* ProfileEditorView.swift */; };
 		D5090A4CCA8720B4F8D0EB1B /* ProfileRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = D910FAA4F4E12A2C52F5ADB5 /* ProfileRecord.swift */; };
 		D71F641DFE696D96353013AB /* ReminderSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1815D5867D7AB7394AEA6F4 /* ReminderSnapshot.swift */; };
@@ -277,6 +278,7 @@
 		5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinator.swift; sourceTree = "<group>"; };
 		5D0F4CAF444E648C867C92FD /* Fakes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fakes.swift; sourceTree = "<group>"; };
 		601C1B2C329102F7A07180BD /* RoutinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutinesView.swift; sourceTree = "<group>"; };
+		6273DDA991A00906B766D1FD /* ProfileFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFlowUITests.swift; sourceTree = "<group>"; };
 		62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingsStateTests.swift; sourceTree = "<group>"; };
 		653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		654046F51502ACBECF9AAD7F /* PersonalCalendarWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PersonalCalendarWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -567,6 +569,7 @@
 				AF917735FCD674F8418D3F18 /* CompletionFlowUITests.swift */,
 				1FCBF7F7DC1AF2645B93CCA8 /* EditorReviewUITests.swift */,
 				22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */,
+				6273DDA991A00906B766D1FD /* ProfileFlowUITests.swift */,
 			);
 			path = PersonalCalendarUITests;
 			sourceTree = "<group>";
@@ -1084,6 +1087,7 @@
 				03D30364CBC923D48AA1A8C4 /* CompletionFlowUITests.swift in Sources */,
 				8A5DF308EE185223FA1FF14B /* EditorReviewUITests.swift in Sources */,
 				C79693272B1AD1AE438ECD91 /* FoundationFlowUITests.swift in Sources */,
+				CB52700D76CEADB5C09BDA38 /* ProfileFlowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
