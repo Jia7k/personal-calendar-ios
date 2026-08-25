@@ -49,6 +49,45 @@ struct QuickEntryDestinationOptions: Equatable, Sendable {
             visibleReminderListIDs: remindersAccess == .granted ? settings.visibleReminderListIDs(availableIDs: listIDs) : []
         )
     }
+
+    @MainActor
+    static func resolve(
+        calendar: any CalendarServicing,
+        reminders: any RemindersServicing,
+        context: CreationProfileContext
+    ) -> QuickEntryDestinationOptions {
+        let calendarAccess = calendar.accessState
+        let remindersAccess = reminders.accessState
+        let allCalendars = calendarAccess == .granted ? calendar.calendars() : []
+        let allLists = remindersAccess == .granted ? reminders.lists() : []
+        let writableCalendars = SourceDescriptorOrdering.calendars(
+            allCalendars.filter(\.allowsContentModifications)
+        )
+        let writableLists = SourceDescriptorOrdering.reminderLists(
+            allLists.filter(\.allowsContentModifications)
+        )
+        let calendarIDs = Set(allCalendars.map(\.id))
+        let listIDs = Set(allLists.map(\.id))
+        let validCalendarDefault = context.defaultCalendarID.flatMap { id in
+            context.memberCalendarIDs.contains(id)
+                && writableCalendars.contains(where: { $0.id == id }) ? id : nil
+        }
+        let validListDefault = context.defaultReminderListID.flatMap { id in
+            context.memberReminderListIDs.contains(id)
+                && writableLists.contains(where: { $0.id == id }) ? id : nil
+        }
+
+        return .init(
+            calendarAccess: calendarAccess,
+            remindersAccess: remindersAccess,
+            calendars: writableCalendars,
+            reminderLists: writableLists,
+            defaultCalendarID: validCalendarDefault,
+            defaultReminderListID: validListDefault,
+            visibleCalendarIDs: context.memberCalendarIDs.intersection(calendarIDs),
+            visibleReminderListIDs: context.memberReminderListIDs.intersection(listIDs)
+        )
+    }
 }
 
 enum QuickEntryFailure: Equatable, Sendable {
@@ -56,6 +95,7 @@ enum QuickEntryFailure: Equatable, Sendable {
     case accessUnavailable
     case systemDefaultUnavailable
     case invalidDestination
+    case explicitDestinationRequired
     case writeFailed
 }
 
@@ -96,6 +136,7 @@ final class QuickEntryViewModel {
     @ObservationIgnored private let parser: any QuickEntryParsing
     @ObservationIgnored private let saver: any QuickEntrySaving
     @ObservationIgnored private let context: QuickEntryParseContext
+    @ObservationIgnored private let creationProfile: CreationProfileContext?
     @ObservationIgnored private let onCommitted: @MainActor (QuickEntrySaveOutcome) -> Void
     @ObservationIgnored private var didCommit = false
     @ObservationIgnored private var discardWasConfirmed = false
@@ -110,6 +151,7 @@ final class QuickEntryViewModel {
         context: QuickEntryParseContext,
         destinations: QuickEntryDestinationOptions = .empty,
         categories: [CategorySnapshot] = [],
+        creationProfile: CreationProfileContext? = nil,
         onCommitted: @escaping @MainActor (QuickEntrySaveOutcome) -> Void = { _ in }
     ) {
         self.parser = parser
@@ -117,6 +159,7 @@ final class QuickEntryViewModel {
         self.context = context
         self.destinations = destinations
         self.categories = categories.sorted { $0.sortOrder < $1.sortOrder }
+        self.creationProfile = creationProfile
         self.onCommitted = onCommitted
         eventDestinationID = destinations.defaultCalendarID
         taskDestinationID = destinations.defaultReminderListID
@@ -153,6 +196,14 @@ final class QuickEntryViewModel {
 
     var destinationVisibilityHint: String? {
         guard let preview, let id = preview.destinationID else { return nil }
+        if let creationProfile {
+            let isOutsideProfile = switch preview.kind {
+            case .event: !creationProfile.memberCalendarIDs.contains(id)
+            case .task: !creationProfile.memberReminderListIDs.contains(id)
+            case .routine: false
+            }
+            return isOutsideProfile ? "Outside \(creationProfile.profileName)" : nil
+        }
         switch preview.kind {
         case .event where !destinations.visibleCalendarIDs.contains(id):
             return "Items saved in this calendar may be hidden from combined views."
@@ -169,6 +220,19 @@ final class QuickEntryViewModel {
         case .notDetermined: .requestAccess
         case .denied: .openSettings
         case .granted, .restricted: .none
+        }
+    }
+
+    func systemDefaultIsAvailable(for kind: QuickEntryKind) -> Bool {
+        switch kind {
+        case .event:
+            guard !requiresExplicitDestination(for: kind) else { return false }
+            return destinations.calendarAccess == .granted && !destinations.calendars.isEmpty
+        case .task:
+            guard !requiresExplicitDestination(for: kind) else { return false }
+            return destinations.remindersAccess == .granted && !destinations.reminderLists.isEmpty
+        case .routine:
+            return false
         }
     }
 
@@ -439,6 +503,8 @@ final class QuickEntryViewModel {
             guard destinations.calendarAccess == .granted else { return .accessUnavailable }
             if let id = preview.destinationID {
                 guard destinations.calendars.contains(where: { $0.id == id }) else { return .invalidDestination }
+            } else if requiresExplicitDestination(for: preview.kind) {
+                return .explicitDestinationRequired
             } else if destinations.calendars.isEmpty { return .systemDefaultUnavailable }
             guard let start = preview.startDate, let end = preview.endDate,
                   start.timeIntervalSinceReferenceDate.isFinite,
@@ -452,6 +518,8 @@ final class QuickEntryViewModel {
             guard destinations.remindersAccess == .granted else { return .accessUnavailable }
             if let id = preview.destinationID {
                 guard destinations.reminderLists.contains(where: { $0.id == id }) else { return .invalidDestination }
+            } else if requiresExplicitDestination(for: preview.kind) {
+                return .explicitDestinationRequired
             } else if destinations.reminderLists.isEmpty { return .systemDefaultUnavailable }
             guard !(preview.dueDate == nil && preview.dueHasTime),
                   preview.dueDate?.timeIntervalSinceReferenceDate.isFinite ?? true,
@@ -481,6 +549,22 @@ final class QuickEntryViewModel {
             .systemDefaultUnavailable
         case .destinationMissing, .destinationReadOnly:
             .invalidDestination
+        case .explicitDestinationRequired:
+            .explicitDestinationRequired
+        }
+    }
+
+    private func requiresExplicitDestination(for kind: QuickEntryKind) -> Bool {
+        guard let creationProfile else { return false }
+        return switch kind {
+        case .event:
+            creationProfile.requiresExplicitCalendarDestination
+                || destinations.defaultCalendarID == nil
+        case .task:
+            creationProfile.requiresExplicitReminderDestination
+                || destinations.defaultReminderListID == nil
+        case .routine:
+            false
         }
     }
 
@@ -501,6 +585,10 @@ final class QuickEntryViewModel {
         case .accessUnavailable: sourceExplanation ?? "This source is unavailable."
         case .systemDefaultUnavailable: "No writable System Default destination is available. Choose another type or destination."
         case .invalidDestination: "The selected destination is no longer writable. Choose another destination."
+        case .explicitDestinationRequired:
+            preview?.kind == .event
+                ? "Choose a calendar before saving."
+                : "Choose a reminder list before saving."
         case .writeFailed:
             switch preview?.kind {
             case .event: "Your event was not saved. Edit it and try again."

@@ -97,7 +97,7 @@ final class EventEditorViewModel {
     /// authority (the live item and destination) is deliberately rechecked
     /// only by the mutation path immediately before a write.
     var canSave: Bool {
-        acceptsActions && formValidationError() == nil
+        acceptsActions && hasRequiredCreationDestination && formValidationError() == nil
     }
 
     /// The exact scope whose consent is currently being requested. Confirmation
@@ -125,6 +125,7 @@ final class EventEditorViewModel {
     @ObservationIgnored private let mode: Mode
     @ObservationIgnored private let service: any CalendarServicing
     @ObservationIgnored private let categories: (any CategoryRepository)?
+    @ObservationIgnored private let requiresExplicitCreationDestination: Bool
     @ObservationIgnored private let onCommitted: @MainActor (EventEditorCommit) -> Void
     @ObservationIgnored private let onReconciliationNeeded: @MainActor () -> Void
     @ObservationIgnored private var cleanBaseline: FormState
@@ -142,6 +143,7 @@ final class EventEditorViewModel {
         mode: Mode,
         service: any CalendarServicing,
         savedDefaultCalendarID: String? = nil,
+        requiresExplicitCreationDestination: Bool = false,
         initialStart: Date,
         initialEnd: Date,
         initialIsAllDay: Bool,
@@ -152,6 +154,7 @@ final class EventEditorViewModel {
         self.mode = mode
         self.service = service
         self.categories = categories
+        self.requiresExplicitCreationDestination = requiresExplicitCreationDestination
         self.onCommitted = onCommitted
         self.onReconciliationNeeded = onReconciliationNeeded
         title = ""
@@ -181,16 +184,25 @@ final class EventEditorViewModel {
     static func create(
         service: any CalendarServicing,
         savedDefaultCalendarID: String?,
+        creationProfile: CreationProfileContext? = nil,
         initialStart: Date = .now,
         initialEnd: Date? = nil,
         isAllDay: Bool = false,
         categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping @MainActor (EventEditorCommit) -> Void = { _ in }
     ) -> EventEditorViewModel {
-        EventEditorViewModel(
+        let preferredDefaultCalendarID: String?
+        if let creationProfile {
+            preferredDefaultCalendarID = creationProfile.defaultCalendarID
+        } else {
+            preferredDefaultCalendarID = savedDefaultCalendarID
+        }
+
+        return EventEditorViewModel(
             mode: .create,
             service: service,
-            savedDefaultCalendarID: savedDefaultCalendarID,
+            savedDefaultCalendarID: preferredDefaultCalendarID,
+            requiresExplicitCreationDestination: creationProfile?.requiresExplicitCalendarDestination == true,
             initialStart: initialStart,
             initialEnd: initialEnd ?? initialStart.addingTimeInterval(3_600),
             initialIsAllDay: isAllDay,
@@ -349,6 +361,11 @@ final class EventEditorViewModel {
         }
     }
 
+    private var hasRequiredCreationDestination: Bool {
+        guard case .create = mode, requiresExplicitCreationDestination else { return true }
+        return destinationCalendarID != nil
+    }
+
     private func resolveCurrentForMutation() -> CalendarEventSnapshot? {
         guard service.accessState == .granted else {
             phase = .unavailable(reason: .accessUnavailable)
@@ -413,6 +430,12 @@ final class EventEditorViewModel {
     private func validateExplicitDestination() -> Bool {
         guard service.accessState == .granted else {
             phase = .unavailable(reason: .accessUnavailable)
+            return false
+        }
+        if case .create = mode,
+           requiresExplicitCreationDestination,
+           destinationCalendarID == nil {
+            phase = .failed(action: .save, error: .invalidDestination)
             return false
         }
         guard let destinationCalendarID else { return true }

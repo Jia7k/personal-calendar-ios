@@ -414,7 +414,7 @@ struct QuickEntrySheet: View {
                     Text("System Default")
                 }
             }
-            .disabled(!systemDefaultIsAvailable(for: preview.kind))
+            .disabled(!model.systemDefaultIsAvailable(for: preview.kind))
             .accessibilityIdentifier("quick-entry-destination-system-default")
 
             switch preview.kind {
@@ -736,19 +736,6 @@ struct QuickEntrySheet: View {
         model.preview?.kind == .task ? "Allow Reminders Access" : "Allow Calendar Access"
     }
 
-    private func systemDefaultIsAvailable(for kind: QuickEntryKind) -> Bool {
-        switch kind {
-        case .event:
-            model.destinations.calendarAccess == .granted
-                && !model.destinations.calendars.isEmpty
-        case .task:
-            model.destinations.remindersAccess == .granted
-                && !model.destinations.reminderLists.isEmpty
-        case .routine:
-            false
-        }
-    }
-
     private func destinationTitle(for preview: QuickEntryPreview) -> String {
         guard let id = preview.destinationID else { return "System Default" }
         switch preview.kind {
@@ -785,6 +772,10 @@ struct QuickEntrySheet: View {
             return "No writable System Default destination is available. Choose another type or destination."
         case .invalidDestination:
             return "The selected destination is no longer writable. Choose another destination."
+        case .explicitDestinationRequired:
+            return model.preview?.kind == .event
+                ? "Choose a calendar before saving."
+                : "Choose a reminder list before saving."
         }
     }
 

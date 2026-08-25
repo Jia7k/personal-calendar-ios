@@ -20,6 +20,7 @@ enum QuickEntrySaveError: Error, Equatable, Sendable {
     case unsupportedCategory
     case accessUnavailable
     case systemDefaultUnavailable
+    case explicitDestinationRequired
     case destinationMissing
     case destinationReadOnly
 }
@@ -34,6 +35,8 @@ struct SaveRouter: QuickEntrySaving {
     private let calendar: any CalendarServicing
     private let reminders: any RemindersServicing
     private let routines: any RoutineRepository
+    private let routineProfileMutations: (any RoutineProfileMutating)?
+    private let creationProfile: CreationProfileContext?
     private let categories: (any CategoryRepository)?
     private let localCalendar: Calendar
 
@@ -42,11 +45,15 @@ struct SaveRouter: QuickEntrySaving {
         reminders: any RemindersServicing,
         routines: any RoutineRepository,
         categories: (any CategoryRepository)? = nil,
+        routineProfileMutations: (any RoutineProfileMutating)? = nil,
+        creationProfile: CreationProfileContext? = nil,
         localCalendar: Calendar
     ) {
         self.calendar = calendar
         self.reminders = reminders
         self.routines = routines
+        self.routineProfileMutations = routineProfileMutations
+        self.creationProfile = creationProfile
         self.categories = categories
         self.localCalendar = localCalendar
     }
@@ -57,6 +64,10 @@ struct SaveRouter: QuickEntrySaving {
         switch preview.kind {
         case .event:
             let draft = try eventDraft(from: preview)
+            if creationProfile?.requiresExplicitCalendarDestination == true,
+               draft.calendarID == nil {
+                throw QuickEntrySaveError.explicitDestinationRequired
+            }
             try validateEventAuthority(destinationID: draft.calendarID)
             let id = try calendar.createEvent(draft)
             assign(preview.categoryID, to: .event, externalID: id)
@@ -64,6 +75,10 @@ struct SaveRouter: QuickEntrySaving {
 
         case .task:
             let draft = try reminderDraft(from: preview)
+            if creationProfile?.requiresExplicitReminderDestination == true,
+               draft.listID == nil {
+                throw QuickEntrySaveError.explicitDestinationRequired
+            }
             try validateTaskAuthority(destinationID: draft.listID)
             let id = try reminders.createReminder(draft)
             assign(preview.categoryID, to: .task, externalID: id)
@@ -71,6 +86,17 @@ struct SaveRouter: QuickEntrySaving {
 
         case .routine:
             let draft = try routineDraft(from: preview)
+            if let creationProfile {
+                guard let routineProfileMutations else {
+                    throw RoutineProfileMutationError.savedProfileRequired
+                }
+                return .routine(
+                    id: try routineProfileMutations.create(
+                        draft: draft,
+                        profileID: creationProfile.profileID
+                    )
+                )
+            }
             return .routine(id: try routines.create(draft))
         }
     }

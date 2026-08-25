@@ -59,7 +59,7 @@ final class TaskEditorViewModel {
     /// still reacquires the provider item and destination immediately before it
     /// mutates either one.
     var canSave: Bool {
-        acceptsNewAction && formValidationError() == nil
+        acceptsNewAction && hasRequiredCreationDestination && formValidationError() == nil
     }
     var requiresDiscardConfirmation: Bool {
         guard !discardWasConfirmed else { return false }
@@ -76,6 +76,7 @@ final class TaskEditorViewModel {
     private let mode: Mode
     private let service: any RemindersServicing
     private let categories: (any CategoryRepository)?
+    private let requiresExplicitCreationDestination: Bool
     private let onCommitted: (TaskEditorCommit) -> Void
     private let onReconciliationNeeded: () -> Void
     private let initialForm: ReminderDraft
@@ -94,6 +95,7 @@ final class TaskEditorViewModel {
         snapshot: ReminderSnapshot?,
         service: any RemindersServicing,
         categories: (any CategoryRepository)?,
+        requiresExplicitCreationDestination: Bool = false,
         onCommitted: @escaping (TaskEditorCommit) -> Void,
         onReconciliationNeeded: @escaping () -> Void
     ) {
@@ -103,6 +105,7 @@ final class TaskEditorViewModel {
         self.currentSnapshot = snapshot
         self.service = service
         self.categories = categories
+        self.requiresExplicitCreationDestination = requiresExplicitCreationDestination
         self.onCommitted = onCommitted
         self.onReconciliationNeeded = onReconciliationNeeded
         self.initialForm = form
@@ -123,11 +126,18 @@ final class TaskEditorViewModel {
     static func creating(
         service: any RemindersServicing,
         savedDefaultListID: String? = nil,
+        creationProfile: CreationProfileContext? = nil,
         categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping (TaskEditorCommit) -> Void = { _ in }
     ) -> TaskEditorViewModel {
+        let preferredDefaultListID: String?
+        if let creationProfile {
+            preferredDefaultListID = creationProfile.defaultReminderListID
+        } else {
+            preferredDefaultListID = savedDefaultListID
+        }
         let selected = service.accessState == .granted
-            ? service.lists().first { $0.id == savedDefaultListID && $0.allowsContentModifications }
+            ? service.lists().first { $0.id == preferredDefaultListID && $0.allowsContentModifications }
             : nil
         return .init(
             mode: .create,
@@ -136,6 +146,7 @@ final class TaskEditorViewModel {
             snapshot: nil,
             service: service,
             categories: categories,
+            requiresExplicitCreationDestination: creationProfile?.requiresExplicitReminderDestination == true,
             onCommitted: onCommitted,
             onReconciliationNeeded: {}
         )
@@ -245,6 +256,11 @@ final class TaskEditorViewModel {
         }
     }
 
+    private var hasRequiredCreationDestination: Bool {
+        guard case .create = mode, requiresExplicitCreationDestination else { return true }
+        return form.listID != nil
+    }
+
     private func performSave() {
         guard acceptsNewAction else { return }
         guard service.accessState == .granted else { becomeUnavailable(.accessUnavailable); return }
@@ -344,6 +360,12 @@ final class TaskEditorViewModel {
     }
 
     private func validateExplicitDestination() -> Bool {
+        if case .create = mode,
+           requiresExplicitCreationDestination,
+           form.listID == nil {
+            phase = .failed(.save, .invalidDestination)
+            return false
+        }
         guard let id = form.listID else { return true }
         guard service.lists().contains(where: { $0.id == id && $0.allowsContentModifications }) else {
             phase = .failed(.save, .invalidDestination)

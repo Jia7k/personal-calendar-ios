@@ -7,6 +7,7 @@ struct RootTabView: View {
     let environment: AppEnvironment
     @State private var selection: RootTab = .calendar
     @State private var presentation: RootPresentation?
+    @State private var creationProfileChoice: CreationProfileChoice?
     @State private var refreshSignal: QuickEntryRefreshSignal?
     @State private var lifecycle: RootLifecycleController
     @Environment(\.scenePhase) private var scenePhase
@@ -54,10 +55,38 @@ struct RootTabView: View {
                         QuickEntrySheet(
                             model: session.model,
                             onDismiss: { self.presentation = nil },
-                            onRequestAccess: { kind in requestAccess(for: kind, model: session.model) },
+                            onRequestAccess: { kind in
+                                requestAccess(
+                                    for: kind,
+                                    profileID: session.profileID,
+                                    model: session.model
+                                )
+                            },
                             onOpenSettings: openSystemSettings
                         )
                     }
+                }
+                .confirmationDialog(
+                    "Create in Profile",
+                    isPresented: Binding(
+                        get: { creationProfileChoice != nil },
+                        set: { if !$0 { creationProfileChoice = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    if let choice = creationProfileChoice {
+                        ForEach(choice.profiles) { profile in
+                            Button {
+                                chooseCreationProfile(profile.id)
+                            } label: {
+                                Label(profile.name, systemImage: profile.symbolName)
+                            }
+                            .accessibilityIdentifier("quick-entry-profile-\(profile.id.uuidString)")
+                        }
+                    }
+                    Button("Cancel", role: .cancel) { creationProfileChoice = nil }
+                } message: {
+                    Text("Choose where this new item belongs. You can still change its calendar or list before saving.")
                 }
             } else { PermissionOnboardingView(environment: environment) }
         }
@@ -81,18 +110,45 @@ struct RootTabView: View {
     }
 
     private func presentQuickEntry() {
+        guard presentation == nil, creationProfileChoice == nil else { return }
+        let resolver = creationProfileResolver()
+        guard let resolution = try? resolver.resolve(
+            active: environment.profileSelection.activeIdentity
+        ) else { return }
+        switch resolution {
+        case let .ready(context):
+            presentQuickEntry(context: context)
+        case let .chooseSavedProfile(ids):
+            let profilesByID = Dictionary(
+                uniqueKeysWithValues: environment.profileSelection.profiles.map { ($0.id, $0) }
+            )
+            creationProfileChoice = CreationProfileChoice(
+                profiles: ids.compactMap { profilesByID[$0] }
+            )
+        }
+    }
+
+    private func chooseCreationProfile(_ id: UUID) {
+        creationProfileChoice = nil
+        guard let context = try? creationProfileResolver().resolve(chosen: id) else { return }
+        presentQuickEntry(context: context)
+    }
+
+    private func presentQuickEntry(context creationProfile: CreationProfileContext) {
         guard presentation == nil else { return }
         let context = environment.quickEntryContext()
         let options = QuickEntryDestinationOptions.resolve(
             calendar: environment.calendar,
             reminders: environment.reminders,
-            settings: environment.settings
+            context: creationProfile
         )
         let router = SaveRouter(
             calendar: environment.calendar,
             reminders: environment.reminders,
             routines: environment.routines,
             categories: environment.categories,
+            routineProfileMutations: environment.routineProfileMutations,
+            creationProfile: creationProfile,
             localCalendar: context.calendar
         )
         let model = QuickEntryViewModel(
@@ -101,15 +157,23 @@ struct RootTabView: View {
             context: context,
             destinations: options,
             categories: (try? environment.categories.list()) ?? [],
+            creationProfile: creationProfile,
             onCommitted: { outcome in
+                if case .routine = outcome {
+                    try? environment.profileSelection.refreshScope()
+                }
                 refreshSignal = .init(id: UUID(), outcome: outcome)
                 Task { await environment.rescheduleNotifications() }
             }
         )
-        presentation = .quickEntry(.init(model: model))
+        presentation = .quickEntry(.init(profileID: creationProfile.profileID, model: model))
     }
 
-    private func requestAccess(for kind: QuickEntryKind, model: QuickEntryViewModel) {
+    private func requestAccess(
+        for kind: QuickEntryKind,
+        profileID: UUID,
+        model: QuickEntryViewModel
+    ) {
         Task { @MainActor in
             switch kind {
             case .event:
@@ -119,11 +183,14 @@ struct RootTabView: View {
             case .routine:
                 break
             }
+            guard let creationProfile = try? creationProfileResolver().resolve(
+                chosen: profileID
+            ) else { return }
             model.updateDestinationOptions(
                 .resolve(
                     calendar: environment.calendar,
                     reminders: environment.reminders,
-                    settings: environment.settings
+                    context: creationProfile
                 )
             )
         }
@@ -132,12 +199,22 @@ struct RootTabView: View {
     private func refreshPresentedQuickEntryDestinations() {
         guard let presentation,
               case let .quickEntry(session) = presentation else { return }
+        guard let creationProfile = try? creationProfileResolver().resolve(
+            chosen: session.profileID
+        ) else { return }
         session.model.updateDestinationOptions(
             .resolve(
                 calendar: environment.calendar,
                 reminders: environment.reminders,
-                settings: environment.settings
+                context: creationProfile
             )
+        )
+    }
+
+    private func creationProfileResolver() -> CreationProfileResolver {
+        CreationProfileResolver(
+            profiles: environment.profileSelection.profiles,
+            resolveScope: { try environment.profileScopes.resolve($0) }
         )
     }
 
@@ -161,5 +238,11 @@ private enum RootPresentation: Identifiable {
 
 private struct RootQuickEntrySession: Identifiable {
     let id = UUID()
+    let profileID: UUID
     let model: QuickEntryViewModel
+}
+
+private struct CreationProfileChoice: Identifiable {
+    let id = UUID()
+    let profiles: [ProfileSnapshot]
 }
