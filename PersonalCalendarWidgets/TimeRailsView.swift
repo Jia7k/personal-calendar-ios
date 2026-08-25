@@ -16,7 +16,7 @@ struct TimeRailsView: View {
         snapshot: TimetableSnapshotV1,
         now: Date,
         showsStatusStrip: Bool,
-        profileName: String = "School Week"
+        profileName: String
     ) {
         self.snapshot = snapshot
         self.now = now
@@ -90,7 +90,7 @@ struct TimeRailsView: View {
         Group {
             switch snapshot.moment(at: now, calendar: localCalendar) {
             case .none:
-                Text("No more classes today")
+                Text("No more events today")
             case let .current(entry):
                 statusText(prefix: "NOW", entry: entry, boundary: entry.end, boundaryWord: "until")
             case let .next(entry), let .gap(entry):

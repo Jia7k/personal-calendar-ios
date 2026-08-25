@@ -5,14 +5,20 @@ import WidgetKit
 struct TimetableLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TimetableActivityAttributes.self) { context in
-            TimetableLockScreenView(snapshot: context.state.snapshot)
+            TimetableLockScreenView(
+                snapshot: context.state.snapshot,
+                profileName: context.attributes.profileName
+            )
                 .privacySensitive()
                 .activityBackgroundTint(.black.opacity(0.82))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    CourseStatusCode(snapshot: context.state.snapshot)
+                    CourseStatusCode(
+                        snapshot: context.state.snapshot,
+                        profileName: context.attributes.profileName
+                    )
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     CourseBoundaryTimer(snapshot: context.state.snapshot)
@@ -21,7 +27,10 @@ struct TimetableLiveActivity: Widget {
                     CourseStatusDetail(snapshot: context.state.snapshot)
                 }
             } compactLeading: {
-                CourseStatusCode(snapshot: context.state.snapshot)
+                CourseStatusCode(
+                    snapshot: context.state.snapshot,
+                    profileName: context.attributes.profileName
+                )
             } compactTrailing: {
                 CourseBoundaryTimer(snapshot: context.state.snapshot)
             } minimal: {
@@ -36,10 +45,16 @@ struct TimetableLiveActivity: Widget {
 
 private struct TimetableLockScreenView: View {
     let snapshot: TimetableSnapshotV1
+    let profileName: String
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            TimeRailsView(snapshot: snapshot, now: context.date, showsStatusStrip: true)
+            TimeRailsView(
+                snapshot: snapshot,
+                now: context.date,
+                showsStatusStrip: true,
+                profileName: profileName
+            )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .frame(height: 148)
@@ -49,9 +64,10 @@ private struct TimetableLockScreenView: View {
 
 private struct CourseStatusCode: View {
     let snapshot: TimetableSnapshotV1
+    let profileName: String
 
     var body: some View {
-        Text(moment.entry?.shortTitle ?? "SCHOOL")
+        Text(moment.entry?.shortTitle ?? profileName.uppercased())
             .font(.caption.weight(.heavy))
             .foregroundStyle(.white)
             .privacySensitive()
@@ -110,7 +126,7 @@ private struct CourseStatusDetail: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .privacySensitive()
         } else {
-            Text("No more classes today")
+            Text("No more events today")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

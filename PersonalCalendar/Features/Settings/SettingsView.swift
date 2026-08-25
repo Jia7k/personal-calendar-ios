@@ -37,10 +37,11 @@ struct SettingsView: View {
             }
             NotificationSettingsView(settings: environment.settings, coordinator: environment.notificationCoordinator, reschedule: environment.rescheduleNotifications)
             Section("Lock Screen") {
-                NavigationLink("School timetable") {
+                NavigationLink("Timetable") {
                     TimetableSettingsView(
                         snapshotCoordinator: environment.timetableSnapshotCoordinator,
                         activityCoordinator: environment.timetableLiveActivityCoordinator,
+                        initialProfileIdentity: environment.profileSelection.activeIdentity,
                         refresh: {
                             await environment.refreshCoordinator.refreshNow(reason: .localMutation)
                         }

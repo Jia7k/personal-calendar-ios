@@ -95,8 +95,9 @@ struct AppEnvironment {
                 let restoredIdentity = settings.activeProfileIdentity
                 try? profileSelection.reloadProfiles()
                 try? profileSelection.select(restoredIdentity)
-                if let snapshot = try? timetableSnapshotCoordinator.refresh(failClosed: true) {
-                    Task { await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot) }
+                if (try? timetableSnapshotCoordinator.refresh(failClosed: true)) != nil,
+                   let catalog = timetableSnapshotCoordinator.latestCatalog {
+                    Task { await timetableLiveActivityCoordinator.reconcile(catalog: catalog) }
                 }
             }
         )
@@ -117,8 +118,9 @@ struct AppEnvironment {
             // EventKit currently exposes no authoritative all-item inventory. Never prune links from visible-range snapshots.
             cleanCategoryLinks: {},
             refreshTimetable: {
-                guard let snapshot = try? timetableSnapshotCoordinator.refresh() else { return }
-                await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot)
+                guard (try? timetableSnapshotCoordinator.refresh()) != nil,
+                      let catalog = timetableSnapshotCoordinator.latestCatalog else { return }
+                await timetableLiveActivityCoordinator.reconcile(catalog: catalog)
             },
             rescheduleNotifications: rescheduleNotifications
         ))
@@ -240,8 +242,9 @@ struct AppEnvironment {
                 let restoredIdentity = settings.activeProfileIdentity
                 try? profileSelection.reloadProfiles()
                 try? profileSelection.select(restoredIdentity)
-                if let snapshot = try? timetableSnapshotCoordinator.refresh(failClosed: true) {
-                    Task { await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot) }
+                if (try? timetableSnapshotCoordinator.refresh(failClosed: true)) != nil,
+                   let catalog = timetableSnapshotCoordinator.latestCatalog {
+                    Task { await timetableLiveActivityCoordinator.reconcile(catalog: catalog) }
                 }
             }
         )
@@ -261,8 +264,9 @@ struct AppEnvironment {
             refreshAgenda: { await agendaRefreshRegistry.refreshAll() },
             cleanCategoryLinks: {},
             refreshTimetable: {
-                guard let snapshot = try? timetableSnapshotCoordinator.refresh() else { return }
-                await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot)
+                guard (try? timetableSnapshotCoordinator.refresh()) != nil,
+                      let catalog = timetableSnapshotCoordinator.latestCatalog else { return }
+                await timetableLiveActivityCoordinator.reconcile(catalog: catalog)
             },
             rescheduleNotifications: rescheduleNotifications
         ))

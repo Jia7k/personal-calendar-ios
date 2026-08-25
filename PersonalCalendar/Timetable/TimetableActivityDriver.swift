@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 protocol TimetableActivityDriving: AnyObject {
     var activitiesEnabled: Bool { get }
-    func activityIDs() -> [String]
+    func activityDescriptors() -> [TimetableActivityDescriptor]
     func request(
         attributes: TimetableActivityAttributes,
         state: TimetableActivityAttributes.ContentState,
@@ -18,14 +18,21 @@ protocol TimetableActivityDriving: AnyObject {
     func end(id: String, immediately: Bool) async
 }
 
+struct TimetableActivityDescriptor: Equatable, Sendable {
+    let id: String
+    let attributes: TimetableActivityAttributes
+}
+
 @MainActor
 final class SystemTimetableActivityDriver: TimetableActivityDriving {
     var activitiesEnabled: Bool {
         ActivityAuthorizationInfo().areActivitiesEnabled
     }
 
-    func activityIDs() -> [String] {
-        Activity<TimetableActivityAttributes>.activities.map(\.id)
+    func activityDescriptors() -> [TimetableActivityDescriptor] {
+        Activity<TimetableActivityAttributes>.activities.map {
+            TimetableActivityDescriptor(id: $0.id, attributes: $0.attributes)
+        }
     }
 
     func request(
@@ -66,7 +73,7 @@ final class SystemTimetableActivityDriver: TimetableActivityDriving {
 @MainActor
 final class NoopTimetableActivityDriver: TimetableActivityDriving {
     var activitiesEnabled: Bool { false }
-    func activityIDs() -> [String] { [] }
+    func activityDescriptors() -> [TimetableActivityDescriptor] { [] }
 
     func request(
         attributes: TimetableActivityAttributes,

@@ -17,8 +17,9 @@ struct ProfilesSettingsView: View {
         let liveActivity = environment.timetableLiveActivityCoordinator
         let rescheduleNotifications = environment.rescheduleNotifications
         let rebuildTimetable: @MainActor (Bool) -> Void = { failClosed in
-            guard let snapshot = try? timetable.refresh(failClosed: failClosed) else { return }
-            Task { await liveActivity.reconcile(snapshot: snapshot) }
+            guard (try? timetable.refresh(failClosed: failClosed)) != nil,
+                  let catalog = timetable.latestCatalog else { return }
+            Task { await liveActivity.reconcile(catalog: catalog) }
         }
         _model = State(initialValue: ProfilesSettingsModel(
             repository: environment.profiles,
