@@ -4,6 +4,7 @@ struct TimeRailsView: View {
     let snapshot: TimetableSnapshotV1
     let now: Date
     let showsStatusStrip: Bool
+    let profileName: String
 
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
@@ -11,11 +12,24 @@ struct TimeRailsView: View {
     private let railStartHour = 9
     private let railEndHour = 18
 
+    init(
+        snapshot: TimetableSnapshotV1,
+        now: Date,
+        showsStatusStrip: Bool,
+        profileName: String = "School Week"
+    ) {
+        self.snapshot = snapshot
+        self.now = now
+        self.showsStatusStrip = showsStatusStrip
+        self.profileName = profileName
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             HStack {
-                Text("SCHOOL WEEK")
+                Text(profileName.uppercased())
                     .font(.caption2.weight(.bold))
+                    .lineLimit(1)
                 Spacer()
                 Text(snapshot.weekStart, format: .dateTime.month(.abbreviated).day())
                     .font(.caption2)

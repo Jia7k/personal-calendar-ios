@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 import WidgetKit
 
@@ -5,10 +6,14 @@ struct NextClassWidget: Widget {
     let kind = "NextClassWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: TimetableWidgetProvider()) { entry in
+        AppIntentConfiguration(
+            kind: kind,
+            intent: TimetableWidgetConfigurationIntent.self,
+            provider: TimetableWidgetProvider()
+        ) { entry in
             NextClassWidgetView(entry: entry)
-                .privacySensitive()
-                .redacted(reason: entry.snapshot.generatedAt == .distantPast ? .placeholder : [])
+                .privacySensitive(entry.containsPrivateData)
+                .redacted(reason: entry.isPlaceholder ? .placeholder : [])
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Next Class")
@@ -20,44 +25,68 @@ struct NextClassWidget: Widget {
 struct NextClassWidgetView: View {
     let entry: TimetableWidgetEntry
 
+    @ViewBuilder
     var body: some View {
-        if entry.snapshot.availability != .ready {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("SCHOOL TIMETABLE").font(.caption2.weight(.semibold))
-                Text("Open My Calendar to sync").font(.headline)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            content(for: entry.snapshot.moment(at: entry.date, calendar: localCalendar))
+        switch entry.content {
+        case .chooseProfile:
+            message(title: "TIMETABLE", detail: "Choose a profile")
+        case .profileDeleted:
+            message(title: "TIMETABLE", detail: "Choose another profile")
+        case let .calendarAccessRequired(profileName):
+            message(title: profileName, detail: "Allow Calendar access")
+        case let .emptyProfile(profileName):
+            message(title: profileName, detail: "No calendars in this profile")
+        case let .noClasses(profileName):
+            message(title: profileName, detail: "No classes this week")
+        case let .ready(profileName, snapshot):
+            content(
+                for: snapshot.moment(at: entry.date, calendar: calendar(for: snapshot)),
+                profileName: profileName
+            )
         }
     }
 
     @ViewBuilder
-    private func content(for moment: TimetableMoment) -> some View {
+    private func content(for moment: TimetableMoment, profileName: String) -> some View {
         switch moment {
         case .none:
-            VStack(alignment: .leading, spacing: 2) {
-                Text("SCHOOL DAY").font(.caption2.weight(.semibold))
-                Text("No more classes").font(.headline)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            message(title: profileName, detail: "No more classes")
         case let .current(value):
-            classContent(label: "NOW", value: value, showsCountdown: true)
+            classContent(
+                profileName: profileName,
+                label: "NOW",
+                value: value,
+                showsCountdown: true
+            )
         case let .next(value), let .gap(value):
-            classContent(label: "NEXT", value: value, showsCountdown: false)
+            classContent(
+                profileName: profileName,
+                label: "NEXT",
+                value: value,
+                showsCountdown: false
+            )
         }
     }
 
-    private func classContent(label: String, value: TimetableEntry, showsCountdown: Bool) -> some View {
+    private func classContent(
+        profileName: String,
+        label: String,
+        value: TimetableEntry,
+        showsCountdown: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 5) {
-                Text(label).font(.caption2.weight(.bold))
+                Text(profileName.uppercased())
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                Text(label)
                 if showsCountdown {
-                    Text(value.end, style: .timer).font(.caption2.monospacedDigit())
+                    Text(value.end, style: .timer).monospacedDigit()
                 } else {
-                    Text(value.start, style: .time).font(.caption2.monospacedDigit())
+                    Text(value.start, style: .time).monospacedDigit()
                 }
             }
+            .font(.caption2.weight(.bold))
             Text(value.title).font(.headline).lineLimit(1)
             if let location = value.location {
                 Text(location).font(.caption).lineLimit(1)
@@ -66,9 +95,22 @@ struct NextClassWidgetView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var localCalendar: Calendar {
+    private func message(title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+            Text(detail)
+                .font(.headline)
+                .minimumScaleFactor(0.8)
+                .lineLimit(2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func calendar(for snapshot: TimetableSnapshotV1) -> Calendar {
         var value = Calendar(identifier: .gregorian)
-        value.timeZone = TimeZone(identifier: entry.snapshot.timeZoneIdentifier) ?? .current
+        value.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .current
         return value
     }
 }

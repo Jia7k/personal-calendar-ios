@@ -1,51 +1,104 @@
+import AppIntents
 import Foundation
 import WidgetKit
 
-struct TimetableWidgetEntry: TimelineEntry {
-    let date: Date
-    let snapshot: TimetableSnapshotV1
+enum TimetableWidgetContent: Hashable, Sendable {
+    case chooseProfile
+    case profileDeleted
+    case calendarAccessRequired(profileName: String)
+    case emptyProfile(profileName: String)
+    case noClasses(profileName: String)
+    case ready(profileName: String, snapshot: TimetableSnapshotV1)
 }
 
-struct TimetableWidgetProvider: TimelineProvider {
+struct TimetableWidgetEntry: TimelineEntry {
+    let date: Date
+    let content: TimetableWidgetContent
+
+    var isPlaceholder: Bool {
+        guard case let .ready(_, snapshot) = content else { return false }
+        return snapshot.generatedAt == .distantPast
+    }
+
+    var containsPrivateData: Bool {
+        guard case let .ready(_, snapshot) = content else { return false }
+        return !snapshot.entries.isEmpty
+    }
+}
+
+struct TimetableWidgetProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> TimetableWidgetEntry {
         let now = Date()
-        return TimetableWidgetEntry(date: now, snapshot: placeholderSnapshot(now: now))
+        return TimetableWidgetEntry(
+            date: now,
+            content: .ready(profileName: "School", snapshot: placeholderSnapshot(now: now))
+        )
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (TimetableWidgetEntry) -> Void) {
+    func snapshot(
+        for configuration: TimetableWidgetConfigurationIntent,
+        in context: Context
+    ) async -> TimetableWidgetEntry {
         let now = Date()
-        completion(TimetableWidgetEntry(date: now, snapshot: loadSnapshot(now: now, placeholder: context.isPreview)))
+        if context.isPreview { return placeholder(in: context) }
+        return TimetableWidgetEntry(date: now, content: loadContent(configuration: configuration))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<TimetableWidgetEntry>) -> Void) {
+    func timeline(
+        for configuration: TimetableWidgetConfigurationIntent,
+        in context: Context
+    ) async -> Timeline<TimetableWidgetEntry> {
         let now = Date()
-        let snapshot = loadSnapshot(now: now, placeholder: false)
+        let content = loadContent(configuration: configuration)
+        guard case let .ready(_, snapshot) = content else {
+            return Timeline(
+                entries: [TimetableWidgetEntry(date: now, content: content)],
+                policy: .never
+            )
+        }
         let calendar = calendar(for: snapshot)
         let dates = TimetableTimelineBuilder(calendar: calendar).refreshDates(snapshot: snapshot, now: now)
-        completion(Timeline(entries: dates.map { TimetableWidgetEntry(date: $0, snapshot: snapshot) }, policy: .atEnd))
+        return Timeline(
+            entries: dates.map { TimetableWidgetEntry(date: $0, content: content) },
+            policy: .atEnd
+        )
     }
 
-    private func loadSnapshot(now: Date, placeholder: Bool) -> TimetableSnapshotV1 {
-        if placeholder { return placeholderSnapshot(now: now) }
-        return (try? TimetableSnapshotStore.appGroup().read()) ?? unavailableSnapshot(now: now)
+    private func loadContent(
+        configuration: TimetableWidgetConfigurationIntent
+    ) -> TimetableWidgetContent {
+        guard let configuredProfile = configuration.profile else { return .chooseProfile }
+        guard let identity = ProfileIdentity(storageKey: configuredProfile.id) else {
+            return .profileDeleted
+        }
+        guard let catalog = try? TimetableWidgetCatalogStore.appGroup().read() else {
+            return .profileDeleted
+        }
+        let profileName = catalog.profile(for: identity)?.name ?? configuredProfile.name
+
+        switch TimetableWidgetSelectionResolver.resolve(identity, in: catalog) {
+        case .chooseProfile:
+            return .chooseProfile
+        case .profileDeleted:
+            return .profileDeleted
+        case .calendarAccessRequired:
+            return .calendarAccessRequired(profileName: profileName)
+        case .emptyProfile:
+            return .emptyProfile(profileName: profileName)
+        case .noClasses:
+            return .noClasses(profileName: profileName)
+        case let .ready(snapshot):
+            guard !snapshot.entries.isEmpty else {
+                return .noClasses(profileName: profileName)
+            }
+            return .ready(profileName: profileName, snapshot: snapshot)
+        }
     }
 
     private func calendar(for snapshot: TimetableSnapshotV1) -> Calendar {
         var value = Calendar(identifier: .gregorian)
         value.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .current
         return value
-    }
-
-    private func unavailableSnapshot(now: Date) -> TimetableSnapshotV1 {
-        let calendar = Calendar.current
-        return TimetableSnapshotV1(
-            version: TimetableSnapshotV1.currentVersion,
-            availability: .calendarAccessRequired,
-            generatedAt: now,
-            weekStart: calendar.startOfDay(for: now),
-            timeZoneIdentifier: calendar.timeZone.identifier,
-            entries: []
-        )
     }
 
     private func placeholderSnapshot(now: Date) -> TimetableSnapshotV1 {
