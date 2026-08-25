@@ -7,6 +7,7 @@ struct AppEnvironment {
     let calendar: any CalendarServicing
     let reminders: any RemindersServicing
     let routines: any RoutineRepository
+    let routineProfileMutations: any RoutineProfileMutating
     let categories: any CategoryRepository
     let profiles: any ProfileRepository
     let profileScopes: ProfileScopeResolver
@@ -37,6 +38,10 @@ struct AppEnvironment {
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
         let routines = SwiftDataRoutineRepository(context: container.mainContext)
         let profiles = SwiftDataProfileRepository(context: container.mainContext)
+        let routineProfileMutations = RoutineProfileMutationCoordinator(
+            context: container.mainContext,
+            routines: routines
+        )
         let profileMigration = ProfileMigrationCoordinator(
             profiles: profiles,
             calendar: calendar,
@@ -106,6 +111,7 @@ struct AppEnvironment {
             calendar: calendar,
             reminders: reminders,
             routines: routines,
+            routineProfileMutations: routineProfileMutations,
             categories: categories,
             profiles: profiles,
             profileScopes: profileScopes,
@@ -157,6 +163,10 @@ struct AppEnvironment {
         let settings = AppSettingsStore(defaults: .ephemeral)
         let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"))
         let profiles = SwiftDataProfileRepository(context: container.mainContext)
+        let routineProfileMutations = DemoRoutineProfileMutationAdapter(
+            routines: routines,
+            profiles: profiles
+        )
         let profileMigration = ProfileMigrationCoordinator(
             profiles: profiles,
             calendar: calendar,
@@ -230,6 +240,7 @@ struct AppEnvironment {
             calendar: calendar,
             reminders: reminders,
             routines: routines,
+            routineProfileMutations: routineProfileMutations,
             categories: categories,
             profiles: profiles,
             profileScopes: profileScopes,

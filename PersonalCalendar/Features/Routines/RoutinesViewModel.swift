@@ -36,13 +36,49 @@ final class RoutinesViewModel {
     }
     private(set) var isLoading = false
     private(set) var mutatingIDs: Set<UUID> = []
-    private let repository: any RoutineRepository; private let calendar: Calendar; private let now: () -> Date
+    private let repository: any RoutineRepository
+    @ObservationIgnored private let routineProfileMutations: (any RoutineProfileMutating)?
+    @ObservationIgnored private let selectedProfileID: @MainActor () -> UUID?
+    @ObservationIgnored private let onProfileMembershipChanged: @MainActor () -> Void
+    private let calendar: Calendar
+    private let now: () -> Date
     private let rescheduleNotifications: @MainActor @Sendable () async -> Void
     private var confirmedCompletedDays: [UUID: Set<LocalDay>] = [:]
     private var actionToken = 0
     @ObservationIgnored private var lastQuickEntryRefreshID: UUID?
 
-    init(repository: any RoutineRepository, calendar: Calendar = .current, now: @escaping () -> Date = { .now }, rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void = {}) { self.repository = repository; self.calendar = calendar; self.now = now; self.rescheduleNotifications = rescheduleNotifications }
+    init(
+        repository: any RoutineRepository,
+        calendar: Calendar = .current,
+        now: @escaping () -> Date = { .now },
+        rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void = {}
+    ) {
+        self.repository = repository
+        routineProfileMutations = nil
+        selectedProfileID = { nil }
+        onProfileMembershipChanged = {}
+        self.calendar = calendar
+        self.now = now
+        self.rescheduleNotifications = rescheduleNotifications
+    }
+
+    init(
+        repository: any RoutineRepository,
+        routineProfileMutations: any RoutineProfileMutating,
+        selectedProfileID: @escaping @MainActor () -> UUID?,
+        onProfileMembershipChanged: @escaping @MainActor () -> Void = {},
+        calendar: Calendar = .current,
+        now: @escaping () -> Date = { .now },
+        rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void = {}
+    ) {
+        self.repository = repository
+        self.routineProfileMutations = routineProfileMutations
+        self.selectedProfileID = selectedProfileID
+        self.onProfileMembershipChanged = onProfileMembershipChanged
+        self.calendar = calendar
+        self.now = now
+        self.rescheduleNotifications = rescheduleNotifications
+    }
     var currentDay: LocalDay { LocalDay(date: now(), calendar: calendar) }
     var weekdayOrder: [Int] { (0..<7).map { ((calendar.firstWeekday - 1 + $0) % 7) + 1 } }
     func weekdayName(_ weekday: Int) -> String { calendar.weekdaySymbols[weekday - 1] }
@@ -90,7 +126,26 @@ final class RoutinesViewModel {
     func create(_ draft: RoutineDraft) -> Bool {
         guard valid(draft) else { failEditor(.create, draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
         let clean = normalized(draft)
-        do { let id = try repository.create(clean); clearEditorFailure(matching: .create); insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false, categoryID: clean.categoryID), completed: [], day: currentDay)); reload(savedMutation: true); refreshNotifications(); return true } catch { failEditor(.create, draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
+        do {
+            let id: UUID
+            if let routineProfileMutations {
+                guard let profileID = selectedProfileID() else {
+                    throw RoutineProfileMutationError.savedProfileRequired
+                }
+                id = try routineProfileMutations.create(draft: clean, profileID: profileID)
+            } else {
+                id = try repository.create(clean)
+            }
+            clearEditorFailure(matching: .create)
+            insert(rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: false, isArchived: false, categoryID: clean.categoryID), completed: [], day: currentDay))
+            reload(savedMutation: true)
+            if routineProfileMutations != nil { onProfileMembershipChanged() }
+            refreshNotifications()
+            return true
+        } catch {
+            failEditor(.create, draft: clean, message: "Your routine was not saved. Edit it and try again.")
+            return false
+        }
     }
     func update(id: UUID, draft: RoutineDraft) -> Bool {
         guard valid(draft), let existing = row(id) else { failEditor(.update(id), draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
@@ -111,10 +166,15 @@ final class RoutinesViewModel {
         mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         let operation = RoutineActionOperation.delete(id)
         do {
-            try repository.delete(id: id)
+            if let routineProfileMutations {
+                try routineProfileMutations.delete(id: id)
+            } else {
+                try repository.delete(id: id)
+            }
             clearActionRecovery(targetID: id); clearEditorFailure(matching: .update(id))
             active.removeAll { $0.id == id }; archived.removeAll { $0.id == id }; confirmedCompletedDays[id] = nil
             reload(savedMutation: true)
+            if routineProfileMutations != nil { onProfileMembershipChanged() }
             refreshNotifications()
             return true
         } catch { failAction(operation, message: "Your routine was not deleted. Try again. The routine and its completion history are still safe on this iPhone."); return false }

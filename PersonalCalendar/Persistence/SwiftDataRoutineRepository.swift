@@ -18,9 +18,8 @@ final class SwiftDataRoutineRepository: RoutineRepository {
     }
 
     func create(_ draft: RoutineDraft) throws -> UUID {
-        let draft = try normalized(draft)
-        let record = RoutineRecord(draft: draft)
-        context.insert(record)
+        let record = try makeRecord(for: draft)
+        insertWithoutSaving(record)
         try context.save()
         return record.id
     }
@@ -48,14 +47,7 @@ final class SwiftDataRoutineRepository: RoutineRepository {
     }
 
     func delete(id: UUID) throws {
-        let record = try routine(id: id)
-        let completionDescriptor = FetchDescriptor<RoutineCompletionRecord>(
-            predicate: #Predicate { $0.routineID == id }
-        )
-        for completion in try context.fetch(completionDescriptor) {
-            context.delete(completion)
-        }
-        context.delete(record)
+        try deleteWithoutSaving(id: id)
         try context.save()
     }
 
@@ -92,6 +84,25 @@ final class SwiftDataRoutineRepository: RoutineRepository {
         return Set(try context.fetch(descriptor).map { record in
             LocalDay(year: record.year, month: record.month, day: record.day)
         })
+    }
+
+    func makeRecord(for draft: RoutineDraft) throws -> RoutineRecord {
+        RoutineRecord(draft: try normalized(draft))
+    }
+
+    func insertWithoutSaving(_ record: RoutineRecord) {
+        context.insert(record)
+    }
+
+    func deleteWithoutSaving(id: UUID) throws {
+        let record = try routine(id: id)
+        let completionDescriptor = FetchDescriptor<RoutineCompletionRecord>(
+            predicate: #Predicate { $0.routineID == id }
+        )
+        for completion in try context.fetch(completionDescriptor) {
+            context.delete(completion)
+        }
+        context.delete(record)
     }
 
     private func routine(id: UUID) throws -> RoutineRecord {

@@ -123,6 +123,7 @@
 		AF7C9FF4EC19C5921E08DF6A /* QuickEntryPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73BB5B46213314A1766A96CA /* QuickEntryPreview.swift */; };
 		B0A493DA47E0A15A4F194AD2 /* TimetableLiveActivityCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2747FB88388E16E398FE474 /* TimetableLiveActivityCoordinatorTests.swift */; };
 		B24681A4D06EE60A60149AE4 /* RoutineEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97BCFF23F6E67827A782E2A /* RoutineEditorView.swift */; };
+		B725C64256C97782027C43E8 /* RoutineProfileMutationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4359A0D244D360CE1966EC0 /* RoutineProfileMutationCoordinator.swift */; };
 		B8267D7E960D5A4A2D52D8BE /* TimetableSnapshotBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B118E633BA21B7BD5EBB303 /* TimetableSnapshotBuilderTests.swift */; };
 		B86E720D087E56010028276A /* RuleBasedQuickEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B52C8A386EC9982A48F656 /* RuleBasedQuickEntryParser.swift */; };
 		BB5CBCDF43C332E840CB627B /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B88E152BB724F5C32324CEE /* NotificationCoordinator.swift */; };
@@ -146,6 +147,7 @@
 		E3F00C8B2BE2A11B793C24CB /* CalendarServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */; };
 		E9AF60A9B0B2B3224BC25DB5 /* EventKitMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C30CD53CF9716208915AEEB /* EventKitMutationTests.swift */; };
 		EA109F1C24B3F290A8494F8F /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0301807D2E3D787BF7934E52 /* Recurrence.swift */; };
+		EA2311E5C3E2AED91933670F /* RoutineProfileMutationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE194D5D8177DBC3B3BBB94E /* RoutineProfileMutationCoordinatorTests.swift */; };
 		EB75D60C51870941DFF5003D /* CalendarEventSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */; };
 		EDA3E28A2B9595DD7DF8047A /* TimetableWidgetProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AAB3B87DA2D8D62E276B6F9 /* TimetableWidgetProvider.swift */; };
 		F025561331FF3463890E05E9 /* LocalDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC500C0ADDC6ACCF98F33F62 /* LocalDay.swift */; };
@@ -324,7 +326,9 @@
 		C2747FB88388E16E398FE474 /* TimetableLiveActivityCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableLiveActivityCoordinatorTests.swift; sourceTree = "<group>"; };
 		C4915ADDAF699A819650A494 /* FakesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakesTests.swift; sourceTree = "<group>"; };
 		CB967637C56AFC66EA20405A /* DayTrayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTrayView.swift; sourceTree = "<group>"; };
+		CE194D5D8177DBC3B3BBB94E /* RoutineProfileMutationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineProfileMutationCoordinatorTests.swift; sourceTree = "<group>"; };
 		CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarServicing.swift; sourceTree = "<group>"; };
+		D4359A0D244D360CE1966EC0 /* RoutineProfileMutationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineProfileMutationCoordinator.swift; sourceTree = "<group>"; };
 		D910FAA4F4E12A2C52F5ADB5 /* ProfileRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileRecord.swift; sourceTree = "<group>"; };
 		DB5198B0025A74BC69D26436 /* TaskEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditorView.swift; sourceTree = "<group>"; };
 		DB9A9562279429E312F626F7 /* CalendarViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarViewModelTests.swift; sourceTree = "<group>"; };
@@ -420,6 +424,7 @@
 				D910FAA4F4E12A2C52F5ADB5 /* ProfileRecord.swift */,
 				55C0E124762C7E50A80F0ECF /* ProfileRepository.swift */,
 				29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */,
+				D4359A0D244D360CE1966EC0 /* RoutineProfileMutationCoordinator.swift */,
 				0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */,
 				E02776B6366CB5D539044404 /* RoutineRepository.swift */,
 				E9227EB5684B6167116F04A6 /* SwiftDataCategoryRepository.swift */,
@@ -729,6 +734,7 @@
 				258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */,
 				98D0B42FE22A2EBACDFAB6C8 /* ProfileSelectionControllerTests.swift */,
 				62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */,
+				CE194D5D8177DBC3B3BBB94E /* RoutineProfileMutationCoordinatorTests.swift */,
 			);
 			path = Profiles;
 			sourceTree = "<group>";
@@ -1109,6 +1115,7 @@
 				3E3144568AB324AA37718A47 /* RootTabView.swift in Sources */,
 				71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */,
 				B24681A4D06EE60A60149AE4 /* RoutineEditorView.swift in Sources */,
+				B725C64256C97782027C43E8 /* RoutineProfileMutationCoordinator.swift in Sources */,
 				85AB5DCA3D670D2D1B4F7F5C /* RoutineRecord.swift in Sources */,
 				2D98665810C521F28F1AE1CD /* RoutineRepository.swift in Sources */,
 				F87E7C5DE0847CD2644D39EF /* RoutineSnapshot.swift in Sources */,
@@ -1179,6 +1186,7 @@
 				5DB55CBEA8727BFCC3C1F050 /* ProfileSettingsStateTests.swift in Sources */,
 				DD4D840C121A997E6864D136 /* QuickEntryViewModelTests.swift in Sources */,
 				874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */,
+				EA2311E5C3E2AED91933670F /* RoutineProfileMutationCoordinatorTests.swift in Sources */,
 				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,
 				39290C76AB5EB3BBBC7ED042 /* RuleBasedQuickEntryParserTests.swift in Sources */,
 				BB782DCDAC7E289308C76830 /* SaveRouterTests.swift in Sources */,

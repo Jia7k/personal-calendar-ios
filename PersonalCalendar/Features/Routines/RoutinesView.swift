@@ -14,7 +14,17 @@ struct RoutinesView: View {
         revision: Int = 0,
         quickEntryRefresh: QuickEntryRefreshSignal? = nil
     ) {
-        _model = State(initialValue: RoutinesViewModel(repository: environment.routines, rescheduleNotifications: environment.rescheduleNotifications))
+        let selection = environment.profileSelection
+        _model = State(initialValue: RoutinesViewModel(
+            repository: environment.routines,
+            routineProfileMutations: environment.routineProfileMutations,
+            selectedProfileID: {
+                guard case let .saved(id) = selection.activeIdentity else { return nil }
+                return id
+            },
+            onProfileMembershipChanged: { try? selection.refreshScope() },
+            rescheduleNotifications: environment.rescheduleNotifications
+        ))
         categories = (try? environment.categories.list()) ?? []
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh

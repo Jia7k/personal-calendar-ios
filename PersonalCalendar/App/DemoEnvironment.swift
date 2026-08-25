@@ -468,6 +468,41 @@ final class DemoRoutineRepository: RoutineRepository {
 }
 
 @MainActor
+final class DemoRoutineProfileMutationAdapter: RoutineProfileMutating {
+    private let routines: DemoRoutineRepository
+    private let profiles: any ProfileRepository
+
+    init(routines: DemoRoutineRepository, profiles: any ProfileRepository) {
+        self.routines = routines
+        self.profiles = profiles
+    }
+
+    func create(draft: RoutineDraft, profileID: UUID) throws -> UUID {
+        let profile = try profiles.profile(id: profileID)
+        let routineID = try routines.create(draft)
+        try profiles.update(
+            id: profileID,
+            draft: ProfileDraft(
+                name: profile.name,
+                colorHex: profile.colorHex,
+                symbolName: profile.symbolName,
+                calendarIDs: profile.calendarIDs,
+                reminderListIDs: profile.reminderListIDs,
+                routineIDs: profile.routineIDs.union([routineID]),
+                defaultCalendarID: profile.defaultCalendarID,
+                defaultReminderListID: profile.defaultReminderListID
+            )
+        )
+        return routineID
+    }
+
+    func delete(id: UUID) throws {
+        try routines.delete(id: id)
+        try profiles.removeRoutineID(id)
+    }
+}
+
+@MainActor
 final class DemoNotificationAuthorizer: NotificationAuthorizing {
     private var state: AccessState
 
