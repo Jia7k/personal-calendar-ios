@@ -3,6 +3,7 @@ import UserNotifications
 @MainActor
 final class SystemNotificationScheduler: NotificationScheduling {
     private let center: UNUserNotificationCenter
+    private var replacementTail: Task<Void, Error>?
 
     init(center: UNUserNotificationCenter = .current()) {
         self.center = center
@@ -23,6 +24,18 @@ final class SystemNotificationScheduler: NotificationScheduling {
     }
 
     func replaceAppRequests(with requests: [LocalNotificationRequest]) async throws {
+        let previous = replacementTail
+        let replacement = Task { @MainActor [self] in
+            if let previous {
+                _ = try? await previous.value
+            }
+            try await replaceImmediately(with: requests)
+        }
+        replacementTail = replacement
+        try await replacement.value
+    }
+
+    private func replaceImmediately(with requests: [LocalNotificationRequest]) async throws {
         let ownedIdentifiers = await center.pendingNotificationRequests()
             .map(\.identifier)
             .filter(isAppOwned)

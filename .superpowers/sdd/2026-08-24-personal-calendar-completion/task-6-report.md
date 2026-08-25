@@ -58,3 +58,16 @@ GREEN output: `NotificationCoordinatorTests` executed 1 test with 0 failures; `T
 ## Commit
 
 Implementation: `b40039b7c5da2a3855754f0065565d5821b85a61` (`feat: add calm local notifications`).
+
+## Review follow-up
+
+- Serialized complete system-notification replacements through a task tail. A later reschedule waits for an earlier remove/add sequence before it reads, removes, and writes app-owned requests, so an older snapshot cannot re-add stale requests after a newer snapshot.
+- Source selection changes are tracked by Settings and invoke the existing `AppEnvironment.rescheduleNotifications` closure exactly once when Settings disappears. This refreshes the morning-summary snapshot after the content-selection owner has finished its work.
+
+Focused verification command:
+
+```sh
+xcodebuild test -project PersonalCalendar.xcodeproj -scheme PersonalCalendar -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:PersonalCalendarTests/NotificationCoordinatorTests
+```
+
+Focused verification output: `NotificationCoordinatorTests` executed 1 test with 0 failures; `TEST SUCCEEDED`.

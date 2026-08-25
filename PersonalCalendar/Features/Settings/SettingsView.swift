@@ -21,6 +21,7 @@ struct SettingsView: View {
     let onContentChanged: @MainActor () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var loading = true
+    @State private var sourceSelectionChanged = false
     init(environment: AppEnvironment, onContentChanged: @escaping @MainActor () -> Void = {}, openSystemSettings: @escaping @MainActor () -> Void = { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }) { self.environment = environment; self.onContentChanged = onContentChanged; self.openSystemSettings = openSystemSettings }
     var body: some View {
         NavigationStack { List {
@@ -29,8 +30,8 @@ struct SettingsView: View {
                 permission("Reminders", state: environment.permissions.remindersAccess, request: environment.permissions.requestReminders)
                 permission("Notifications", state: environment.permissions.notificationAccess, request: environment.permissions.requestNotifications)
             }
-            Section("Visible calendars") { ForEach(environment.calendar.calendars()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleCalendarIDs(availableIDs: Set(environment.calendar.calendars().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleCalendar(id: value.id, availableIDs: Set(environment.calendar.calendars().map(\.id))); onContentChanged() })) } }
-            Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))); onContentChanged() })) } }
+            Section("Visible calendars") { ForEach(environment.calendar.calendars()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleCalendarIDs(availableIDs: Set(environment.calendar.calendars().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleCalendar(id: value.id, availableIDs: Set(environment.calendar.calendars().map(\.id))); sourceSelectionChanged = true; onContentChanged() })) } }
+            Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))); sourceSelectionChanged = true; onContentChanged() })) } }
             defaults
             NotificationSettingsView(settings: environment.settings, coordinator: environment.notificationCoordinator, reschedule: environment.rescheduleNotifications)
             Section("Organization") {
@@ -42,7 +43,7 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings-categories")
             }
-        }.navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false } }
+        }.navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false }.onDisappear { guard sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.rescheduleNotifications() } } }
     }
     @ViewBuilder private var defaults: some View {
         let calendars = SourceDescriptorOrdering.calendars(environment.calendar.calendars().filter(\.allowsContentModifications))
