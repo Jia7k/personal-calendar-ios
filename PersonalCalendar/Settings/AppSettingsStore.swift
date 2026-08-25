@@ -25,6 +25,10 @@ final class AppSettingsStore {
         static let listsExplicit = "selectedReminderListIDsAreExplicit"
         static let onboarding = "didCompleteOnboarding"
         static let categoriesSeeded = "didSeedCategories"
+        static let morningSummaryEnabled = "morningSummaryEnabled"
+        static let morningSummaryHour = "morningSummaryHour"
+        static let morningSummaryMinute = "morningSummaryMinute"
+        static let showNextItemOnLockScreen = "showNextItemOnLockScreen"
     }
 
     private let defaults: UserDefaults
@@ -34,6 +38,10 @@ final class AppSettingsStore {
     private(set) var defaultReminderListID: String?
     var didCompleteOnboarding: Bool { didSet { defaults.set(didCompleteOnboarding, forKey: Key.onboarding) } }
     var didSeedCategories: Bool { didSet { defaults.set(didSeedCategories, forKey: Key.categoriesSeeded) } }
+    var morningSummaryEnabled: Bool { didSet { defaults.set(morningSummaryEnabled, forKey: Key.morningSummaryEnabled) } }
+    var morningSummaryHour: Int { didSet { defaults.set(morningSummaryHour, forKey: Key.morningSummaryHour) } }
+    var morningSummaryMinute: Int { didSet { defaults.set(morningSummaryMinute, forKey: Key.morningSummaryMinute) } }
+    var showNextItemOnLockScreen: Bool { didSet { defaults.set(showNextItemOnLockScreen, forKey: Key.showNextItemOnLockScreen) } }
     private(set) var calendarSelectionIsExplicit: Bool
     private(set) var reminderSelectionIsExplicit: Bool
 
@@ -47,6 +55,10 @@ final class AppSettingsStore {
         defaultReminderListID = defaults.string(forKey: Key.defaultList)
         didCompleteOnboarding = defaults.bool(forKey: Key.onboarding)
         didSeedCategories = defaults.bool(forKey: Key.categoriesSeeded)
+        morningSummaryEnabled = defaults.bool(forKey: Key.morningSummaryEnabled)
+        morningSummaryHour = (defaults.object(forKey: Key.morningSummaryHour) as? Int).flatMap { (0...23).contains($0) ? $0 : nil } ?? 8
+        morningSummaryMinute = (defaults.object(forKey: Key.morningSummaryMinute) as? Int).flatMap { (0...59).contains($0) ? $0 : nil } ?? 0
+        showNextItemOnLockScreen = defaults.bool(forKey: Key.showNextItemOnLockScreen)
         calendarSelectionIsExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendarIDs.isEmpty
         reminderSelectionIsExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedReminderListIDs.isEmpty
         persistSelectionMarkers()

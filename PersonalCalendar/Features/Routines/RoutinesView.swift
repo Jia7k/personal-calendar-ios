@@ -14,7 +14,7 @@ struct RoutinesView: View {
         revision: Int = 0,
         quickEntryRefresh: QuickEntryRefreshSignal? = nil
     ) {
-        _model = State(initialValue: RoutinesViewModel(repository: environment.routines))
+        _model = State(initialValue: RoutinesViewModel(repository: environment.routines, rescheduleNotifications: environment.rescheduleNotifications))
         categories = (try? environment.categories.list()) ?? []
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh

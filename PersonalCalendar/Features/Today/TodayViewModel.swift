@@ -46,6 +46,7 @@ final class TodayViewModel {
     private let settings: AppSettingsStore
     private let calendarProvider: () -> Calendar
     private let now: () -> Date
+    private let rescheduleNotifications: @MainActor @Sendable () async -> Void
     private var loadGeneration = 0
     private var reminderRefreshGeneration = 0
 
@@ -56,7 +57,8 @@ final class TodayViewModel {
         composer: AgendaComposer,
         settings: AppSettingsStore,
         calendarProvider: @escaping () -> Calendar = { .current },
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void = {}
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -65,6 +67,7 @@ final class TodayViewModel {
         self.settings = settings
         self.calendarProvider = calendarProvider
         self.now = now
+        self.rescheduleNotifications = rescheduleNotifications
     }
 
     var localDay: LocalDay { LocalDay(date: now(), calendar: calendarProvider()) }
@@ -239,6 +242,7 @@ final class TodayViewModel {
                 routinesError = "Routine changes were saved, but routines could not be refreshed. Pull to try again."
             }
             compose(day: localDay, calendar: calendarProvider())
+            await rescheduleNotifications()
         } catch {
             routinesError = "This routine could not be updated. Pull to try again."
         }

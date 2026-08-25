@@ -11,6 +11,8 @@ struct AppEnvironment {
     let permissions: PermissionCoordinator
     let agendaComposer: AgendaComposer
     let settings: AppSettingsStore
+    let notificationCoordinator: NotificationCoordinator
+    let rescheduleNotifications: @MainActor @Sendable () async -> Void
     let reduceMotionOverride: Bool
     let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
 
@@ -22,6 +24,8 @@ struct AppEnvironment {
         let notifications = SystemNotificationAuthorizer()
         let settings = AppSettingsStore()
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
+        let routines = SwiftDataRoutineRepository(context: container.mainContext)
+        let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
         try! categories.seedDefaultsIfNeeded(settings: settings)
         let permissions = PermissionCoordinator(
             calendar: calendar,
@@ -31,12 +35,14 @@ struct AppEnvironment {
         return .init(
             calendar: calendar,
             reminders: reminders,
-            routines: SwiftDataRoutineRepository(context: container.mainContext),
+            routines: routines,
             categories: categories,
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
             settings: settings,
+            notificationCoordinator: notificationCoordinator,
+            rescheduleNotifications: makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator),
             reduceMotionOverride: false,
             quickEntryContext: { currentQuickEntryContext() }
         )
@@ -68,6 +74,8 @@ struct AppEnvironment {
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let settings = AppSettingsStore(defaults: .ephemeral)
+        let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"))
+        let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
         settings.didCompleteOnboarding = !arguments.contains("-show-onboarding")
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
         try! categories.seedDefaultsIfNeeded(settings: settings)
@@ -85,12 +93,14 @@ struct AppEnvironment {
         return .init(
             calendar: calendar,
             reminders: reminders,
-            routines: DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title")),
+            routines: routines,
             categories: categories,
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
             settings: settings,
+            notificationCoordinator: notificationCoordinator,
+            rescheduleNotifications: makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator),
             reduceMotionOverride: arguments.contains("-reduce-motion"),
             quickEntryContext: quickEntryContext
         )
@@ -102,6 +112,74 @@ struct AppEnvironment {
         calendar.timeZone = timeZone
         let locale = Locale.current
         return .init(now: Date(), calendar: calendar, locale: locale, timeZone: timeZone)
+    }
+
+    private static func makeNotificationRescheduler(
+        calendar: any CalendarServicing,
+        reminders: any RemindersServicing,
+        routines: any RoutineRepository,
+        composer: AgendaComposer,
+        settings: AppSettingsStore,
+        authorization: any NotificationAuthorizing,
+        coordinator: NotificationCoordinator
+    ) -> @MainActor @Sendable () async -> Void {
+        {
+            guard await authorization.accessState == .granted else {
+                await coordinator.reschedule(summary: nil, routines: [], completedDays: [:], now: .now, calendar: .current)
+                return
+            }
+
+            var localCalendar = Calendar.current
+            localCalendar.timeZone = .current
+            let now = Date()
+            let today = LocalDay(date: now, calendar: localCalendar)
+            let todaySummaryTime = localCalendar.date(
+                bySettingHour: settings.morningSummaryHour,
+                minute: settings.morningSummaryMinute,
+                second: 0,
+                of: today.startDate(in: localCalendar)
+            )
+            let summaryDay: LocalDay
+            if let todaySummaryTime, todaySummaryTime > now {
+                summaryDay = today
+            } else {
+                summaryDay = LocalDay(date: localCalendar.date(byAdding: .day, value: 1, to: today.startDate(in: localCalendar))!, calendar: localCalendar)
+            }
+
+            let routineSnapshots = (try? routines.list(includeArchived: false)) ?? []
+            var completedDays: [UUID: Set<LocalDay>] = [:]
+            for routine in routineSnapshots {
+                completedDays[routine.id] = (try? routines.completedDays(routineID: routine.id)) ?? []
+            }
+
+            let start = summaryDay.startDate(in: localCalendar)
+            let interval = DateInterval(start: start, end: localCalendar.date(byAdding: .day, value: 1, to: start)!)
+            let events: [CalendarEventSnapshot]
+            if calendar.accessState == .granted {
+                let availableIDs = Set(calendar.calendars().map(\.id))
+                let selectedIDs = availableIDs.isEmpty ? settings.selectedCalendarIDs : settings.visibleCalendarIDs(availableIDs: availableIDs)
+                events = settings.calendarSelectionIsExplicit && selectedIDs.isEmpty ? [] : (try? calendar.fetchEvents(in: interval, calendarIDs: selectedIDs)) ?? []
+            } else {
+                events = []
+            }
+            let taskSnapshots: [ReminderSnapshot]
+            if reminders.accessState == .granted {
+                let availableIDs = Set(reminders.lists().map(\.id))
+                let selectedIDs = availableIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: availableIDs)
+                taskSnapshots = settings.reminderSelectionIsExplicit && selectedIDs.isEmpty ? [] : (try? await reminders.fetchReminders(listIDs: selectedIDs)) ?? []
+            } else {
+                taskSnapshots = []
+            }
+            let completedRoutineIDs = Set(routineSnapshots.filter { completedDays[$0.id]?.contains(summaryDay) == true }.map(\.id))
+            let agenda = composer.compose(day: summaryDay, events: events, reminders: taskSnapshots, routines: routineSnapshots, completedRoutineIDs: completedRoutineIDs, includeOverdueTasks: false, calendar: localCalendar)
+            await coordinator.reschedule(
+                summary: .init(enabled: settings.morningSummaryEnabled, hour: settings.morningSummaryHour, minute: settings.morningSummaryMinute, day: summaryDay, agenda: agenda, showsNextTitle: settings.showNextItemOnLockScreen),
+                routines: routineSnapshots,
+                completedDays: completedDays,
+                now: now,
+                calendar: localCalendar
+            )
+        }
     }
 
     private static func fixedQuickEntryContext() -> QuickEntryParseContext {

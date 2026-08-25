@@ -15,7 +15,7 @@ struct TodayView: View {
         openSettings: @escaping @MainActor () -> Void = {}
     ) {
         self.environment = environment
-        _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings))
+        _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings, rescheduleNotifications: environment.rescheduleNotifications))
         self.openSettings = openSettings
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh

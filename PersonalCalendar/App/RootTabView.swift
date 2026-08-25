@@ -50,6 +50,7 @@ struct RootTabView: View {
             guard phase == .active else { return }
             Task {
                 await lifecycle.sceneBecameActive()
+                await environment.rescheduleNotifications()
                 refreshPresentedQuickEntryDestinations()
             }
         }
@@ -84,6 +85,7 @@ struct RootTabView: View {
             categories: (try? environment.categories.list()) ?? [],
             onCommitted: { outcome in
                 refreshSignal = .init(id: UUID(), outcome: outcome)
+                Task { await environment.rescheduleNotifications() }
             }
         )
         refreshAfterPresentationDismissal = false
