@@ -22,8 +22,8 @@ struct AgendaRow: View {
                 .buttonStyle(.borderless)
                 .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
                 .contentShape(Rectangle())
-                .accessibilityIdentifier(metadata.identifier)
-                .accessibilityLabel(metadata.label)
+                .accessibilityIdentifier(metadata)
+                .accessibilityLabel(AgendaAccessibilityDescription.build(for: item))
             } else {
                 primaryContent
                     .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
@@ -42,6 +42,7 @@ struct AgendaRow: View {
                 } else {
                     Text("Read-only").font(.caption).foregroundStyle(.secondary)
                         .accessibilityLabel("Read-only task")
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -69,7 +70,7 @@ struct AgendaRow: View {
         .background(categoryBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityDescription)
+        .accessibilityLabel(AgendaAccessibilityDescription.build(for: item))
     }
 
     private var categoryColor: Color? {
@@ -84,18 +85,12 @@ struct AgendaRow: View {
         }
     }
 
-    private var accessibilityDescription: String {
-        let base = "\(Self.sourceDescription(item.source)), \(item.title), \(timeDescription)"
-        guard let category = item.category else { return base }
-        return "\(base), category \(category.name)"
-    }
-
-    private var openMetadata: (identifier: String, label: String)? {
+    private var openMetadata: String? {
         switch item.origin {
         case let .event(id):
-            ("agenda-open-event-\(id)", "Open event \(item.title), \(timeDescription)")
+            ("agenda-open-event-\(id)")
         case let .reminder(id):
-            ("agenda-open-task-\(id)", "Open task \(item.title), \(timeDescription)")
+            ("agenda-open-task-\(id)")
         case .routine, .synthetic:
             nil
         }
@@ -110,26 +105,6 @@ struct AgendaRow: View {
     }
 
     private var sourceSymbol: String { switch item.source { case .event: "calendar"; case .task: "checkmark.circle"; case .routine: "repeat" } }
-    static func sourceDescription(_ source: AgendaSource) -> String {
-        switch source {
-        case .event: String(localized: "Event")
-        case .task: String(localized: "Task")
-        case .routine: String(localized: "Routine")
-        }
-    }
     private var sourceColor: Color { switch item.source { case .event: CalendarTheme.accent; case .task: .orange; case .routine: .purple } }
-    private var timeDescription: String {
-        switch item.placement {
-        case .allDay: String(localized: "All Day")
-        case let .timed(date): date.formatted(date: .omitted, time: .shortened)
-        case let .window(window):
-            switch window {
-            case .morning: String(localized: "Morning")
-            case .afternoon: String(localized: "Afternoon")
-            case .evening: String(localized: "Evening")
-            case .anytime: String(localized: "Anytime")
-            }
-        case .unscheduled: String(localized: "Priority")
-        }
-    }
+    private var timeDescription: String { AgendaAccessibilityDescription.scheduleDescription(item.placement) }
 }

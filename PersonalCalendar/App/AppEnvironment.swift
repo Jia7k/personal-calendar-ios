@@ -83,6 +83,7 @@ struct AppEnvironment {
             failFirstDelete: arguments.contains("-event-delete-fails-once"),
             multipleSources: arguments.contains("-demo-multiple-sources"),
             includeReadOnlySource: arguments.contains("-demo-editor-read-only"),
+            replacePrimaryEventWithReadOnly: arguments.contains("-read-only-event"),
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported")
         )

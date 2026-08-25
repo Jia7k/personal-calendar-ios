@@ -16,16 +16,18 @@ final class DemoCalendarService: CalendarServicing {
     private var shouldFailNextDelete: Bool
     private let multipleSources: Bool
     private let includeReadOnlySource: Bool
+    private let replacePrimaryEventWithReadOnly: Bool
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
         shouldFailNextDelete = failFirstDelete
         self.multipleSources = multipleSources
         self.includeReadOnlySource = includeReadOnlySource
+        self.replacePrimaryEventWithReadOnly = replacePrimaryEventWithReadOnly
         self.includeRecurringItems = includeRecurringItems
         self.includeUnsupportedItems = includeUnsupportedItems
         let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
@@ -33,13 +35,13 @@ final class DemoCalendarService: CalendarServicing {
             .init(
                 id: "demo-event",
                 mutationID: "demo-event",
-                title: "Coffee",
+                title: replacePrimaryEventWithReadOnly ? "Public holiday" : "Coffee",
                 start: start,
                 end: start.addingTimeInterval(3_600),
                 isAllDay: false,
-                calendarID: "demo-calendar",
-                calendarTitle: "Personal",
-                allowsModification: true,
+                calendarID: replacePrimaryEventWithReadOnly ? "demo-calendar-read-only" : "demo-calendar",
+                calendarTitle: replacePrimaryEventWithReadOnly ? "Read Only" : "Personal",
+                allowsModification: !replacePrimaryEventWithReadOnly,
                 hasRecurrence: false
             )
         ]
@@ -194,7 +196,7 @@ final class DemoCalendarService: CalendarServicing {
     private var descriptors: [CalendarDescriptor] {
         var values = [descriptor]
         if multipleSources { values.append(.init(id: "demo-calendar-work", title: "Work", colorHex: "#4868A8", allowsContentModifications: true)) }
-        if includeReadOnlySource { values.append(.init(id: "demo-calendar-read-only", title: "Read Only", colorHex: "#777777", allowsContentModifications: false)) }
+        if includeReadOnlySource || replacePrimaryEventWithReadOnly { values.append(.init(id: "demo-calendar-read-only", title: "Read Only", colorHex: "#777777", allowsContentModifications: false)) }
         return values
     }
 }

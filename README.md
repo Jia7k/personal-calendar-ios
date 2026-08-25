@@ -9,3 +9,14 @@ Run tests with `xcodegen generate && xcodebuild test -project PersonalCalendar.x
 Use the [foundation accessibility manual-QA checklist](docs/manual-qa/foundation-accessibility.md) for Dark Mode, Reduce Motion, VoiceOver, and Accessibility XXXL checks that automation cannot prove visually.
 
 The app stores events in Apple Calendar, tasks in Apple Reminders, and routines locally with SwiftData. It is local-only: no backend, account, analytics, or CloudKit entitlement.
+
+## Data ownership
+
+- Events remain in Apple Calendar.
+- Tasks remain in Apple Reminders.
+- Routines, completion history, categories, and preferences stay on this iPhone.
+- A manual backup contains only app-owned data.
+
+## Device installation
+
+Open `PersonalCalendar.xcodeproj`, choose your Personal Team under Signing & Capabilities, connect an iPhone running iOS 17 or later, and press Run. A free Personal Team installation may need to be renewed periodically.

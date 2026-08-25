@@ -83,7 +83,7 @@ struct DayTrayView: View {
                 .frame(minHeight: CalendarTheme.minimumTapSize)
                 .contentShape(Rectangle())
                 .accessibilityIdentifier("agenda-open-event-\(displayID)")
-                .accessibilityLabel("Open event \(item.title)")
+                .accessibilityLabel(AgendaAccessibilityDescription.build(for: item))
         case let .reminder(reminderID):
             HStack(spacing: 8) {
                 Button { onOpenItem(.reminder(id: reminderID)) } label: { trayRowContent(item, label: label) }
@@ -91,7 +91,7 @@ struct DayTrayView: View {
                     .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
                     .contentShape(Rectangle())
                     .accessibilityIdentifier("agenda-open-task-\(reminderID)")
-                    .accessibilityLabel("Open task \(item.title)")
+                    .accessibilityLabel(AgendaAccessibilityDescription.build(for: item))
                 if item.allowsModification {
                     Button { onSetTaskCompleted(item, !item.isCompleted) } label: {
                         Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -106,6 +106,8 @@ struct DayTrayView: View {
         case .routine, .synthetic:
             trayRowContent(item, label: label)
                 .frame(minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(AgendaAccessibilityDescription.build(for: item))
         }
     }
 
