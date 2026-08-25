@@ -92,7 +92,7 @@ The system controls vibrant rendering on the Lock Screen, so the widget cannot d
 
 ### Week Home Screen widget
 
-The `.systemMedium` widget shows the complete Monday-to-Friday week using the same Time Rails model. It may use the Harbor teal accent because Home Screen rendering supports richer color treatment. Tapping opens the Calendar tab.
+The `.systemMedium` widget shows the complete Monday-to-Friday week using the same Time Rails model. It may use the Harbor teal accent because Home Screen rendering supports richer color treatment. Tapping opens My Calendar.
 
 The widget refreshes from precomputed timeline boundaries and whenever the app rewrites the snapshot.
 
