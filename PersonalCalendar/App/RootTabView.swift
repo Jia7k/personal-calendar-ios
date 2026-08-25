@@ -23,22 +23,26 @@ struct RootTabView: View {
         }, refreshCoordinator: environment.refreshCoordinator))
     }
     var body: some View {
+        let contentRevision = AppContentRevision(
+            lifecycle: lifecycle.revision,
+            profileScope: environment.profileSelection.scopeRevision
+        )
         Group {
             if environment.settings.didCompleteOnboarding {
                 TabView(selection: $selection) {
-                    CalendarHomeView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
+                    CalendarHomeView(environment: environment, revision: contentRevision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Calendar", systemImage: "calendar") }
                         .tag(RootTab.calendar)
-                    TodayView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
+                    TodayView(environment: environment, revision: contentRevision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Today", systemImage: "sun.max") }
                         .tag(RootTab.today)
-                    TasksView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal)
+                    TasksView(environment: environment, revision: contentRevision, quickEntryRefresh: refreshSignal)
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Tasks", systemImage: "checklist") }
                         .tag(RootTab.tasks)
-                    RoutinesView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal)
+                    RoutinesView(environment: environment, revision: contentRevision, quickEntryRefresh: refreshSignal)
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Routines", systemImage: "repeat") }
                         .tag(RootTab.routines)

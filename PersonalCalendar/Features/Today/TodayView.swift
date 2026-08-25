@@ -6,17 +6,29 @@ struct TodayView: View {
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
-    private let revision: Int
+    private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
 
     init(
         environment: AppEnvironment,
-        revision: Int = 0,
+        revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil,
         openSettings: @escaping @MainActor () -> Void = {}
     ) {
         self.environment = environment
-        _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings, rescheduleNotifications: environment.rescheduleNotifications))
+        let profileScopes = environment.profileScopes
+        let profileSelection = environment.profileSelection
+        _model = State(initialValue: TodayViewModel(
+            calendar: environment.calendar,
+            reminders: environment.reminders,
+            routines: environment.routines,
+            composer: environment.agendaComposer,
+            settings: environment.settings,
+            currentScope: {
+                try profileScopes.resolve(profileSelection.activeIdentity)
+            },
+            rescheduleNotifications: environment.rescheduleNotifications
+        ))
         self.openSettings = openSettings
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh

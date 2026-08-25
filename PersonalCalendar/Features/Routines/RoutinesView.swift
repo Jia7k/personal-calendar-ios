@@ -6,12 +6,12 @@ struct RoutinesView: View {
     @State private var model: RoutinesViewModel
     @State private var editing: RoutineRowState?
     @State private var deleteRequest: DeleteRequest?
-    private let revision: Int
+    private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
     private let categories: [CategorySnapshot]
     init(
         environment: AppEnvironment,
-        revision: Int = 0,
+        revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil
     ) {
         let selection = environment.profileSelection
@@ -23,6 +23,7 @@ struct RoutinesView: View {
                 return id
             },
             onProfileMembershipChanged: { try? selection.refreshScope() },
+            currentScope: { try environment.profileScopes.resolve(selection.activeIdentity) },
             rescheduleNotifications: environment.rescheduleNotifications
         ))
         categories = (try? environment.categories.list()) ?? []
@@ -32,7 +33,8 @@ struct RoutinesView: View {
     var body: some View { NavigationStack { List {
         if let error = model.refreshErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry Refresh") { model.reload() }.frame(minWidth: 44, minHeight: 44) } }
         if let error = model.actionErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(actionRetryLabel) { if let target = model.resolveDeleteRetryTarget() { requestDelete(target) } else if model.failedActionOperation != nil { model.retryFailedAction() } }.frame(minWidth: 44, minHeight: 44) } }
-        Section("Active") { if model.active.isEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Use Add to create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
+        if model.isProfileEmpty { ContentUnavailableView("No routines in this profile", systemImage: "repeat", description: Text("Add routines to this profile in Settings.")) }
+        Section("Active") { if model.active.isEmpty && !model.isProfileEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Use Add to create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
     }
     .scrollContentBackground(.hidden)

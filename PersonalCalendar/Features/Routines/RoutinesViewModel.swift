@@ -35,15 +35,18 @@ final class RoutinesViewModel {
         return target
     }
     private(set) var isLoading = false
+    private(set) var isProfileEmpty = false
     private(set) var mutatingIDs: Set<UUID> = []
     private let repository: any RoutineRepository
     @ObservationIgnored private let routineProfileMutations: (any RoutineProfileMutating)?
     @ObservationIgnored private let selectedProfileID: @MainActor () -> UUID?
     @ObservationIgnored private let onProfileMembershipChanged: @MainActor () -> Void
+    @ObservationIgnored private let currentScope: (@MainActor () throws -> ProfileScope)?
     private let calendar: Calendar
     private let now: () -> Date
     private let rescheduleNotifications: @MainActor @Sendable () async -> Void
     private var confirmedCompletedDays: [UUID: Set<LocalDay>] = [:]
+    private var cachedScopeIdentity: ProfileIdentity?
     private var actionToken = 0
     @ObservationIgnored private var lastQuickEntryRefreshID: UUID?
 
@@ -57,6 +60,24 @@ final class RoutinesViewModel {
         routineProfileMutations = nil
         selectedProfileID = { nil }
         onProfileMembershipChanged = {}
+        currentScope = nil
+        self.calendar = calendar
+        self.now = now
+        self.rescheduleNotifications = rescheduleNotifications
+    }
+
+    init(
+        repository: any RoutineRepository,
+        currentScope: @escaping @MainActor () throws -> ProfileScope,
+        calendar: Calendar = .current,
+        now: @escaping () -> Date = { .now },
+        rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void = {}
+    ) {
+        self.repository = repository
+        routineProfileMutations = nil
+        selectedProfileID = { nil }
+        onProfileMembershipChanged = {}
+        self.currentScope = currentScope
         self.calendar = calendar
         self.now = now
         self.rescheduleNotifications = rescheduleNotifications
@@ -67,6 +88,7 @@ final class RoutinesViewModel {
         routineProfileMutations: any RoutineProfileMutating,
         selectedProfileID: @escaping @MainActor () -> UUID?,
         onProfileMembershipChanged: @escaping @MainActor () -> Void = {},
+        currentScope: (@MainActor () throws -> ProfileScope)? = nil,
         calendar: Calendar = .current,
         now: @escaping () -> Date = { .now },
         rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void = {}
@@ -75,6 +97,7 @@ final class RoutinesViewModel {
         self.routineProfileMutations = routineProfileMutations
         self.selectedProfileID = selectedProfileID
         self.onProfileMembershipChanged = onProfileMembershipChanged
+        self.currentScope = currentScope
         self.calendar = calendar
         self.now = now
         self.rescheduleNotifications = rescheduleNotifications
@@ -96,9 +119,29 @@ final class RoutinesViewModel {
 
     func reload(savedMutation: Bool = false) {
         isLoading = true; defer { isLoading = false }
+        let scope: ProfileScope?
+        do {
+            scope = try currentScope?()
+        } catch {
+            failClosedForUnknownScope()
+            refreshErrorMessage = savedMutation
+                ? "Your routine change was saved, but routines could not be refreshed. Pull to try again."
+                : "Your routines could not be loaded. Pull to try again."
+            return
+        }
+
+        prepareForLoad(scope)
+        if let scope, scope.routineIDs.isEmpty {
+            refreshErrorMessage = nil
+            return
+        }
+
         do {
             let reloadDay = currentDay
-            let snapshots = try repository.list(includeArchived: true)
+            let listed = try repository.list(includeArchived: true)
+            let snapshots = scope.map { captured in
+                listed.filter { captured.routineIDs.contains($0.id) }
+            } ?? listed
             var nextCompleted: [UUID: Set<LocalDay>] = [:]
             let staged = try snapshots.map { routine -> RoutineRowState in
                 let completed = try repository.completedDays(routineID: routine.id)
@@ -149,6 +192,7 @@ final class RoutinesViewModel {
     }
     func update(id: UUID, draft: RoutineDraft) -> Bool {
         guard valid(draft), let existing = row(id) else { failEditor(.update(id), draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
+        guard routineIsAuthorized(id) else { return false }
         let clean = normalized(draft)
         do { try repository.update(id: id, draft: clean); replace(existing, with: rowState(for: .init(id: id, title: clean.title, weekdays: clean.weekdays, window: clean.window, reminderHour: clean.reminderHour, reminderMinute: clean.reminderMinute, isPaused: existing.routine.isPaused, isArchived: existing.routine.isArchived, categoryID: clean.categoryID), completed: confirmedCompletedDays[id] ?? [], day: existing.representedDay)); clearEditorFailure(matching: .update(id)); reload(savedMutation: true); refreshNotifications(); return true } catch { failEditor(.update(id), draft: clean, message: "Your routine was not saved. Edit it and try again."); return false }
     }
@@ -162,7 +206,7 @@ final class RoutinesViewModel {
     func setPaused(id: UUID, paused: Bool) { if mutate(id, operation: .pause(id, paused), patch: { row in self.with(row, paused: paused) }, action: { try repository.setPaused(id: id, paused: paused) }) { refreshNotifications() } }
     func setArchived(id: UUID, archived: Bool) { if mutate(id, operation: .archive(id, archived), patch: { row in self.with(row, archived: archived) }, action: { try repository.setArchived(id: id, archived: archived) }) { refreshNotifications() } }
     @discardableResult func delete(id: UUID) -> Bool {
-        guard !mutatingIDs.contains(id), row(id) != nil else { return false }
+        guard !mutatingIDs.contains(id), row(id) != nil, routineIsAuthorized(id) else { return false }
         mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         let operation = RoutineActionOperation.delete(id)
         do {
@@ -195,9 +239,77 @@ final class RoutinesViewModel {
         do { try action(normalized(draft)); draftOnFailure = nil; reload(); return true } catch { draftOnFailure = draft; editorErrorMessage = "Your routine was not saved. Edit it and try again."; return false }
     }
     private func mutate(_ id: UUID, operation: RoutineActionOperation? = nil, patch: (RoutineRowState) -> RoutineRowState, action: () throws -> Void) -> Bool {
-        guard !mutatingIDs.contains(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
+        guard !mutatingIDs.contains(id), routineIsAuthorized(id) else { return false }; mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         guard let old = row(id) else { clearActionRecovery(targetID: id); refreshErrorMessage = "That routine is no longer available. Refresh routines to continue."; return false }
         do { try action(); if let operation { clearActionRecovery(targetID: operation.targetID) }; replace(old, with: patch(old)); reload(savedMutation: true); return true } catch { if let operation { failAction(operation, message: "Your routine was not changed. Try again.") }; return false }
+    }
+    private func prepareForLoad(_ scope: ProfileScope?) {
+        guard let scope else {
+            isProfileEmpty = false
+            return
+        }
+
+        isProfileEmpty = scope.routineIDs.isEmpty
+        if cachedScopeIdentity != scope.identity {
+            clearProfileContent()
+            refreshErrorMessage = nil
+        } else {
+            pruneContent(to: scope.routineIDs)
+        }
+        cachedScopeIdentity = scope.identity
+    }
+    private func routineIsAuthorized(_ id: UUID) -> Bool {
+        guard let currentScope else { return true }
+
+        let scope: ProfileScope
+        do {
+            scope = try currentScope()
+        } catch {
+            failClosedForUnknownScope()
+            refreshErrorMessage = "Your routines could not be loaded. Pull to try again."
+            return false
+        }
+
+        let identityMatches = cachedScopeIdentity == scope.identity
+        prepareForLoad(scope)
+        guard identityMatches, scope.routineIDs.contains(id) else {
+            clearActionRecovery(targetID: id)
+            if case let .update(failedID)? = failedEditorOperation, failedID == id {
+                failedEditorOperation = nil
+                draftOnFailure = nil
+                editorErrorMessage = nil
+            }
+            refreshErrorMessage = "Refresh routines before changing this routine."
+            return false
+        }
+        return true
+    }
+    private func pruneContent(to ids: Set<UUID>) {
+        active.removeAll { !ids.contains($0.id) }
+        archived.removeAll { !ids.contains($0.id) }
+        confirmedCompletedDays = confirmedCompletedDays.filter { ids.contains($0.key) }
+        if let recovery = actionRecovery, !ids.contains(recovery.operation.targetID) {
+            actionRecovery = nil
+        }
+        if case let .update(id)? = failedEditorOperation, !ids.contains(id) {
+            failedEditorOperation = nil
+            draftOnFailure = nil
+            editorErrorMessage = nil
+        }
+    }
+    private func clearProfileContent() {
+        active = []
+        archived = []
+        confirmedCompletedDays = [:]
+        actionRecovery = nil
+        failedEditorOperation = nil
+        draftOnFailure = nil
+        editorErrorMessage = nil
+    }
+    private func failClosedForUnknownScope() {
+        clearProfileContent()
+        cachedScopeIdentity = nil
+        isProfileEmpty = false
     }
     private func rowState(for routine: RoutineSnapshot, completed: Set<LocalDay>, day today: LocalDay) -> RoutineRowState {
         let history = (-13...0).map { offset -> RoutineHistoryDay in let day = localDay(offset: offset, from: today); return .init(day: day, isScheduled: routine.weekdays.contains(weekday(for: day)), isCompleted: completed.contains(day)) }

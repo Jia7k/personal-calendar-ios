@@ -5,16 +5,22 @@ struct TasksView: View {
     @State private var editorPresentation: TasksEditorPresentation?
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
-    private let revision: Int
+    private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
 
     init(
         environment: AppEnvironment,
-        revision: Int = 0,
+        revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil
     ) {
         self.environment = environment
-        _model = State(initialValue: TasksViewModel(service: environment.reminders, settings: environment.settings))
+        let selection = environment.profileSelection
+        let scopes = environment.profileScopes
+        _model = State(initialValue: TasksViewModel(
+            service: environment.reminders,
+            settings: environment.settings,
+            currentScope: { try scopes.resolve(selection.activeIdentity) }
+        ))
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
     }
@@ -23,6 +29,7 @@ struct TasksView: View {
         NavigationStack {
             List {
                 if let explanation = model.accessExplanation { ContentUnavailableView("Tasks unavailable", systemImage: "checklist", description: Text(explanation)) }
+                else if model.isProfileEmpty { ContentUnavailableView("No tasks in this profile", systemImage: "checklist", description: Text("Add a reminder list to this profile in Settings.")) }
                 if let error = model.refreshErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry Refresh") { Task { await model.load() } }.frame(minWidth: 44, minHeight: 44) } }
                 if let error = model.mutationErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(model.failedMutationOperation?.completed == true ? "Retry Completion" : "Retry Undo") { Task { await model.retryFailedMutation() } }.frame(minWidth: 44, minHeight: 44) } }
                 taskSection("Today", model.today)

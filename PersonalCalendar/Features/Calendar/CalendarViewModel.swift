@@ -92,28 +92,81 @@ final class CalendarViewModel {
     private(set) var isLoading = false
     private(set) var sourceAccessNotices: [SourceAccessNotice] = []
     private(set) var mutatingItemIDs: Set<String> = []
+    private(set) var isProfileEmpty = false
 
     private var cachedEvents: [CalendarEventSnapshot] = []
     private var cachedReminders: [ReminderSnapshot] = []
     private var cachedRoutines: [RoutineSnapshot] = []
     private var cachedRoutineCompletions: [UUID: Set<LocalDay>] = [:]
+    private var cachedScopeIdentity: ProfileIdentity?
+    private var cachedScope: ProfileScope?
     private let today: LocalDay
     private let calendarService: any CalendarServicing
     private let remindersService: any RemindersServicing
     private let routines: any RoutineRepository
     private let composer: AgendaComposer
     private let settings: AppSettingsStore
+    private let currentScope: @MainActor () throws -> ProfileScope
+    private let usesLegacyScope: Bool
     private let systemCalendar: Calendar
     private var loadGeneration = 0
     private var latestRefreshFailures: Set<CalendarRefreshFailureSource> = []
 
-    init(today: LocalDay, calendarService: any CalendarServicing, remindersService: any RemindersServicing, routines: any RoutineRepository, composer: AgendaComposer, settings: AppSettingsStore, systemCalendar: Calendar) {
+    init(
+        today: LocalDay,
+        calendarService: any CalendarServicing,
+        remindersService: any RemindersServicing,
+        routines: any RoutineRepository,
+        composer: AgendaComposer,
+        settings: AppSettingsStore,
+        systemCalendar: Calendar
+    ) {
         self.today = today
         self.calendarService = calendarService
         self.remindersService = remindersService
         self.routines = routines
         self.composer = composer
         self.settings = settings
+        currentScope = {
+            let calendarDescriptorIDs = Set(calendarService.calendars().map(\.id))
+            let reminderDescriptorIDs = Set(remindersService.lists().map(\.id))
+            return ProfileScope(
+                identity: .everything,
+                calendarIDs: calendarDescriptorIDs.isEmpty
+                    ? settings.selectedCalendarIDs
+                    : settings.visibleCalendarIDs(availableIDs: calendarDescriptorIDs),
+                reminderListIDs: reminderDescriptorIDs.isEmpty
+                    ? settings.selectedReminderListIDs
+                    : settings.visibleReminderListIDs(availableIDs: reminderDescriptorIDs),
+                routineIDs: [],
+                defaultCalendarID: nil,
+                defaultReminderListID: nil
+            )
+        }
+        usesLegacyScope = true
+        self.systemCalendar = systemCalendar
+        displayedMonth = LocalDay(year: today.year, month: today.month, day: 1)
+        selectedDay = today
+    }
+
+    init(
+        today: LocalDay,
+        calendarService: any CalendarServicing,
+        remindersService: any RemindersServicing,
+        routines: any RoutineRepository,
+        composer: AgendaComposer,
+        settings: AppSettingsStore,
+        currentScope: @escaping @MainActor () throws -> ProfileScope,
+        systemCalendar: Calendar
+    ) {
+        self.today = today
+        self.calendarService = calendarService
+        self.remindersService = remindersService
+        self.routines = routines
+        self.composer = composer
+        self.settings = settings
+        self.currentScope = currentScope
+        usesLegacyScope = false
         self.systemCalendar = systemCalendar
         displayedMonth = LocalDay(year: today.year, month: today.month, day: 1)
         selectedDay = today
@@ -124,6 +177,17 @@ final class CalendarViewModel {
         let generation = loadGeneration
         isLoading = true
         defer { if generation == loadGeneration { isLoading = false } }
+
+        let scope: ProfileScope
+        do {
+            scope = try currentScope()
+        } catch {
+            guard generation == loadGeneration else { return }
+            failScopeResolution()
+            return
+        }
+        adopt(scope)
+
         var nextEvents = cachedEvents
         var nextReminders = cachedReminders
         var nextRoutines = cachedRoutines
@@ -136,15 +200,23 @@ final class CalendarViewModel {
 
         let calendarAccess = calendarService.accessState
         if calendarAccess == .granted {
-            do {
-                let descriptorIDs = Set(calendarService.calendars().map(\.id))
-                let ids = descriptorIDs.isEmpty ? settings.selectedCalendarIDs : settings.visibleCalendarIDs(availableIDs: descriptorIDs)
-                nextEvents = settings.calendarSelectionIsExplicit && ids.isEmpty ? [] : try calendarService.fetchEvents(in: interval, calendarIDs: ids)
-                if settings.calendarSelectionIsExplicit { nextEvents = nextEvents.filter { ids.contains($0.calendarID) } }
-            }
-            catch {
-                encounteredFailure = true
-                refreshFailures.insert(.event)
+            let skipsFetch = scope.calendarIDs.isEmpty
+                && (!usesLegacyScope || settings.calendarSelectionIsExplicit)
+            if skipsFetch {
+                nextEvents = []
+            } else {
+                do {
+                    let fetched = try calendarService.fetchEvents(
+                        in: interval,
+                        calendarIDs: scope.calendarIDs
+                    )
+                    nextEvents = shouldFilterLegacyCalendarResults
+                        ? fetched.filter { scope.calendarIDs.contains($0.calendarID) }
+                        : fetched
+                } catch {
+                    encounteredFailure = true
+                    refreshFailures.insert(.event)
+                }
             }
         } else {
             nextEvents = []
@@ -153,29 +225,46 @@ final class CalendarViewModel {
 
         let remindersAccess = remindersService.accessState
         if remindersAccess == .granted {
-            do {
-                let descriptorIDs = Set(remindersService.lists().map(\.id))
-                let ids = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
-                nextReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await remindersService.fetchReminders(listIDs: ids)
-                if settings.reminderSelectionIsExplicit { nextReminders = nextReminders.filter { ids.contains($0.listID) } }
-            }
-            catch {
-                encounteredFailure = true
-                refreshFailures.insert(.task)
+            let skipsFetch = scope.reminderListIDs.isEmpty
+                && (!usesLegacyScope || settings.reminderSelectionIsExplicit)
+            if skipsFetch {
+                nextReminders = []
+            } else {
+                do {
+                    let fetched = try await remindersService.fetchReminders(
+                        listIDs: scope.reminderListIDs
+                    )
+                    nextReminders = shouldFilterLegacyReminderResults
+                        ? fetched.filter { scope.reminderListIDs.contains($0.listID) }
+                        : fetched
+                } catch {
+                    encounteredFailure = true
+                    refreshFailures.insert(.task)
+                }
             }
         } else {
             nextReminders = []
             notices.append(SourceAccessNotice(source: .reminders, accessState: remindersAccess))
         }
 
-        do {
-            let refreshed = try routines.list(includeArchived: false)
-            let completions = try Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
-            nextRoutines = refreshed
-            nextCompletions = completions
-        } catch {
-            encounteredFailure = true
-            refreshFailures.insert(.routine)
+        if !usesLegacyScope && scope.routineIDs.isEmpty {
+            nextRoutines = []
+            nextCompletions = [:]
+        } else {
+            do {
+                let refreshed = try routines.list(includeArchived: false)
+                let scoped = usesLegacyScope
+                    ? refreshed
+                    : refreshed.filter { scope.routineIDs.contains($0.id) }
+                let completions = try Dictionary(uniqueKeysWithValues: scoped.map {
+                    ($0.id, try routines.completedDays(routineID: $0.id))
+                })
+                nextRoutines = scoped
+                nextCompletions = completions
+            } catch {
+                encounteredFailure = true
+                refreshFailures.insert(.routine)
+            }
         }
 
         guard generation == loadGeneration else { return }
@@ -185,7 +274,8 @@ final class CalendarViewModel {
         cachedRoutineCompletions = nextCompletions
         sourceAccessNotices = notices
         latestRefreshFailures = refreshFailures
-        rebuildVisibleAgendas()
+        cachedScope = scope
+        rebuildVisibleAgendas(scope: scope)
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }
 
@@ -244,33 +334,140 @@ final class CalendarViewModel {
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
+        let scope: ProfileScope
+        do {
+            scope = try currentScope()
+        } catch {
+            failScopeResolution()
+            return
+        }
+        adopt(scope)
+
         guard case let .reminder(id) = item.origin,
               item.allowsModification,
               !mutatingItemIDs.contains(item.id),
-              cachedReminders.contains(where: { $0.id == id && $0.allowsModification })
+              let snapshot = cachedReminders.first(where: {
+                  $0.id == id && $0.allowsModification
+              }),
+              usesLegacyScope || scope.reminderListIDs.contains(snapshot.listID)
         else { return }
         mutatingItemIDs.insert(item.id)
         defer { mutatingItemIDs.remove(item.id) }
         do {
             try remindersService.setCompleted(id: id, completed: completed)
             cachedReminders = cachedReminders.map { $0.id == id ? $0.withCompletion(completed) : $0 }
-            rebuildVisibleAgendas()
+            rebuildVisibleAgendas(scope: scope)
             await load()
         } catch {
             errorMessage = "This task could not be updated. Pull to try again."
         }
     }
 
-    private func rebuildVisibleAgendas() {
-        let calendarIDs = Set(calendarService.calendars().map(\.id)).isEmpty ? Set(cachedEvents.map(\.calendarID)) : Set(calendarService.calendars().map(\.id))
-        let reminderIDs = Set(remindersService.lists().map(\.id)).isEmpty ? Set(cachedReminders.map(\.listID)) : Set(remindersService.lists().map(\.id))
-        let visibleEvents = cachedEvents.filter { settings.visibleCalendarIDs(availableIDs: calendarIDs).contains($0.calendarID) }
-        let visibleReminders = cachedReminders.filter { settings.visibleReminderListIDs(availableIDs: reminderIDs).contains($0.listID) }
+    private var shouldFilterLegacyCalendarResults: Bool {
+        !usesLegacyScope || settings.calendarSelectionIsExplicit
+    }
+
+    private var shouldFilterLegacyReminderResults: Bool {
+        !usesLegacyScope || settings.reminderSelectionIsExplicit
+    }
+
+    private func adopt(_ scope: ProfileScope) {
+        let identityChanged = cachedScopeIdentity != scope.identity
+        if identityChanged {
+            cachedEvents = []
+            cachedReminders = []
+            cachedRoutines = []
+            cachedRoutineCompletions = [:]
+            sourceAccessNotices = []
+            latestRefreshFailures = []
+            errorMessage = nil
+        } else if !usesLegacyScope {
+            cachedEvents.removeAll { !scope.calendarIDs.contains($0.calendarID) }
+            cachedReminders.removeAll { !scope.reminderListIDs.contains($0.listID) }
+            cachedRoutines.removeAll { !scope.routineIDs.contains($0.id) }
+            cachedRoutineCompletions = cachedRoutineCompletions.filter {
+                scope.routineIDs.contains($0.key)
+            }
+        }
+
+        cachedScopeIdentity = scope.identity
+        cachedScope = scope
+        isProfileEmpty = profileIsEmpty(scope)
+        rebuildVisibleAgendas(scope: scope)
+    }
+
+    private func failScopeResolution() {
+        cachedEvents = []
+        cachedReminders = []
+        cachedRoutines = []
+        cachedRoutineCompletions = [:]
+        cachedScopeIdentity = nil
+        cachedScope = nil
+        sourceAccessNotices = []
+        latestRefreshFailures = []
+        isProfileEmpty = false
+        publishEmptyAgendas()
+        errorMessage = "The selected profile could not be loaded. Try again."
+    }
+
+    private func profileIsEmpty(_ scope: ProfileScope) -> Bool {
+        guard case .saved = scope.identity else { return false }
+        return scope.calendarIDs.isEmpty
+            && scope.reminderListIDs.isEmpty
+            && scope.routineIDs.isEmpty
+    }
+
+    private func rebuildVisibleAgendas(scope: ProfileScope) {
+        let visibleEvents: [CalendarEventSnapshot]
+        let visibleReminders: [ReminderSnapshot]
+        let visibleRoutines: [RoutineSnapshot]
+        if usesLegacyScope {
+            let descriptorCalendarIDs = Set(calendarService.calendars().map(\.id))
+            let descriptorReminderIDs = Set(remindersService.lists().map(\.id))
+            let calendarIDs = descriptorCalendarIDs.isEmpty
+                ? Set(cachedEvents.map(\.calendarID))
+                : descriptorCalendarIDs
+            let reminderIDs = descriptorReminderIDs.isEmpty
+                ? Set(cachedReminders.map(\.listID))
+                : descriptorReminderIDs
+            visibleEvents = cachedEvents.filter {
+                settings.visibleCalendarIDs(availableIDs: calendarIDs).contains($0.calendarID)
+            }
+            visibleReminders = cachedReminders.filter {
+                settings.visibleReminderListIDs(availableIDs: reminderIDs).contains($0.listID)
+            }
+            visibleRoutines = cachedRoutines
+        } else {
+            visibleEvents = cachedEvents.filter { scope.calendarIDs.contains($0.calendarID) }
+            visibleReminders = cachedReminders.filter { scope.reminderListIDs.contains($0.listID) }
+            visibleRoutines = cachedRoutines.filter { scope.routineIDs.contains($0.id) }
+        }
+
         let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
         visibleAgendas = Dictionary(uniqueKeysWithValues: days.map { day in
-            let completed = Set(cachedRoutines.filter { cachedRoutineCompletions[$0.id]?.contains(day) == true }.map(\.id))
-            return (day, composer.compose(day: day, events: visibleEvents, reminders: visibleReminders, routines: cachedRoutines, completedRoutineIDs: completed, includeOverdueTasks: day == today, calendar: systemCalendar))
+            let completed = Set(visibleRoutines.filter {
+                cachedRoutineCompletions[$0.id]?.contains(day) == true
+            }.map(\.id))
+            return (
+                day,
+                composer.compose(
+                    day: day,
+                    events: visibleEvents,
+                    reminders: visibleReminders,
+                    routines: visibleRoutines,
+                    completedRoutineIDs: completed,
+                    includeOverdueTasks: day == today,
+                    calendar: systemCalendar
+                )
+            )
         })
         agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
+    }
+
+    private func publishEmptyAgendas() {
+        let empty = DayAgenda(allDay: [], scheduled: [], priority: [])
+        let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
+        visibleAgendas = Dictionary(uniqueKeysWithValues: days.map { ($0, empty) })
+        agenda = empty
     }
 }

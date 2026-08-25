@@ -24,6 +24,7 @@
 		0F53C817B1951E9108AFE34E /* PersonalCalendarWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07201320C3E78179E4EF63A5 /* PersonalCalendarWidgetsBundle.swift */; };
 		0FFDD637EA1D1F64D2A2514C /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93EF05B1DCB2CB75F40436F /* TasksView.swift */; };
 		101DE3373E26811584F086BA /* EventKitServiceMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69706BD23CDB0C90971E282 /* EventKitServiceMappingTests.swift */; };
+		104F57C2A4D11F6CFEFDEF90 /* ProfileFeatureScopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068C18572713D479F8631959 /* ProfileFeatureScopeTests.swift */; };
 		113257C9C6CA7C6B0E63E1FD /* EventKitMutationBacking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 937AF9948796D74A6142B26F /* EventKitMutationBacking.swift */; };
 		12FFD28EA0A2029E104D7C7E /* TimetableSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EBA6F5D46317158C80AAD66 /* TimetableSnapshot.swift */; };
 		15EF16E7B765D36522FC34DF /* TaskEditorViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F647A85B6C60046288ECF3B7 /* TaskEditorViewModelTests.swift */; };
@@ -208,6 +209,7 @@
 		0301807D2E3D787BF7934E52 /* Recurrence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recurrence.swift; sourceTree = "<group>"; };
 		0305691ED4EE8A7D16468599 /* MonthGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridView.swift; sourceTree = "<group>"; };
 		0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRecord.swift; sourceTree = "<group>"; };
+		068C18572713D479F8631959 /* ProfileFeatureScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeatureScopeTests.swift; sourceTree = "<group>"; };
 		07201320C3E78179E4EF63A5 /* PersonalCalendarWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalCalendarWidgetsBundle.swift; sourceTree = "<group>"; };
 		0E9B9D6B59D700174A556740 /* RemindersServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersServicing.swift; sourceTree = "<group>"; };
 		1008A1F56F8A1FD12DDE16B1 /* TimetableSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableSnapshotStore.swift; sourceTree = "<group>"; };
@@ -729,6 +731,7 @@
 			isa = PBXGroup;
 			children = (
 				66D90F9802186D2EC7A9B23A /* ProfileEnvironmentTests.swift */,
+				068C18572713D479F8631959 /* ProfileFeatureScopeTests.swift */,
 				B92CB7D40732AC4D6A34CC88 /* ProfileMigrationCoordinatorTests.swift */,
 				FC4216599AFDC4F9B31CA748 /* ProfileRepositoryTests.swift */,
 				258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */,
@@ -1179,6 +1182,7 @@
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
 				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
 				FE3ED8F126EC1EBB03C563B7 /* ProfileEnvironmentTests.swift in Sources */,
+				104F57C2A4D11F6CFEFDEF90 /* ProfileFeatureScopeTests.swift in Sources */,
 				3579609AC6B39AB3B25A5D5F /* ProfileMigrationCoordinatorTests.swift in Sources */,
 				91304125657CFA0AD48974B9 /* ProfileRepositoryTests.swift in Sources */,
 				BB93192B8A47DEC76AEA7CA2 /* ProfileScopeResolverTests.swift in Sources */,

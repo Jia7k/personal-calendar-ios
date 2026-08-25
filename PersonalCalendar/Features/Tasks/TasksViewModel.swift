@@ -13,17 +13,46 @@ final class TasksViewModel {
     private(set) var failedMutationOperation: TaskMutationOperation?
     var errorMessage: String? { mutationErrorMessage ?? refreshErrorMessage }
     private(set) var isLoading = false
+    private(set) var isProfileEmpty = false
     private(set) var mutatingIDs: Set<String> = []
 
     private let service: any RemindersServicing
     private let settings: AppSettingsStore
+    @ObservationIgnored private let currentScope: (@MainActor () throws -> ProfileScope)?
     private let calendar: Calendar
     private let now: () -> Date
     private var confirmed: [ReminderSnapshot] = []
     private var loadGeneration = 0
+    private var cachedScopeIdentity: ProfileIdentity?
+
+    private struct CapturedScope {
+        let identity: ProfileIdentity?
+        let reminderListIDs: Set<String>
+        let fetchesAllWhenEmpty: Bool
+
+        var isProfileScope: Bool { identity != nil }
+    }
 
     init(service: any RemindersServicing, settings: AppSettingsStore, calendar: Calendar = .current, now: @escaping () -> Date = { .now }) {
-        self.service = service; self.settings = settings; self.calendar = calendar; self.now = now
+        self.service = service
+        self.settings = settings
+        currentScope = nil
+        self.calendar = calendar
+        self.now = now
+    }
+
+    init(
+        service: any RemindersServicing,
+        settings: AppSettingsStore,
+        currentScope: @escaping @MainActor () throws -> ProfileScope,
+        calendar: Calendar = .current,
+        now: @escaping () -> Date = { .now }
+    ) {
+        self.service = service
+        self.settings = settings
+        self.currentScope = currentScope
+        self.calendar = calendar
+        self.now = now
     }
 
     var accessExplanation: String? {
@@ -36,20 +65,52 @@ final class TasksViewModel {
     }
 
     func load() async {
-        loadGeneration += 1; let generation = loadGeneration
-        guard service.accessState == .granted else { confirmed = []; publish(); reconcileMutationRecovery(authoritativeFetch: true); refreshErrorMessage = nil; isLoading = false; return }
-        isLoading = true; defer { if generation == loadGeneration { isLoading = false } }
+        loadGeneration += 1
+        let generation = loadGeneration
+        isLoading = true
+        defer { if generation == loadGeneration { isLoading = false } }
+
+        let scope: CapturedScope
         do {
-            let descriptorIDs = Set(service.lists().map(\.id))
-            let visibleIDs = descriptorIDs.isEmpty ? settings.selectedReminderListIDs : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
-            let fetched = settings.reminderSelectionIsExplicit && visibleIDs.isEmpty ? [] : try await service.fetchReminders(listIDs: visibleIDs)
+            scope = try captureScope()
+        } catch {
+            failClosedForUnknownScope()
+            refreshErrorMessage = "Your tasks could not be refreshed. Pull to try again."
+            return
+        }
+
+        prepareForLoad(scope)
+
+        guard service.accessState == .granted else {
+            confirmed = []
+            publish(scope: scope)
+            reconcileMutationRecovery(authoritativeFetch: true, scope: scope)
+            refreshErrorMessage = nil
+            return
+        }
+
+        guard !scope.reminderListIDs.isEmpty || scope.fetchesAllWhenEmpty else {
+            confirmed = []
+            publish(scope: scope)
+            reconcileMutationRecovery(authoritativeFetch: true, scope: scope)
+            refreshErrorMessage = nil
+            return
+        }
+
+        do {
+            let fetched = try await service.fetchReminders(listIDs: scope.reminderListIDs)
             guard generation == loadGeneration else { return }
-            confirmed = fetched
-            refreshErrorMessage = nil; publish(); reconcileMutationRecovery(authoritativeFetch: true)
+            confirmed = scope.fetchesAllWhenEmpty
+                ? fetched
+                : fetched.filter { scope.reminderListIDs.contains($0.listID) }
+            refreshErrorMessage = nil
+            publish(scope: scope)
+            reconcileMutationRecovery(authoritativeFetch: true, scope: scope)
         } catch {
             guard generation == loadGeneration else { return }
             refreshErrorMessage = "Your tasks could not be refreshed. Pull to try again."
-            publish(); reconcileMutationRecovery(authoritativeFetch: false)
+            publish(scope: scope)
+            reconcileMutationRecovery(authoritativeFetch: false, scope: scope)
         }
     }
 
@@ -77,14 +138,21 @@ final class TasksViewModel {
     }
 
     func setCompleted(id: String, completed state: Bool) async {
-        reconcileMutationRecovery(authoritativeFetch: false)
+        guard let scope = scopeForMutation() else { clearMutationRecovery(id: id); return }
+        reconcileMutationRecovery(authoritativeFetch: false, scope: scope)
         guard service.accessState == .granted else { clearMutationRecovery(id: id); return }
-        guard let item = confirmed.first(where: { $0.id == id }), item.allowsModification, isSelected(item), !mutatingIDs.contains(id) else { clearMutationRecovery(id: id); return }
+        guard let item = confirmed.first(where: { $0.id == id }),
+              item.allowsModification,
+              scopeAllows(item, scope: scope),
+              !mutatingIDs.contains(id) else {
+            clearMutationRecovery(id: id)
+            return
+        }
         mutatingIDs.insert(id); defer { mutatingIDs.remove(id) }
         do {
             try service.setCompleted(id: id, completed: state)
             confirmed = confirmed.map { $0.id == id ? replacing($0, completed: state) : $0 }
-            publish()
+            publish(scope: scope)
             let operation = TaskMutationOperation(id: id, completed: state)
             if failedMutationOperation?.id == operation.id {
                 failedMutationOperation = nil
@@ -96,33 +164,117 @@ final class TasksViewModel {
     }
     func retryFailedMutation() async {
         guard let operation = failedMutationOperation else { return }
-        reconcileMutationRecovery(authoritativeFetch: false)
+        guard let scope = scopeForMutation() else { clearMutationRecovery(id: operation.id); return }
+        reconcileMutationRecovery(authoritativeFetch: false, scope: scope)
         guard service.accessState == .granted, failedMutationOperation == operation else { clearMutationRecovery(id: operation.id); return }
-        guard let item = confirmed.first(where: { $0.id == operation.id }), item.allowsModification, isSelected(item), item.isCompleted != operation.completed else { clearMutationRecovery(id: operation.id); return }
+        guard let item = confirmed.first(where: { $0.id == operation.id }),
+              item.allowsModification,
+              scopeAllows(item, scope: scope),
+              item.isCompleted != operation.completed else {
+            clearMutationRecovery(id: operation.id)
+            return
+        }
         await setCompleted(id: operation.id, completed: operation.completed)
     }
 
-    private func publish() {
+    private func captureScope() throws -> CapturedScope {
+        if let currentScope {
+            let scope = try currentScope()
+            return CapturedScope(
+                identity: scope.identity,
+                reminderListIDs: scope.reminderListIDs,
+                fetchesAllWhenEmpty: false
+            )
+        }
+
+        let descriptorIDs = Set(service.lists().map(\.id))
+        let visibleIDs = descriptorIDs.isEmpty
+            ? settings.selectedReminderListIDs
+            : settings.visibleReminderListIDs(availableIDs: descriptorIDs)
+        return CapturedScope(
+            identity: nil,
+            reminderListIDs: visibleIDs,
+            fetchesAllWhenEmpty: !settings.reminderSelectionIsExplicit && visibleIDs.isEmpty
+        )
+    }
+
+    private func prepareForLoad(_ scope: CapturedScope) {
+        guard scope.isProfileScope else {
+            isProfileEmpty = false
+            return
+        }
+
+        isProfileEmpty = scope.reminderListIDs.isEmpty
+        if cachedScopeIdentity != scope.identity {
+            confirmed = []
+            today = []
+            upcoming = []
+            completed = []
+            clearAllMutationRecovery()
+            refreshErrorMessage = nil
+        } else {
+            confirmed.removeAll { !scope.reminderListIDs.contains($0.listID) }
+            publish(scope: scope)
+        }
+        cachedScopeIdentity = scope.identity
+    }
+
+    private func scopeForMutation() -> CapturedScope? {
+        let scope: CapturedScope
+        do {
+            scope = try captureScope()
+        } catch {
+            failClosedForUnknownScope()
+            refreshErrorMessage = "Your tasks could not be refreshed. Pull to try again."
+            return nil
+        }
+
+        if scope.isProfileScope {
+            let identityMatches = cachedScopeIdentity == scope.identity
+            prepareForLoad(scope)
+            guard identityMatches else { return nil }
+        }
+        return scope
+    }
+
+    private func failClosedForUnknownScope() {
+        confirmed = []
+        today = []
+        upcoming = []
+        completed = []
+        cachedScopeIdentity = nil
+        isProfileEmpty = false
+        clearAllMutationRecovery()
+    }
+
+    private func publish(scope: CapturedScope) {
         let todayDay = LocalDay(date: now(), calendar: calendar)
-        let selected = settings.visibleReminderListIDs(availableIDs: availableListIDs)
+        let selected = visibleListIDs(for: scope)
         let visible = confirmed.filter { selected.contains($0.listID) }
         let incomplete = visible.filter { !$0.isCompleted }
         today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) <= todayDay } ?? false }.sorted(by: sort)
         upcoming = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? true }.sorted(by: sort)
         completed = visible.filter(\.isCompleted).sorted(by: sort)
     }
-    private func reconcileMutationRecovery(authoritativeFetch: Bool) {
+    private func reconcileMutationRecovery(authoritativeFetch: Bool, scope: CapturedScope) {
         guard let operation = failedMutationOperation else { return }
-        let selected = settings.visibleReminderListIDs(availableIDs: availableListIDs)
+        let selected = visibleListIDs(for: scope)
         guard service.accessState == .granted, let item = confirmed.first(where: { $0.id == operation.id }), selected.contains(item.listID), item.allowsModification else { clearMutationRecovery(id: operation.id); return }
         if authoritativeFetch && item.isCompleted == operation.completed { clearMutationRecovery(id: operation.id) }
     }
-    private func isSelected(_ item: ReminderSnapshot) -> Bool { settings.visibleReminderListIDs(availableIDs: availableListIDs).contains(item.listID) }
+    private func scopeAllows(_ item: ReminderSnapshot, scope: CapturedScope) -> Bool {
+        visibleListIDs(for: scope).contains(item.listID)
+    }
+    private func visibleListIDs(for scope: CapturedScope) -> Set<String> {
+        if scope.isProfileScope { return scope.reminderListIDs }
+        return settings.visibleReminderListIDs(availableIDs: availableListIDs)
+    }
     private var availableListIDs: Set<String> {
         let descriptorIDs = Set(service.lists().map(\.id))
         return descriptorIDs.isEmpty ? Set(confirmed.map(\.listID)) : descriptorIDs
     }
     private func clearMutationRecovery(id: String) { guard failedMutationOperation?.id == id else { return }; failedMutationOperation = nil; mutationErrorMessage = nil }
+    private func clearAllMutationRecovery() { failedMutationOperation = nil; mutationErrorMessage = nil }
 
     private func sort(_ lhs: ReminderSnapshot, _ rhs: ReminderSnapshot) -> Bool {
         switch (lhs.dueDate, rhs.dueDate) { case let (a?, b?): if a != b { return a < b }; case (_?, nil): return true; case (nil, _?): return false; case (nil, nil): break }

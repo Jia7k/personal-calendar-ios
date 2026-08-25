@@ -8,13 +8,13 @@ struct CalendarHomeView: View {
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
-    private let revision: Int
+    private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
     private var calendar: Calendar { .current }
 
     init(
         environment: AppEnvironment,
-        revision: Int = 0,
+        revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil,
         openSettings: @escaping @MainActor () -> Void = {}
     ) {
@@ -23,7 +23,20 @@ struct CalendarHomeView: View {
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
         let systemCalendar = Calendar.current
-        _viewModel = State(initialValue: CalendarViewModel(today: LocalDay(date: .now, calendar: systemCalendar), calendarService: environment.calendar, remindersService: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings, systemCalendar: systemCalendar))
+        let profileScopes = environment.profileScopes
+        let profileSelection = environment.profileSelection
+        _viewModel = State(initialValue: CalendarViewModel(
+            today: LocalDay(date: .now, calendar: systemCalendar),
+            calendarService: environment.calendar,
+            remindersService: environment.reminders,
+            routines: environment.routines,
+            composer: environment.agendaComposer,
+            settings: environment.settings,
+            currentScope: {
+                try profileScopes.resolve(profileSelection.activeIdentity)
+            },
+            systemCalendar: systemCalendar
+        ))
     }
 
     var body: some View {
