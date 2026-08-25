@@ -57,4 +57,4 @@ GREEN output: `NotificationCoordinatorTests` executed 1 test with 0 failures; `T
 
 ## Commit
 
-Pending commit amendment.
+Implementation: `b40039b7c5da2a3855754f0065565d5821b85a61` (`feat: add calm local notifications`).
