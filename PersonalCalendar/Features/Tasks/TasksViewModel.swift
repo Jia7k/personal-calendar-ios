@@ -53,6 +53,10 @@ final class TasksViewModel {
         }
     }
 
+    func refreshForExternalChange() async {
+        await load()
+    }
+
     /// Host-owned post-editor refresh. The editor has already completed its single provider write.
     func refreshAfterEditorCommit(_ commit: TaskEditorCommit) async {
         await load()

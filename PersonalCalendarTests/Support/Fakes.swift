@@ -2,6 +2,48 @@ import Foundation
 @testable import PersonalCalendar
 
 @MainActor
+final class FakeRefreshDebouncer: RefreshDebouncing {
+    private var pending: (@MainActor () async -> Void)?
+
+    func schedule(_ operation: @escaping @MainActor () async -> Void) {
+        pending = operation
+    }
+
+    func fire() async {
+        let operation = pending
+        pending = nil
+        await operation?()
+    }
+}
+
+enum RefreshStep: Equatable {
+    case permissions
+    case sources
+    case agenda
+    case categoryCleanup
+    case notifications
+}
+
+@MainActor
+final class RefreshCallRecorder {
+    private(set) var steps: [RefreshStep] = []
+
+    var completedRefreshes: Int {
+        steps.filter { $0 == .notifications }.count
+    }
+
+    var actions: RefreshActions {
+        .init(
+            refreshPermissions: { self.steps.append(.permissions) },
+            refreshSources: { self.steps.append(.sources) },
+            refreshAgenda: { self.steps.append(.agenda) },
+            cleanCategoryLinks: { self.steps.append(.categoryCleanup) },
+            rescheduleNotifications: { self.steps.append(.notifications) }
+        )
+    }
+}
+
+@MainActor
 final class RecordingEventKitMutationBacking: EventKitMutationBacking {
     var eventCreates: [EventCreateRequest] = []
     var eventUpdates: [(String, EventUpdateRequest)] = []

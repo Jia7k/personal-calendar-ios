@@ -12,11 +12,17 @@ final class RootLifecycleController {
     private(set) var revision = 0
     private let permissions: any PermissionRefreshing
     private let validateDefaults: @MainActor () -> Void
+    private let refreshCoordinator: AppRefreshCoordinator?
     private var activationGeneration = 0
 
-    init(permissions: any PermissionRefreshing, validateDefaults: @escaping @MainActor () -> Void = {}) {
+    init(
+        permissions: any PermissionRefreshing,
+        validateDefaults: @escaping @MainActor () -> Void = {},
+        refreshCoordinator: AppRefreshCoordinator? = nil
+    ) {
         self.permissions = permissions
         self.validateDefaults = validateDefaults
+        self.refreshCoordinator = refreshCoordinator
     }
 
     func advanceRevision() { revision &+= 1 }
@@ -24,9 +30,15 @@ final class RootLifecycleController {
     func sceneBecameActive() async {
         activationGeneration &+= 1
         let generation = activationGeneration
-        await permissions.refresh()
+        if let refreshCoordinator {
+            await refreshCoordinator.refreshNow(reason: .foreground)
+        } else {
+            await permissions.refresh()
+        }
         guard generation == activationGeneration else { return }
-        validateDefaults()
-        advanceRevision()
+        if refreshCoordinator == nil {
+            validateDefaults()
+            advanceRevision()
+        }
     }
 }

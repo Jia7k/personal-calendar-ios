@@ -110,6 +110,38 @@ final class AppSettingsStore {
         }
     }
 
+    /// Reconciles persisted source preferences after EventKit reports a changed source list.
+    /// A vanished explicit selection falls back to every currently available source.
+    func reconcileSources(
+        calendarAccess: AccessState,
+        calendars: [CalendarDescriptor],
+        remindersAccess: AccessState,
+        lists: [ReminderListDescriptor]
+    ) {
+        if calendarAccess == .granted {
+            reconcileSelection(
+                selection: &selectedCalendarIDs,
+                explicit: &calendarSelectionIsExplicit,
+                availableIDs: Set(calendars.map(\.id))
+            )
+            persistCalendarSelection()
+        }
+        if remindersAccess == .granted {
+            reconcileSelection(
+                selection: &selectedReminderListIDs,
+                explicit: &reminderSelectionIsExplicit,
+                availableIDs: Set(lists.map(\.id))
+            )
+            persistReminderSelection()
+        }
+        validateDefaults(
+            calendarAccess: calendarAccess,
+            calendars: calendars,
+            remindersAccess: remindersAccess,
+            lists: lists
+        )
+    }
+
     func applyBackupValue(_ value: SettingsBackup) {
         selectedCalendarIDs = Set(value.selectedCalendarIDs)
         selectedReminderListIDs = Set(value.selectedReminderListIDs)
@@ -146,6 +178,18 @@ final class AppSettingsStore {
         selection = replacement
         explicit = true
         return true
+    }
+
+    private func reconcileSelection(
+        selection: inout Set<String>,
+        explicit: inout Bool,
+        availableIDs: Set<String>
+    ) {
+        let hadSelection = !selection.isEmpty
+        selection.formIntersection(availableIDs)
+        guard explicit, hadSelection, selection.isEmpty else { return }
+        selection = availableIDs
+        explicit = !availableIDs.isEmpty
     }
 
     private func persistCalendarSelection() {

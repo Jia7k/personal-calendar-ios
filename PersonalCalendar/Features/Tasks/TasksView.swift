@@ -38,7 +38,7 @@ struct TasksView: View {
                     onDismiss: dismissEditor
                 )
             }
-            .task(id: revision) { await model.load() }
+            .task(id: revision) { await model.refreshForExternalChange() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh,
                       case .task = quickEntryRefresh.outcome else { return }

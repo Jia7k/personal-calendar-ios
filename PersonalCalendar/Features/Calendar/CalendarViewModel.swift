@@ -189,6 +189,10 @@ final class CalendarViewModel {
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }
 
+    func refreshForExternalChange() async {
+        await load()
+    }
+
     func select(_ day: LocalDay) async {
         selectedDay = day
         agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])

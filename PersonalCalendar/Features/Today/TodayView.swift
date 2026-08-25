@@ -50,7 +50,7 @@ struct TodayView: View {
             }
             .overlay { if model.isLoading && !model.hasLoaded { ProgressView() } }
             .navigationTitle("Today")
-            .task(id: revision) { await model.load() }
+            .task(id: revision) { await model.refreshForExternalChange() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
                 await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)

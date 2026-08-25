@@ -20,16 +20,16 @@ struct RootTabView: View {
                 remindersAccess: environment.reminders.accessState,
                 lists: environment.reminders.lists()
             )
-        }))
+        }, refreshCoordinator: environment.refreshCoordinator))
     }
     var body: some View {
         Group {
             if environment.settings.didCompleteOnboarding {
                 TabView(selection: $selection) {
-                    CalendarHomeView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings).tabItem { Label("Calendar", systemImage: "calendar") }.tag(RootTab.calendar)
-                    TodayView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings).tabItem { Label("Today", systemImage: "sun.max") }.tag(RootTab.today)
-                    TasksView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal).tabItem { Label("Tasks", systemImage: "checklist") }.tag(RootTab.tasks)
-                    RoutinesView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal).tabItem { Label("Routines", systemImage: "repeat") }.tag(RootTab.routines)
+                    CalendarHomeView(environment: environment, revision: refreshRevision, quickEntryRefresh: refreshSignal, openSettings: presentSettings).tabItem { Label("Calendar", systemImage: "calendar") }.tag(RootTab.calendar)
+                    TodayView(environment: environment, revision: refreshRevision, quickEntryRefresh: refreshSignal, openSettings: presentSettings).tabItem { Label("Today", systemImage: "sun.max") }.tag(RootTab.today)
+                    TasksView(environment: environment, revision: refreshRevision, quickEntryRefresh: refreshSignal).tabItem { Label("Tasks", systemImage: "checklist") }.tag(RootTab.tasks)
+                    RoutinesView(environment: environment, revision: refreshRevision, quickEntryRefresh: refreshSignal).tabItem { Label("Routines", systemImage: "repeat") }.tag(RootTab.routines)
                 }
                 .universalQuickEntry(onAdd: presentQuickEntry)
                 .sheet(item: $presentation, onDismiss: presentationDidDismiss) { presentation in
@@ -50,10 +50,13 @@ struct RootTabView: View {
             guard phase == .active else { return }
             Task {
                 await lifecycle.sceneBecameActive()
-                await environment.rescheduleNotifications()
                 refreshPresentedQuickEntryDestinations()
             }
         }
+    }
+
+    private var refreshRevision: Int {
+        lifecycle.revision &+ environment.agendaRefreshPublisher.revision
     }
 
     private func presentSettings() {

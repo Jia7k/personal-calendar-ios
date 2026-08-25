@@ -13,6 +13,7 @@ struct PersonalCalendarApp: App {
         environment = isUITesting
             ? .demo(container: container, arguments: arguments)
             : .live(container: container)
+        environment.startRefreshMonitoring()
     }
 
     var body: some Scene {

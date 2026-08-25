@@ -39,7 +39,7 @@ struct CalendarHomeView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             }
-            .task(id: revision) { await viewModel.load() }
+            .task(id: revision) { await viewModel.refreshForExternalChange() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
                 await viewModel.refreshAfterQuickEntry(quickEntryRefresh.outcome)

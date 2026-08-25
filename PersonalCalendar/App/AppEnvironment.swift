@@ -14,6 +14,9 @@ struct AppEnvironment {
     let backup: BackupService
     let notificationCoordinator: NotificationCoordinator
     let rescheduleNotifications: @MainActor @Sendable () async -> Void
+    let refreshCoordinator: AppRefreshCoordinator
+    let agendaRefreshPublisher: AgendaRefreshPublisher
+    private let refreshRuntime: EventStoreRefreshRuntime
     let reduceMotionOverride: Bool
     let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
 
@@ -34,6 +37,23 @@ struct AppEnvironment {
             reminders: reminders,
             notifications: notifications
         )
+        let agendaRefreshPublisher = AgendaRefreshPublisher()
+        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator)
+        let refreshCoordinator = AppRefreshCoordinator(actions: .init(
+            refreshPermissions: { await permissions.refresh() },
+            refreshSources: {
+                settings.reconcileSources(
+                    calendarAccess: calendar.accessState,
+                    calendars: calendar.calendars(),
+                    remindersAccess: reminders.accessState,
+                    lists: reminders.lists()
+                )
+            },
+            refreshAgenda: { agendaRefreshPublisher.publish() },
+            // EventKit currently exposes no authoritative all-item inventory. Never prune links from visible-range snapshots.
+            cleanCategoryLinks: {},
+            rescheduleNotifications: rescheduleNotifications
+        ))
         return .init(
             calendar: calendar,
             reminders: reminders,
@@ -45,7 +65,10 @@ struct AppEnvironment {
             settings: settings,
             backup: backup,
             notificationCoordinator: notificationCoordinator,
-            rescheduleNotifications: makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator),
+            rescheduleNotifications: rescheduleNotifications,
+            refreshCoordinator: refreshCoordinator,
+            agendaRefreshPublisher: agendaRefreshPublisher,
+            refreshRuntime: EventStoreRefreshRuntime(coordinator: refreshCoordinator, monitor: EventStoreChangeMonitor(store: store)),
             reduceMotionOverride: false,
             quickEntryContext: { currentQuickEntryContext() }
         )
@@ -94,6 +117,22 @@ struct AppEnvironment {
             reminders: reminders,
             notifications: notifications
         )
+        let agendaRefreshPublisher = AgendaRefreshPublisher()
+        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator)
+        let refreshCoordinator = AppRefreshCoordinator(actions: .init(
+            refreshPermissions: { await permissions.refresh() },
+            refreshSources: {
+                settings.reconcileSources(
+                    calendarAccess: calendar.accessState,
+                    calendars: calendar.calendars(),
+                    remindersAccess: reminders.accessState,
+                    lists: reminders.lists()
+                )
+            },
+            refreshAgenda: { agendaRefreshPublisher.publish() },
+            cleanCategoryLinks: {},
+            rescheduleNotifications: rescheduleNotifications
+        ))
         return .init(
             calendar: calendar,
             reminders: reminders,
@@ -105,10 +144,21 @@ struct AppEnvironment {
             settings: settings,
             backup: backup,
             notificationCoordinator: notificationCoordinator,
-            rescheduleNotifications: makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator),
+            rescheduleNotifications: rescheduleNotifications,
+            refreshCoordinator: refreshCoordinator,
+            agendaRefreshPublisher: agendaRefreshPublisher,
+            refreshRuntime: EventStoreRefreshRuntime(coordinator: refreshCoordinator, monitor: nil),
             reduceMotionOverride: arguments.contains("-reduce-motion"),
             quickEntryContext: quickEntryContext
         )
+    }
+
+    func startRefreshMonitoring() {
+        refreshRuntime.start()
+    }
+
+    func stopRefreshMonitoring() {
+        refreshRuntime.stop()
     }
 
     private static func currentQuickEntryContext() -> QuickEntryParseContext {

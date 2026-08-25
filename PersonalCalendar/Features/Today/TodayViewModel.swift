@@ -126,6 +126,10 @@ final class TodayViewModel {
         hasLoaded = true
     }
 
+    func refreshForExternalChange() async {
+        await load()
+    }
+
     /// Host-owned post-editor refresh. A failed refresh never asks the editor to repeat its write.
     func refreshAfterEventEditorCommit(_ commit: EventEditorCommit) async {
         await load()
