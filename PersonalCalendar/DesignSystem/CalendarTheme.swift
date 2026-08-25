@@ -1,9 +1,23 @@
 import SwiftUI
 
 enum CalendarTheme {
-    static let accent = Color(red: 0.20, green: 0.55, blue: 0.50)
+    static let accent = Color("AccentColor")
+    static let background = Color("CalendarBackground")
+    static let surface = Color("CalendarSurface")
+    static let selectionFill = Color("CalendarSelection")
+    static let event = Color("EventColor")
+    static let task = Color("TaskColor")
+    static let routine = Color("RoutineColor")
     static let cornerRadius: CGFloat = 16
     static let minimumTapSize: CGFloat = 44
+
+    static func sourceColor(_ source: AgendaSource) -> Color {
+        switch source {
+        case .event: event
+        case .task: task
+        case .routine: routine
+        }
+    }
 
     static func color(hex: String) -> Color? {
         let value = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))

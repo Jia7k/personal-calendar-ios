@@ -39,7 +39,11 @@ struct DayTrayView: View {
             if state == .resting { restingContent } else { expandedContent }
         }
         .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius))
+        .background(CalendarTheme.surface, in: RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius)
+                .stroke(CalendarTheme.accent.opacity(0.10), lineWidth: 1)
+        }
         .accessibilityElement(children: .contain)
     }
 
@@ -114,7 +118,7 @@ struct DayTrayView: View {
     private func trayRowContent(_ item: AgendaItem, label: String?) -> some View {
         HStack(spacing: 8) {
             Image(systemName: item.source == .event ? "calendar" : item.source == .task ? "checkmark.circle" : "repeat")
-                .foregroundStyle(CalendarTheme.accent)
+                .foregroundStyle(CalendarTheme.sourceColor(item.source))
             VStack(alignment: .leading) {
                 if let label { Text(label).font(.caption).foregroundStyle(.secondary) }
                 Text(item.title).font(.body)

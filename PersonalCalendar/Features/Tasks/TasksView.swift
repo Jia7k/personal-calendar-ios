@@ -29,6 +29,8 @@ struct TasksView: View {
                 taskSection("Upcoming", model.upcoming)
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
             }
+            .scrollContentBackground(.hidden)
+            .background(CalendarTheme.background)
             .navigationTitle("Tasks")
             .sheet(item: $editorPresentation) { presentation in
                 TaskEditorView(
@@ -66,6 +68,7 @@ struct TasksView: View {
             } label: {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
+                    .foregroundStyle(CalendarTheme.task)
             }
             .buttonStyle(.borderless)
             .disabled(!task.allowsModification || model.mutatingIDs.contains(task.id))

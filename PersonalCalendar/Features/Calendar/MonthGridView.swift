@@ -69,14 +69,18 @@ struct MonthGridView: View {
                     ForEach(Array(items.prefix(3))) { item in
                         Image(systemName: indicatorSymbol(for: item))
                             .font(.caption2)
+                            .foregroundStyle(CalendarTheme.sourceColor(item.source))
                     }
-                    if itemCount > 3 { Text("+\(itemCount - 3)").font(.caption2) }
+                    if itemCount > 3 {
+                        Text("+\(itemCount - 3)")
+                            .font(.caption2)
+                            .foregroundStyle(CalendarTheme.accent)
+                    }
                 }
-                .foregroundStyle(CalendarTheme.accent)
                 .frame(minHeight: 12)
             }
             .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
-            .background(isSelected ? CalendarTheme.accent.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+            .background(isSelected ? CalendarTheme.selectionFill : Color.clear, in: RoundedRectangle(cornerRadius: 10))
             .overlay { if isToday { RoundedRectangle(cornerRadius: 10).stroke(CalendarTheme.accent, lineWidth: 1.5) } }
             .opacity(cell.belongsToDisplayedMonth ? 1 : 0.45)
         }

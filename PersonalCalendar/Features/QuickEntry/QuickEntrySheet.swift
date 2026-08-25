@@ -16,6 +16,8 @@ struct QuickEntrySheet: View {
     var body: some View {
         NavigationStack {
             phaseContent
+                .scrollContentBackground(.hidden)
+                .background(CalendarTheme.background)
                 .navigationTitle(navigationTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { navigationToolbar }

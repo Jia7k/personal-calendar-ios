@@ -51,7 +51,10 @@ struct SettingsView: View {
                     })
                 }
             }
-        }.navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false }.onDisappear { guard sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.rescheduleNotifications() } } }
+        }
+        .scrollContentBackground(.hidden)
+        .background(CalendarTheme.background)
+        .navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false }.onDisappear { guard sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.rescheduleNotifications() } } }
     }
     @ViewBuilder private var defaults: some View {
         let calendars = SourceDescriptorOrdering.calendars(environment.calendar.calendars().filter(\.allowsContentModifications))

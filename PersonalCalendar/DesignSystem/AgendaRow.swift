@@ -32,6 +32,7 @@ struct AgendaRow: View {
                 if item.allowsModification {
                     Button { complete(!item.isCompleted) } label: {
                         Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(sourceColor)
                             .frame(width: CalendarTheme.minimumTapSize, height: CalendarTheme.minimumTapSize)
                     }
                     .buttonStyle(.borderless)
@@ -105,6 +106,6 @@ struct AgendaRow: View {
     }
 
     private var sourceSymbol: String { switch item.source { case .event: "calendar"; case .task: "checkmark.circle"; case .routine: "repeat" } }
-    private var sourceColor: Color { switch item.source { case .event: CalendarTheme.accent; case .task: .orange; case .routine: .purple } }
+    private var sourceColor: Color { CalendarTheme.sourceColor(item.source) }
     private var timeDescription: String { AgendaAccessibilityDescription.scheduleDescription(item.placement) }
 }

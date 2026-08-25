@@ -49,6 +49,8 @@ struct TodayView: View {
                     ContentUnavailableView("Nothing planned today", systemImage: "sun.max", description: Text("New events, tasks, and routines will appear here."))
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(CalendarTheme.background)
             .overlay { if model.isLoading && !model.hasLoaded { ProgressView() } }
             .navigationTitle("Today")
             .task(id: revision) { await model.load() }

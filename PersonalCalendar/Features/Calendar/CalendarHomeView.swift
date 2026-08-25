@@ -38,6 +38,7 @@ struct CalendarHomeView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                 }
+                .background(CalendarTheme.background)
                 .onChange(of: viewModel.selectedDay) { _, selectedDay in
                     guard dynamicTypeSize.isAccessibilitySize else { return }
                     proxy.scrollTo(selectedDay, anchor: .center)
