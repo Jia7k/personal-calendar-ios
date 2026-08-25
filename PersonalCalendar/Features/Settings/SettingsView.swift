@@ -34,6 +34,18 @@ struct SettingsView: View {
             Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))); sourceSelectionChanged = true; onContentChanged() })) } }
             defaults
             NotificationSettingsView(settings: environment.settings, coordinator: environment.notificationCoordinator, reschedule: environment.rescheduleNotifications)
+            Section("Lock Screen") {
+                NavigationLink("School timetable") {
+                    TimetableSettingsView(
+                        snapshotCoordinator: environment.timetableSnapshotCoordinator,
+                        activityCoordinator: environment.timetableLiveActivityCoordinator,
+                        refresh: {
+                            await environment.refreshCoordinator.refreshNow(reason: .localMutation)
+                        }
+                    )
+                }
+                .accessibilityIdentifier("settings-school-timetable")
+            }
             Section("Organization") {
                 NavigationLink("Categories") {
                     CategorySettingsView(
@@ -54,7 +66,7 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(CalendarTheme.background)
-        .navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false }.onDisappear { guard sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.rescheduleNotifications() } } }
+        .navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false }.onDisappear { guard sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.refreshCoordinator.refreshNow(reason: .localMutation) } } }
     }
     @ViewBuilder private var defaults: some View {
         let calendars = SourceDescriptorOrdering.calendars(environment.calendar.calendars().filter(\.allowsContentModifications))

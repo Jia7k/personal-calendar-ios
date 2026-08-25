@@ -57,7 +57,13 @@ struct RootTabView: View {
                     }
                 }
             } else { PermissionOnboardingView(environment: environment) }
-        }.tint(CalendarTheme.accent).onChange(of: scenePhase) { _, phase in
+        }
+        .tint(CalendarTheme.accent)
+        .task(id: environment.settings.didCompleteOnboarding) {
+            guard environment.settings.didCompleteOnboarding else { return }
+            await environment.refreshCoordinator.refreshNow(reason: .launch)
+        }
+        .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await lifecycle.sceneBecameActive()

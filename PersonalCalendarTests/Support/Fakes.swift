@@ -21,6 +21,7 @@ enum RefreshStep: Equatable {
     case sources
     case agenda
     case categoryCleanup
+    case timetable
     case notifications
 }
 
@@ -28,6 +29,7 @@ enum RefreshStep: Equatable {
 final class RefreshCallRecorder {
     private(set) var steps: [RefreshStep] = []
     var agendaOperation: (@MainActor () async -> Void)?
+    var timetableOperation: (@MainActor () async -> Void)?
 
     var completedRefreshes: Int {
         steps.filter { $0 == .notifications }.count
@@ -42,6 +44,10 @@ final class RefreshCallRecorder {
                 await self.agendaOperation?()
             },
             cleanCategoryLinks: { self.steps.append(.categoryCleanup) },
+            refreshTimetable: {
+                self.steps.append(.timetable)
+                await self.timetableOperation?()
+            },
             rescheduleNotifications: { self.steps.append(.notifications) }
         )
     }

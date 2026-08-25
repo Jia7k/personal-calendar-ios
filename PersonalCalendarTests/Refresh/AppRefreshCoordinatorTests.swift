@@ -7,12 +7,16 @@ final class AppRefreshCoordinatorTests: XCTestCase {
         let debouncer = FakeRefreshDebouncer()
         let agendaRefreshes = AgendaRefreshRegistry()
         let agendaGate = FakeRefreshGate()
+        let timetableGate = FakeRefreshGate()
         let calls = RefreshCallRecorder()
         calls.agendaOperation = {
             await agendaRefreshes.refreshAll()
         }
         agendaRefreshes.register(id: UUID()) {
             await agendaGate.wait()
+        }
+        calls.timetableOperation = {
+            await timetableGate.wait()
         }
         let subject = AppRefreshCoordinator(debouncer: debouncer, actions: calls.actions)
 
@@ -26,11 +30,22 @@ final class AppRefreshCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(calls.steps, [.permissions, .sources, .agenda])
         agendaGate.release()
+        for _ in 0..<100 where calls.steps != [
+            .permissions, .sources, .agenda, .categoryCleanup, .timetable
+        ] {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            calls.steps,
+            [.permissions, .sources, .agenda, .categoryCleanup, .timetable]
+        )
+        timetableGate.release()
         await refresh.value
 
         XCTAssertEqual(
             calls.steps,
-            [.permissions, .sources, .agenda, .categoryCleanup, .notifications]
+            [.permissions, .sources, .agenda, .categoryCleanup, .timetable, .notifications]
         )
         XCTAssertEqual(calls.completedRefreshes, 1)
     }

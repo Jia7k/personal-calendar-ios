@@ -1,4 +1,5 @@
 import EventKit
+import Foundation
 import SwiftData
 
 @MainActor
@@ -16,6 +17,8 @@ struct AppEnvironment {
     let rescheduleNotifications: @MainActor @Sendable () async -> Void
     let refreshCoordinator: AppRefreshCoordinator
     let agendaRefreshRegistry: AgendaRefreshRegistry
+    let timetableSnapshotCoordinator: TimetableSnapshotCoordinator
+    let timetableLiveActivityCoordinator: TimetableLiveActivityCoordinator
     private let refreshRuntime: EventStoreRefreshRuntime
     let reduceMotionOverride: Bool
     let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
@@ -38,6 +41,25 @@ struct AppEnvironment {
             notifications: notifications
         )
         let agendaRefreshRegistry = AgendaRefreshRegistry()
+        var localCalendar = Calendar.current
+        localCalendar.timeZone = .current
+        let timetableWriter: any TimetableSnapshotWriting
+        do {
+            timetableWriter = try TimetableSnapshotStore.appGroup()
+        } catch {
+            timetableWriter = UnavailableTimetableSnapshotWriter()
+        }
+        let timetableSnapshotCoordinator = TimetableSnapshotCoordinator(
+            calendar: calendar,
+            settings: settings,
+            builder: TimetableSnapshotBuilder(calendar: localCalendar),
+            writer: timetableWriter,
+            reloader: SystemTimetableWidgetReloader()
+        )
+        let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
+            driver: SystemTimetableActivityDriver(),
+            calendar: localCalendar
+        )
         let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator)
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
@@ -52,6 +74,10 @@ struct AppEnvironment {
             refreshAgenda: { await agendaRefreshRegistry.refreshAll() },
             // EventKit currently exposes no authoritative all-item inventory. Never prune links from visible-range snapshots.
             cleanCategoryLinks: {},
+            refreshTimetable: {
+                guard let snapshot = try? timetableSnapshotCoordinator.refresh() else { return }
+                await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot)
+            },
             rescheduleNotifications: rescheduleNotifications
         ))
         return .init(
@@ -68,6 +94,8 @@ struct AppEnvironment {
             rescheduleNotifications: rescheduleNotifications,
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
+            timetableSnapshotCoordinator: timetableSnapshotCoordinator,
+            timetableLiveActivityCoordinator: timetableLiveActivityCoordinator,
             refreshRuntime: EventStoreRefreshRuntime(coordinator: refreshCoordinator, monitor: EventStoreChangeMonitor(store: store)),
             reduceMotionOverride: false,
             quickEntryContext: { currentQuickEntryContext() }
@@ -119,6 +147,22 @@ struct AppEnvironment {
             notifications: notifications
         )
         let agendaRefreshRegistry = AgendaRefreshRegistry()
+        var localCalendar = Calendar.current
+        localCalendar.timeZone = .current
+        let timetableSnapshotCoordinator = TimetableSnapshotCoordinator(
+            calendar: calendar,
+            settings: settings,
+            builder: TimetableSnapshotBuilder(calendar: localCalendar),
+            writer: TimetableSnapshotStore(
+                fileURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("demo-timetable-\(UUID().uuidString).json")
+            ),
+            reloader: NoopTimetableWidgetReloader()
+        )
+        let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
+            driver: NoopTimetableActivityDriver(),
+            calendar: localCalendar
+        )
         let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator)
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
@@ -132,6 +176,10 @@ struct AppEnvironment {
             },
             refreshAgenda: { await agendaRefreshRegistry.refreshAll() },
             cleanCategoryLinks: {},
+            refreshTimetable: {
+                guard let snapshot = try? timetableSnapshotCoordinator.refresh() else { return }
+                await timetableLiveActivityCoordinator.reconcile(snapshot: snapshot)
+            },
             rescheduleNotifications: rescheduleNotifications
         ))
         return .init(
@@ -148,6 +196,8 @@ struct AppEnvironment {
             rescheduleNotifications: rescheduleNotifications,
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
+            timetableSnapshotCoordinator: timetableSnapshotCoordinator,
+            timetableLiveActivityCoordinator: timetableLiveActivityCoordinator,
             refreshRuntime: EventStoreRefreshRuntime(coordinator: refreshCoordinator, monitor: nil),
             reduceMotionOverride: arguments.contains("-reduce-motion"),
             quickEntryContext: quickEntryContext
@@ -260,6 +310,17 @@ struct AppEnvironment {
         )!
         return .init(now: now, calendar: calendar, locale: locale, timeZone: timeZone)
     }
+}
+
+private struct UnavailableTimetableSnapshotWriter: TimetableSnapshotWriting {
+    func write(_ value: TimetableSnapshotV1) throws {
+        throw TimetableSnapshotStoreError.containerUnavailable
+    }
+}
+
+@MainActor
+private final class NoopTimetableWidgetReloader: TimetableWidgetReloading {
+    func reloadTimetableWidgets() {}
 }
 
 @MainActor

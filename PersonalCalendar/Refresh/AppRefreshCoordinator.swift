@@ -13,6 +13,7 @@ struct RefreshActions {
     let refreshSources: @MainActor () async -> Void
     let refreshAgenda: @MainActor () async -> Void
     let cleanCategoryLinks: @MainActor () async -> Void
+    let refreshTimetable: @MainActor () async -> Void
     let rescheduleNotifications: @MainActor () async -> Void
 }
 
@@ -37,6 +38,7 @@ final class AppRefreshCoordinator {
         await actions.refreshSources()
         await actions.refreshAgenda()
         await actions.cleanCategoryLinks()
+        await actions.refreshTimetable()
         await actions.rescheduleNotifications()
     }
 }
