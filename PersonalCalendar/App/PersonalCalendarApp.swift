@@ -31,6 +31,8 @@ struct PersonalCalendarApp: App {
             return try ModelContainer(
                 for: RoutineRecord.self,
                 RoutineCompletionRecord.self,
+                CategoryRecord.self,
+                ExternalCategoryLinkRecord.self,
                 configurations: configuration
             )
         } catch {

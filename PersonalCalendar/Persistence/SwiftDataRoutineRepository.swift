@@ -33,6 +33,7 @@ final class SwiftDataRoutineRepository: RoutineRepository {
         record.windowRaw = draft.window.rawValue
         record.reminderHour = draft.reminderHour
         record.reminderMinute = draft.reminderMinute
+        record.categoryID = draft.categoryID
         try context.save()
     }
 
@@ -121,7 +122,8 @@ final class SwiftDataRoutineRepository: RoutineRepository {
             weekdays: draft.weekdays,
             window: draft.window,
             reminderHour: draft.reminderHour,
-            reminderMinute: draft.reminderMinute
+            reminderMinute: draft.reminderMinute,
+            categoryID: draft.categoryID
         )
     }
 
@@ -134,7 +136,8 @@ final class SwiftDataRoutineRepository: RoutineRepository {
             reminderHour: record.reminderHour,
             reminderMinute: record.reminderMinute,
             isPaused: record.isPaused,
-            isArchived: record.isArchived
+            isArchived: record.isArchived,
+            categoryID: record.categoryID
         )
     }
 }

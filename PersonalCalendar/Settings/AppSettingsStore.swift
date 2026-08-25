@@ -24,6 +24,7 @@ final class AppSettingsStore {
         static let calendarsExplicit = "selectedCalendarIDsAreExplicit"
         static let listsExplicit = "selectedReminderListIDsAreExplicit"
         static let onboarding = "didCompleteOnboarding"
+        static let categoriesSeeded = "didSeedCategories"
     }
 
     private let defaults: UserDefaults
@@ -32,6 +33,7 @@ final class AppSettingsStore {
     private(set) var defaultCalendarID: String?
     private(set) var defaultReminderListID: String?
     var didCompleteOnboarding: Bool { didSet { defaults.set(didCompleteOnboarding, forKey: Key.onboarding) } }
+    var didSeedCategories: Bool { didSet { defaults.set(didSeedCategories, forKey: Key.categoriesSeeded) } }
     private(set) var calendarSelectionIsExplicit: Bool
     private(set) var reminderSelectionIsExplicit: Bool
 
@@ -44,6 +46,7 @@ final class AppSettingsStore {
         defaultCalendarID = defaults.string(forKey: Key.defaultCalendar)
         defaultReminderListID = defaults.string(forKey: Key.defaultList)
         didCompleteOnboarding = defaults.bool(forKey: Key.onboarding)
+        didSeedCategories = defaults.bool(forKey: Key.categoriesSeeded)
         calendarSelectionIsExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendarIDs.isEmpty
         reminderSelectionIsExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedReminderListIDs.isEmpty
         persistSelectionMarkers()

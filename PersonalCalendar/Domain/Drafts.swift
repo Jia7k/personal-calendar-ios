@@ -49,4 +49,5 @@ struct RoutineDraft: Equatable, Sendable {
     var window: RoutineWindow
     var reminderHour: Int?
     var reminderMinute: Int?
+    var categoryID: UUID? = nil
 }

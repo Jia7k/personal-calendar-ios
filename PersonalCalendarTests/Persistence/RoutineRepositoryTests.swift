@@ -96,6 +96,54 @@ final class RoutineRepositoryTests: XCTestCase {
         XCTAssertTrue(try container.mainContext.fetch(FetchDescriptor<RoutineCompletionRecord>()).isEmpty)
     }
 
+    func testCreateAndListRoundTripCategoryID() throws {
+        let container = try makeContainer()
+        let subject = SwiftDataRoutineRepository(context: container.mainContext)
+        let categoryID = UUID(uuidString: "F46D5B2D-F279-4BCB-9307-D4EFCC52B7D6")!
+
+        let id = try subject.create(
+            .init(
+                title: "Read",
+                weekdays: [2],
+                window: .evening,
+                reminderHour: nil,
+                reminderMinute: nil,
+                categoryID: categoryID
+            )
+        )
+
+        let routine = try XCTUnwrap(subject.list(includeArchived: false).first { $0.id == id })
+        XCTAssertEqual(routine.categoryID, categoryID)
+    }
+
+    func testUpdateChangesCategoryIDAndDefaultCategoryRemainsNil() throws {
+        let container = try makeContainer()
+        let subject = SwiftDataRoutineRepository(context: container.mainContext)
+        let categoryID = UUID(uuidString: "6C8CB9AB-615C-42B2-98A2-55D3BEA324A0")!
+        let id = try subject.create(
+            .init(title: "Read", weekdays: [2], window: .evening, reminderHour: nil, reminderMinute: nil)
+        )
+
+        XCTAssertNil(try XCTUnwrap(subject.list(includeArchived: false).first { $0.id == id }).categoryID)
+
+        try subject.update(
+            id: id,
+            draft: .init(
+                title: "Read",
+                weekdays: [2],
+                window: .evening,
+                reminderHour: nil,
+                reminderMinute: nil,
+                categoryID: categoryID
+            )
+        )
+
+        XCTAssertEqual(
+            try XCTUnwrap(subject.list(includeArchived: false).first { $0.id == id }).categoryID,
+            categoryID
+        )
+    }
+
     func testCreateRejectsInvalidDraft() throws {
         let container = try makeContainer()
         let subject = SwiftDataRoutineRepository(context: container.mainContext)

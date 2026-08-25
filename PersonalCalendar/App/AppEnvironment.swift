@@ -6,6 +6,7 @@ struct AppEnvironment {
     let calendar: any CalendarServicing
     let reminders: any RemindersServicing
     let routines: any RoutineRepository
+    let categories: any CategoryRepository
     let notificationAuthorization: any NotificationAuthorizing
     let permissions: PermissionCoordinator
     let agendaComposer: AgendaComposer
@@ -19,6 +20,9 @@ struct AppEnvironment {
         let calendar = EventKitCalendarService(store: store, mutations: mutations)
         let reminders = EventKitRemindersService(store: store, mutations: mutations)
         let notifications = SystemNotificationAuthorizer()
+        let settings = AppSettingsStore()
+        let categories = SwiftDataCategoryRepository(context: container.mainContext)
+        try! categories.seedDefaultsIfNeeded(settings: settings)
         let permissions = PermissionCoordinator(
             calendar: calendar,
             reminders: reminders,
@@ -28,10 +32,11 @@ struct AppEnvironment {
             calendar: calendar,
             reminders: reminders,
             routines: SwiftDataRoutineRepository(context: container.mainContext),
+            categories: categories,
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(),
-            settings: AppSettingsStore(),
+            settings: settings,
             reduceMotionOverride: false,
             quickEntryContext: { currentQuickEntryContext() }
         )
@@ -62,6 +67,10 @@ struct AppEnvironment {
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        settings.didCompleteOnboarding = !arguments.contains("-show-onboarding")
+        let categories = SwiftDataCategoryRepository(context: container.mainContext)
+        try! categories.seedDefaultsIfNeeded(settings: settings)
         let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
         if arguments.contains("-quick-entry-fixed-context") {
             quickEntryContext = { fixedQuickEntryContext() }
@@ -77,10 +86,11 @@ struct AppEnvironment {
             calendar: calendar,
             reminders: reminders,
             routines: DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title")),
+            categories: categories,
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(),
-            settings: { let settings = AppSettingsStore(defaults: .ephemeral); settings.didCompleteOnboarding = !arguments.contains("-show-onboarding"); return settings }(),
+            settings: settings,
             reduceMotionOverride: arguments.contains("-reduce-motion"),
             quickEntryContext: quickEntryContext
         )

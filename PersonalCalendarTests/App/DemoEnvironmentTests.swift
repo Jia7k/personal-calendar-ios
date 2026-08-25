@@ -15,6 +15,17 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertFalse(AppEnvironment.demo(container: makeContainer(), arguments: ["-show-onboarding"]).settings.didCompleteOnboarding)
     }
 
+    func testDemoEnvironmentSeedsAndExposesDefaultCategories() throws {
+        let container = makeContainer()
+        let environment = AppEnvironment.demo(container: container, arguments: [])
+        let categories = try environment.categories.list()
+
+        XCTAssertEqual(categories.map(\.name), ["Work", "Personal", "Health", "Errands"])
+        XCTAssertEqual(categories.map(\.colorHex), ["#CB6B4F", "#3A8D7C", "#4868A8", "#8A63B8"])
+        XCTAssertEqual(categories.map(\.sortOrder), [0, 1, 2, 3])
+        XCTAssertTrue(environment.settings.didSeedCategories)
+    }
+
     func testFixedQuickEntryContextUsesStableSingaporeDateAndTimeZone() {
         let environment = AppEnvironment.demo(
             container: makeContainer(),
@@ -435,6 +446,12 @@ final class DemoEnvironmentTests: XCTestCase {
 
     private func makeContainer() -> ModelContainer {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true, cloudKitDatabase: .none)
-        return try! ModelContainer(for: RoutineRecord.self, RoutineCompletionRecord.self, configurations: configuration)
+        return try! ModelContainer(
+            for: RoutineRecord.self,
+            RoutineCompletionRecord.self,
+            CategoryRecord.self,
+            ExternalCategoryLinkRecord.self,
+            configurations: configuration
+        )
     }
 }

@@ -9,6 +9,7 @@ final class RoutineRecord {
     var windowRaw: String
     var reminderHour: Int?
     var reminderMinute: Int?
+    var categoryID: UUID?
     var isPaused: Bool
     var isArchived: Bool
     var createdAt: Date
@@ -20,6 +21,7 @@ final class RoutineRecord {
         windowRaw = draft.window.rawValue
         reminderHour = draft.reminderHour
         reminderMinute = draft.reminderMinute
+        categoryID = draft.categoryID
         isPaused = false
         isArchived = false
         self.createdAt = createdAt
