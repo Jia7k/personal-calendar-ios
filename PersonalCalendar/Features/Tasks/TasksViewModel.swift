@@ -63,6 +63,15 @@ final class TasksViewModel {
         }
     }
 
+    /// Host-owned post-Quick-Entry reconciliation. Other committed kinds do not touch Reminders.
+    func refreshAfterQuickEntry(_ outcome: QuickEntrySaveOutcome) async {
+        guard case .task = outcome else { return }
+        await load()
+        if refreshErrorMessage != nil {
+            refreshErrorMessage = "Your task was saved, but tasks could not be refreshed. Pull to try again."
+        }
+    }
+
     func setCompleted(id: String, completed state: Bool) async {
         reconcileMutationRecovery(authoritativeFetch: false)
         guard service.accessState == .granted else { clearMutationRecovery(id: id); return }

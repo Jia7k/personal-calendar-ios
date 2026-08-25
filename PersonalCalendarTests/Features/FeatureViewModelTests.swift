@@ -131,6 +131,141 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertNil(subject.refreshErrorMessage)
     }
 
+    func testTodayQuickEntryRefreshUsesOutcomeSpecificSourceWarningsWithoutAnotherWrite() async {
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
+
+        let eventCalendar = FakeCalendarService(access: .granted)
+        let eventReminders = FakeRemindersService(access: .granted)
+        let eventRoutines = FakeRoutineRepository()
+        let eventSubject = TodayViewModel(calendar: eventCalendar, reminders: eventReminders, routines: eventRoutines, composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        eventCalendar.fetchError = TestError.failed
+        await eventSubject.refreshAfterQuickEntry(.event(id: nil))
+        XCTAssertEqual(eventSubject.calendarError, "Your event was saved, but calendar events could not be refreshed. Pull to try again.")
+        XCTAssertTrue(eventCalendar.createdDrafts.isEmpty)
+        XCTAssertTrue(eventReminders.createdDrafts.isEmpty)
+        XCTAssertTrue(eventRoutines.createdDrafts.isEmpty)
+
+        let taskCalendar = FakeCalendarService(access: .granted)
+        let taskReminders = FakeRemindersService(access: .granted)
+        let taskRoutines = FakeRoutineRepository()
+        let taskSubject = TodayViewModel(calendar: taskCalendar, reminders: taskReminders, routines: taskRoutines, composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        taskReminders.fetchError = TestError.failed
+        await taskSubject.refreshAfterQuickEntry(.task(id: "task"))
+        XCTAssertEqual(taskSubject.remindersError, "Your task was saved, but tasks could not be refreshed. Pull to try again.")
+        XCTAssertTrue(taskCalendar.createdDrafts.isEmpty)
+        XCTAssertTrue(taskReminders.createdDrafts.isEmpty)
+        XCTAssertTrue(taskRoutines.createdDrafts.isEmpty)
+
+        let routineCalendar = FakeCalendarService(access: .granted)
+        let routineReminders = FakeRemindersService(access: .granted)
+        let routineRepository = FakeRoutineRepository()
+        let routineSubject = TodayViewModel(calendar: routineCalendar, reminders: routineReminders, routines: routineRepository, composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
+        routineRepository.listError = TestError.failed
+        await routineSubject.refreshAfterQuickEntry(.routine(id: UUID()))
+        XCTAssertEqual(routineSubject.routinesError, "Your routine was saved, but routines could not be refreshed. Pull to try again.")
+        XCTAssertTrue(routineCalendar.createdDrafts.isEmpty)
+        XCTAssertTrue(routineReminders.createdDrafts.isEmpty)
+        XCTAssertTrue(routineRepository.createdDrafts.isEmpty)
+    }
+
+    func testTasksQuickEntryRefreshIgnoresEventAndRoutineButLoadsTask() async {
+        let service = FakeRemindersService(access: .granted)
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            calendar: calendar
+        )
+
+        await subject.refreshAfterQuickEntry(.event(id: "event"))
+        await subject.refreshAfterQuickEntry(.routine(id: UUID()))
+        XCTAssertTrue(service.fetchListIDs.isEmpty)
+
+        await subject.refreshAfterQuickEntry(.task(id: nil))
+
+        XCTAssertEqual(service.fetchListIDs.count, 1)
+        XCTAssertTrue(service.createdDrafts.isEmpty)
+    }
+
+    func testTasksQuickEntryRefreshFailureShowsSavedWarningWithoutAnotherWrite() async {
+        let service = FakeRemindersService(access: .granted)
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            calendar: calendar
+        )
+        service.fetchError = TestError.failed
+
+        await subject.refreshAfterQuickEntry(.task(id: "task"))
+
+        XCTAssertEqual(subject.refreshErrorMessage, "Your task was saved, but tasks could not be refreshed. Pull to try again.")
+        XCTAssertTrue(service.createdDrafts.isEmpty)
+    }
+
+    func testRoutinesQuickEntryRefreshIgnoresEventAndTaskButLoadsRoutine() {
+        let repository = FakeRoutineRepository()
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar)
+
+        subject.refreshAfterQuickEntry(.init(id: UUID(), outcome: .event(id: nil)))
+        subject.refreshAfterQuickEntry(.init(id: UUID(), outcome: .task(id: nil)))
+        XCTAssertEqual(repository.listCallCount, 0)
+
+        subject.refreshAfterQuickEntry(.init(id: UUID(), outcome: .routine(id: UUID())))
+
+        XCTAssertEqual(repository.listCallCount, 1)
+        XCTAssertTrue(repository.createdDrafts.isEmpty)
+    }
+
+    func testRoutinesConsumesACommittedQuickEntrySignalExactlyOnceWithoutAnotherWrite() throws {
+        let repository = FakeRoutineRepository()
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar)
+        let committedID = try repository.create(
+            .init(
+                title: "Read poetry",
+                weekdays: [1, 2, 3, 4, 5, 6, 7],
+                window: .evening,
+                reminderHour: nil,
+                reminderMinute: nil
+            )
+        )
+        let signal = QuickEntryRefreshSignal(
+            id: UUID(uuidString: "12345678-1234-5678-9ABC-123456789ABC")!,
+            outcome: .routine(id: committedID)
+        )
+
+        subject.refreshAfterQuickEntry(signal)
+        subject.refreshAfterQuickEntry(signal)
+
+        XCTAssertEqual(subject.active.map(\.routine.title), ["Read poetry"])
+        XCTAssertEqual(repository.listCallCount, 1)
+        XCTAssertEqual(repository.createdDrafts.count, 1)
+
+        subject.refreshAfterQuickEntry(
+            .init(id: UUID(), outcome: .routine(id: committedID))
+        )
+
+        XCTAssertEqual(repository.listCallCount, 2)
+        XCTAssertEqual(repository.createdDrafts.count, 1)
+    }
+
+    func testRoutinesQuickEntryRefreshFailureShowsSavedWarningWithoutAnotherWrite() {
+        let repository = FakeRoutineRepository()
+        let subject = RoutinesViewModel(repository: repository, calendar: calendar)
+        repository.listError = TestError.failed
+
+        subject.refreshAfterQuickEntry(.init(id: UUID(), outcome: .routine(id: UUID())))
+
+        XCTAssertEqual(subject.refreshErrorMessage, "Your routine was saved, but routines could not be refreshed. Pull to try again.")
+        XCTAssertTrue(repository.createdDrafts.isEmpty)
+    }
+
+    func testQuickEntryRefreshSignalKeepsUniqueIdentityAndTypedOutcome() {
+        let id = UUID(uuidString: "12345678-1234-5678-9ABC-123456789ABC")!
+        let signal = QuickEntryRefreshSignal(id: id, outcome: .task(id: nil))
+
+        XCTAssertEqual(signal.id, id)
+        XCTAssertEqual(signal.outcome, .task(id: nil))
+    }
+
     func testTodaySuspendedCompletionRefreshCannotOverwriteNewerSelectedList() async {
         let fixture = makeTodayReminderRaceFixture()
         await fixture.subject.load()

@@ -11,6 +11,7 @@ struct AppEnvironment {
     let agendaComposer: AgendaComposer
     let settings: AppSettingsStore
     let reduceMotionOverride: Bool
+    let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
 
     static func live(container: ModelContainer) -> AppEnvironment {
         let store = EKEventStore()
@@ -31,7 +32,8 @@ struct AppEnvironment {
             permissions: permissions,
             agendaComposer: AgendaComposer(),
             settings: AppSettingsStore(),
-            reduceMotionOverride: false
+            reduceMotionOverride: false,
+            quickEntryContext: { currentQuickEntryContext() }
         )
     }
 
@@ -60,6 +62,12 @@ struct AppEnvironment {
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
+        let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
+        if arguments.contains("-quick-entry-fixed-context") {
+            quickEntryContext = { fixedQuickEntryContext() }
+        } else {
+            quickEntryContext = { currentQuickEntryContext() }
+        }
         let permissions = PermissionCoordinator(
             calendar: calendar,
             reminders: reminders,
@@ -73,7 +81,35 @@ struct AppEnvironment {
             permissions: permissions,
             agendaComposer: AgendaComposer(),
             settings: { let settings = AppSettingsStore(defaults: .ephemeral); settings.didCompleteOnboarding = !arguments.contains("-show-onboarding"); return settings }(),
-            reduceMotionOverride: arguments.contains("-reduce-motion")
+            reduceMotionOverride: arguments.contains("-reduce-motion"),
+            quickEntryContext: quickEntryContext
         )
+    }
+
+    private static func currentQuickEntryContext() -> QuickEntryParseContext {
+        let timeZone = TimeZone.current
+        var calendar = Calendar.current
+        calendar.timeZone = timeZone
+        let locale = Locale.current
+        return .init(now: Date(), calendar: calendar, locale: locale, timeZone: timeZone)
+    }
+
+    private static func fixedQuickEntryContext() -> QuickEntryParseContext {
+        let timeZone = TimeZone(identifier: "Asia/Singapore")!
+        let locale = Locale(identifier: "en_SG")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = locale
+        calendar.timeZone = timeZone
+        let now = calendar.date(
+            from: DateComponents(
+                timeZone: timeZone,
+                year: 2026,
+                month: 8,
+                day: 25,
+                hour: 12,
+                minute: 0
+            )
+        )!
+        return .init(now: now, calendar: calendar, locale: locale, timeZone: timeZone)
     }
 }

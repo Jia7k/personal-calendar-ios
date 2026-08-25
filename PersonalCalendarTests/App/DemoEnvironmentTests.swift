@@ -15,6 +15,29 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertFalse(AppEnvironment.demo(container: makeContainer(), arguments: ["-show-onboarding"]).settings.didCompleteOnboarding)
     }
 
+    func testFixedQuickEntryContextUsesStableSingaporeDateAndTimeZone() {
+        let environment = AppEnvironment.demo(
+            container: makeContainer(),
+            arguments: ["-quick-entry-fixed-context"]
+        )
+
+        let first = environment.quickEntryContext()
+        let second = environment.quickEntryContext()
+        let components = first.calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: first.now
+        )
+
+        XCTAssertEqual(first.now, second.now)
+        XCTAssertEqual(first.timeZone.identifier, "Asia/Singapore")
+        XCTAssertEqual(first.locale.identifier, "en_SG")
+        XCTAssertEqual(components.year, 2026)
+        XCTAssertEqual(components.month, 8)
+        XCTAssertEqual(components.day, 25)
+        XCTAssertEqual(components.hour, 12)
+        XCTAssertEqual(components.minute, 0)
+    }
+
     func testCalendarDenialLeavesDemoRemindersAndRoutinesUsable() async throws {
         let environment = AppEnvironment.demo(container: makeContainer(), arguments: ["-calendar-denied"])
         let day = LocalDay(year: 2026, month: 8, day: 24)

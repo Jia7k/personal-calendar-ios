@@ -39,6 +39,7 @@ final class RoutinesViewModel {
     private let repository: any RoutineRepository; private let calendar: Calendar; private let now: () -> Date
     private var confirmedCompletedDays: [UUID: Set<LocalDay>] = [:]
     private var actionToken = 0
+    @ObservationIgnored private var lastQuickEntryRefreshID: UUID?
 
     init(repository: any RoutineRepository, calendar: Calendar = .current, now: @escaping () -> Date = { .now }) { self.repository = repository; self.calendar = calendar; self.now = now }
     var currentDay: LocalDay { LocalDay(date: now(), calendar: calendar) }
@@ -72,6 +73,17 @@ final class RoutinesViewModel {
             if let recovery = actionRecovery, !snapshots.contains(where: { $0.id == recovery.operation.targetID }) { actionRecovery = nil }
             if case let .update(id)? = failedEditorOperation, !snapshots.contains(where: { $0.id == id }) { failedEditorOperation = nil; draftOnFailure = nil; editorErrorMessage = nil }
         } catch { refreshErrorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
+    }
+
+    /// Host-owned post-Quick-Entry reconciliation. Each committed signal is consumed at most once.
+    func refreshAfterQuickEntry(_ signal: QuickEntryRefreshSignal) {
+        guard case .routine = signal.outcome,
+              lastQuickEntryRefreshID != signal.id else { return }
+        lastQuickEntryRefreshID = signal.id
+        reload()
+        if refreshErrorMessage != nil {
+            refreshErrorMessage = "Your routine was saved, but routines could not be refreshed. Pull to try again."
+        }
     }
 
     func create(_ draft: RoutineDraft) -> Bool {

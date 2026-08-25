@@ -6,12 +6,19 @@ struct TodayView: View {
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let revision: Int
+    private let quickEntryRefresh: QuickEntryRefreshSignal?
 
-    init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = {}) {
+    init(
+        environment: AppEnvironment,
+        revision: Int = 0,
+        quickEntryRefresh: QuickEntryRefreshSignal? = nil,
+        openSettings: @escaping @MainActor () -> Void = {}
+    ) {
         self.environment = environment
         _model = State(initialValue: TodayViewModel(calendar: environment.calendar, reminders: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings))
         self.openSettings = openSettings
         self.revision = revision
+        self.quickEntryRefresh = quickEntryRefresh
     }
 
     var body: some View {
@@ -44,6 +51,10 @@ struct TodayView: View {
             .overlay { if model.isLoading && !model.hasLoaded { ProgressView() } }
             .navigationTitle("Today")
             .task(id: revision) { await model.load() }
+            .task(id: quickEntryRefresh?.id) {
+                guard let quickEntryRefresh else { return }
+                await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)
+            }
             .refreshable { await model.load() }
             .sheet(item: $editorPresentation) { presentation in
                 switch presentation.content {

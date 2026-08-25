@@ -143,6 +143,21 @@ final class TodayViewModel {
         }
     }
 
+    /// Host-owned post-Quick-Entry reconciliation. It never repeats the provider write.
+    func refreshAfterQuickEntry(_ outcome: QuickEntrySaveOutcome) async {
+        await load()
+        switch outcome {
+        case .event where calendarError != nil:
+            calendarError = "Your event was saved, but calendar events could not be refreshed. Pull to try again."
+        case .task where remindersError != nil:
+            remindersError = "Your task was saved, but tasks could not be refreshed. Pull to try again."
+        case .routine where routinesError != nil:
+            routinesError = "Your routine was saved, but routines could not be refreshed. Pull to try again."
+        case .event, .task, .routine:
+            break
+        }
+    }
+
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
         reconcileReminderState()
         guard case let .reminder(id) = item.origin,

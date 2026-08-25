@@ -7,12 +7,19 @@ struct CalendarHomeView: View {
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let revision: Int
+    private let quickEntryRefresh: QuickEntryRefreshSignal?
     private var calendar: Calendar { .current }
 
-    init(environment: AppEnvironment, revision: Int = 0, openSettings: @escaping @MainActor () -> Void = {}) {
+    init(
+        environment: AppEnvironment,
+        revision: Int = 0,
+        quickEntryRefresh: QuickEntryRefreshSignal? = nil,
+        openSettings: @escaping @MainActor () -> Void = {}
+    ) {
         self.environment = environment
         self.openSettings = openSettings
         self.revision = revision
+        self.quickEntryRefresh = quickEntryRefresh
         let systemCalendar = Calendar.current
         _viewModel = State(initialValue: CalendarViewModel(today: LocalDay(date: .now, calendar: systemCalendar), calendarService: environment.calendar, remindersService: environment.reminders, routines: environment.routines, composer: environment.agendaComposer, settings: environment.settings, systemCalendar: systemCalendar))
     }
@@ -31,9 +38,12 @@ struct CalendarHomeView: View {
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
-                ToolbarItem(placement: .topBarTrailing) { Button("New Event", systemImage: "plus", action: presentNewEvent).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             }
             .task(id: revision) { await viewModel.load() }
+            .task(id: quickEntryRefresh?.id) {
+                guard let quickEntryRefresh else { return }
+                await viewModel.refreshAfterQuickEntry(quickEntryRefresh.outcome)
+            }
             .sheet(item: $editorPresentation) { presentation in
                 switch presentation.content {
                 case let .event(model, calendars, nilDestinationLabel, showsDelete):
@@ -78,21 +88,6 @@ struct CalendarHomeView: View {
     private func setTray(_ state: TrayState) {
         if reduceMotion || environment.reduceMotionOverride { viewModel.setTray(state) }
         else { withAnimation(.easeInOut(duration: 0.2)) { viewModel.setTray(state) } }
-    }
-
-    private func presentNewEvent() {
-        let dayStart = viewModel.selectedDay.startDate(in: calendar)
-        let start = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: dayStart) ?? dayStart
-        let end = calendar.date(byAdding: .hour, value: 1, to: start) ?? start.addingTimeInterval(3_600)
-        let model = EventEditorViewModel.create(
-            service: environment.calendar,
-            savedDefaultCalendarID: environment.settings.defaultCalendarID,
-            initialStart: start,
-            initialEnd: end,
-            onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) }
-        )
-        let writable = environment.calendar.calendars().filter(\.allowsContentModifications)
-        editorPresentation = .init(content: .event(model: model, calendars: writable, nilDestinationLabel: "System Default", showsDelete: false))
     }
 
     private func openAgendaItem(_ origin: AgendaItemOrigin) {

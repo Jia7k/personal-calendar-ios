@@ -5,17 +5,31 @@ struct RoutinesView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: RoutinesViewModel
     @State private var editing: RoutineRowState?
-    @State private var showingNew = false
     @State private var deleteRequest: DeleteRequest?
-    init(environment: AppEnvironment) { _model = State(initialValue: RoutinesViewModel(repository: environment.routines)) }
+    private let revision: Int
+    private let quickEntryRefresh: QuickEntryRefreshSignal?
+    init(
+        environment: AppEnvironment,
+        revision: Int = 0,
+        quickEntryRefresh: QuickEntryRefreshSignal? = nil
+    ) {
+        _model = State(initialValue: RoutinesViewModel(repository: environment.routines))
+        self.revision = revision
+        self.quickEntryRefresh = quickEntryRefresh
+    }
     var body: some View { NavigationStack { List {
         if let error = model.refreshErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry Refresh") { model.reload() }.frame(minWidth: 44, minHeight: 44) } }
         if let error = model.actionErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(actionRetryLabel) { if let target = model.resolveDeleteRetryTarget() { requestDelete(target) } else if model.failedActionOperation != nil { model.retryFailedAction() } }.frame(minWidth: 44, minHeight: 44) } }
-        Section("Active") { if model.active.isEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
+        Section("Active") { if model.active.isEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Use Add to create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
-    }.navigationTitle("Routines").toolbar { ToolbarItem(placement: .topBarTrailing) { Button("New Routine", systemImage: "plus") { showingNew = true }.frame(minWidth: 44, minHeight: 44) } }
-    .sheet(isPresented: $showingNew) { RoutineEditorView(model: model) }.sheet(item: $editing) { RoutineEditorView(model: model, row: $0) }.sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) { deleteConfirmation($0) }
-    .task { model.reload() }.refreshable { model.reload() }
+    }.navigationTitle("Routines")
+    .sheet(item: $editing) { RoutineEditorView(model: model, row: $0) }.sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) { deleteConfirmation($0) }
+    .task(id: revision) { model.reload() }
+    .onChange(of: quickEntryRefresh, initial: true) { _, signal in
+        guard let signal else { return }
+        model.refreshAfterQuickEntry(signal)
+    }
+    .refreshable { model.reload() }
     }
     }
     private var actionRetryLabel: String { switch model.failedActionOperation { case .pause: "Retry Pause"; case .archive: "Retry Archive"; case .completion: "Retry Completion"; case .delete: "Retry Delete"; case nil: "Retry" } }

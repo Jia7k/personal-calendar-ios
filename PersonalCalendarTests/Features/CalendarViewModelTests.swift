@@ -203,6 +203,73 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertNil(model.errorMessage)
     }
 
+    func testQuickEntryEventRefreshFailureUsesSavedEventWarningWithoutAnotherWrite() async {
+        let calendarService = FakeCalendarService(access: .granted)
+        let reminders = FakeRemindersService(access: .granted)
+        let routines = FakeRoutineRepository()
+        let model = makeModel(
+            calendarService: calendarService,
+            reminders: reminders,
+            routines: routines
+        )
+        calendarService.fetchError = TestError.failed
+
+        await model.refreshAfterQuickEntry(.event(id: nil))
+
+        XCTAssertEqual(model.errorMessage, "Your event was saved, but your schedule could not be refreshed. Pull to try again.")
+        XCTAssertTrue(calendarService.createdDrafts.isEmpty)
+        XCTAssertTrue(reminders.createdDrafts.isEmpty)
+        XCTAssertTrue(routines.createdDrafts.isEmpty)
+    }
+
+    func testQuickEntryTaskRefreshFailureUsesSavedTaskWarningWithoutAnotherWrite() async {
+        let calendarService = FakeCalendarService(access: .granted)
+        let reminders = FakeRemindersService(access: .granted)
+        let routines = FakeRoutineRepository()
+        let model = makeModel(
+            calendarService: calendarService,
+            reminders: reminders,
+            routines: routines
+        )
+        reminders.fetchError = TestError.failed
+
+        await model.refreshAfterQuickEntry(.task(id: "task"))
+
+        XCTAssertEqual(model.errorMessage, "Your task was saved, but your schedule could not be refreshed. Pull to try again.")
+        XCTAssertTrue(calendarService.createdDrafts.isEmpty)
+        XCTAssertTrue(reminders.createdDrafts.isEmpty)
+        XCTAssertTrue(routines.createdDrafts.isEmpty)
+    }
+
+    func testQuickEntryRoutineRefreshFailureUsesSavedRoutineWarningWithoutAnotherWrite() async {
+        let calendarService = FakeCalendarService(access: .granted)
+        let reminders = FakeRemindersService(access: .granted)
+        let routines = FakeRoutineRepository()
+        let model = makeModel(
+            calendarService: calendarService,
+            reminders: reminders,
+            routines: routines
+        )
+        routines.listError = TestError.failed
+
+        await model.refreshAfterQuickEntry(.routine(id: UUID()))
+
+        XCTAssertEqual(model.errorMessage, "Your routine was saved, but your schedule could not be refreshed. Pull to try again.")
+        XCTAssertTrue(calendarService.createdDrafts.isEmpty)
+        XCTAssertTrue(reminders.createdDrafts.isEmpty)
+        XCTAssertTrue(routines.createdDrafts.isEmpty)
+    }
+
+    func testQuickEntryRefreshDoesNotMisattributeAnUnrelatedSourceFailure() async {
+        let reminders = FakeRemindersService(access: .granted)
+        let model = makeModel(reminders: reminders)
+        reminders.fetchError = TestError.failed
+
+        await model.refreshAfterQuickEntry(.event(id: "event"))
+
+        XCTAssertEqual(model.errorMessage, "Your schedule could not be refreshed. Try again.")
+    }
+
     func testCalendarTaskCompletionUsesOneProviderWriteAndDoesNotOpenAnEditor() async {
         let due = today.startDate(in: calendar).addingTimeInterval(3_600)
         let reminder = ReminderSnapshot(id: "opaque|task", title: "Task", notes: nil, dueDate: due, dueHasTime: true, priority: 1, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false)

@@ -5,11 +5,17 @@ struct TasksView: View {
     @State private var editorPresentation: TasksEditorPresentation?
     private let environment: AppEnvironment
     private let revision: Int
+    private let quickEntryRefresh: QuickEntryRefreshSignal?
 
-    init(environment: AppEnvironment, revision: Int = 0) {
+    init(
+        environment: AppEnvironment,
+        revision: Int = 0,
+        quickEntryRefresh: QuickEntryRefreshSignal? = nil
+    ) {
         self.environment = environment
         _model = State(initialValue: TasksViewModel(service: environment.reminders, settings: environment.settings))
         self.revision = revision
+        self.quickEntryRefresh = quickEntryRefresh
     }
 
     var body: some View {
@@ -23,13 +29,6 @@ struct TasksView: View {
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
             }
             .navigationTitle("Tasks")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("New Task", systemImage: "plus", action: presentNewTask)
-                        .disabled(model.accessExplanation != nil)
-                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                }
-            }
             .sheet(item: $editorPresentation) { presentation in
                 TaskEditorView(
                     model: presentation.model,
@@ -40,6 +39,11 @@ struct TasksView: View {
                 )
             }
             .task(id: revision) { await model.load() }
+            .task(id: quickEntryRefresh?.id) {
+                guard let quickEntryRefresh,
+                      case .task = quickEntryRefresh.outcome else { return }
+                await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)
+            }
             .refreshable { await model.load() }
         }
     }
@@ -87,20 +91,6 @@ struct TasksView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func presentNewTask() {
-        let editorModel = TaskEditorViewModel.creating(
-            service: environment.reminders,
-            savedDefaultListID: environment.settings.defaultReminderListID,
-            onCommitted: { commit in finishEditorAndReload(commit) }
-        )
-        editorPresentation = .init(
-            model: editorModel,
-            lists: environment.reminders.lists(),
-            nilDestinationLabel: "System Default",
-            showsDelete: false
-        )
     }
 
     private func openTask(_ task: ReminderSnapshot) {

@@ -19,6 +19,10 @@ enum CalendarEditorRefreshOperation: Equatable {
     }
 }
 
+private enum CalendarRefreshFailureSource: Hashable {
+    case event, task, routine
+}
+
 struct SourceAccessNotice: Equatable, Identifiable, Sendable {
     enum Source: Hashable, Sendable {
         case calendar
@@ -101,6 +105,7 @@ final class CalendarViewModel {
     private let settings: AppSettingsStore
     private let systemCalendar: Calendar
     private var loadGeneration = 0
+    private var latestRefreshFailures: Set<CalendarRefreshFailureSource> = []
 
     init(today: LocalDay, calendarService: any CalendarServicing, remindersService: any RemindersServicing, routines: any RoutineRepository, composer: AgendaComposer, settings: AppSettingsStore, systemCalendar: Calendar) {
         self.today = today
@@ -125,6 +130,7 @@ final class CalendarViewModel {
         var nextCompletions = cachedRoutineCompletions
         var notices: [SourceAccessNotice] = []
         var encounteredFailure = false
+        var refreshFailures: Set<CalendarRefreshFailureSource> = []
         let cells = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth)
         let interval = DateInterval(start: cells.first!.day.startDate(in: systemCalendar), end: systemCalendar.date(byAdding: .day, value: 1, to: cells.last!.day.startDate(in: systemCalendar))!)
 
@@ -136,7 +142,10 @@ final class CalendarViewModel {
                 nextEvents = settings.calendarSelectionIsExplicit && ids.isEmpty ? [] : try calendarService.fetchEvents(in: interval, calendarIDs: ids)
                 if settings.calendarSelectionIsExplicit { nextEvents = nextEvents.filter { ids.contains($0.calendarID) } }
             }
-            catch { encounteredFailure = true }
+            catch {
+                encounteredFailure = true
+                refreshFailures.insert(.event)
+            }
         } else {
             nextEvents = []
             notices.append(SourceAccessNotice(source: .calendar, accessState: calendarAccess))
@@ -150,7 +159,10 @@ final class CalendarViewModel {
                 nextReminders = settings.reminderSelectionIsExplicit && ids.isEmpty ? [] : try await remindersService.fetchReminders(listIDs: ids)
                 if settings.reminderSelectionIsExplicit { nextReminders = nextReminders.filter { ids.contains($0.listID) } }
             }
-            catch { encounteredFailure = true }
+            catch {
+                encounteredFailure = true
+                refreshFailures.insert(.task)
+            }
         } else {
             nextReminders = []
             notices.append(SourceAccessNotice(source: .reminders, accessState: remindersAccess))
@@ -161,7 +173,10 @@ final class CalendarViewModel {
             let completions = try Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, try routines.completedDays(routineID: $0.id)) })
             nextRoutines = refreshed
             nextCompletions = completions
-        } catch { encounteredFailure = true }
+        } catch {
+            encounteredFailure = true
+            refreshFailures.insert(.routine)
+        }
 
         guard generation == loadGeneration else { return }
         cachedEvents = nextEvents
@@ -169,6 +184,7 @@ final class CalendarViewModel {
         cachedRoutines = nextRoutines
         cachedRoutineCompletions = nextCompletions
         sourceAccessNotices = notices
+        latestRefreshFailures = refreshFailures
         rebuildVisibleAgendas()
         errorMessage = encounteredFailure ? "Your schedule could not be refreshed. Try again." : nil
     }
@@ -196,6 +212,25 @@ final class CalendarViewModel {
     func refreshAfterEditorCommit(_ operation: CalendarEditorRefreshOperation) async {
         await load()
         if errorMessage != nil { errorMessage = operation.failureMessage }
+    }
+
+    /// Host-owned post-Quick-Entry reconciliation. The provider write is already terminal.
+    func refreshAfterQuickEntry(_ outcome: QuickEntrySaveOutcome) async {
+        await load()
+        let source: CalendarRefreshFailureSource
+        let message: String
+        switch outcome {
+        case .event:
+            source = .event
+            message = "Your event was saved, but your schedule could not be refreshed. Pull to try again."
+        case .task:
+            source = .task
+            message = "Your task was saved, but your schedule could not be refreshed. Pull to try again."
+        case .routine:
+            source = .routine
+            message = "Your routine was saved, but your schedule could not be refreshed. Pull to try again."
+        }
+        if latestRefreshFailures.contains(source) { errorMessage = message }
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {

@@ -114,41 +114,46 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["month-grid"].exists)
     }
 
-    func testCreateBasicEventInDemoMode() {
+    func testCreateBasicEventThroughUniversalQuickEntryInDemoMode() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
+        app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context"]
         app.launch()
 
-        app.buttons["New Event"].tap()
-        let title = app.textFields["Title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 3))
-        title.tap()
-        title.typeText("Dentist")
-        app.buttons["Save"].tap()
+        openAndParseQuickEntry("Dentist today at 3pm", in: app)
+        XCTAssertEqual(app.descendants(matching: .any)["quick-entry-kind"].value as? String, "Event")
+        app.buttons["quick-entry-save"].tap()
+        finishSavedQuickEntry("Event saved", in: app)
 
-        XCTAssertTrue(app.staticTexts["Dentist"].waitForExistence(timeout: 3))
+        app.buttons["Expand day"].tap()
+        XCTAssertTrue(app.buttons["agenda-open-event-demo-event-2"].waitForExistence(timeout: 3))
+        XCTAssertEqual(app.buttons.matching(identifier: "agenda-open-event-demo-event-2").count, 1)
     }
 
-    func testRetryUsesEditedEventDraftAfterFailOnce() {
+    func testUniversalQuickEntryRetryUsesEditedEventPreviewAfterFailOnce() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-event-save-fails-once"]
+        app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context", "-event-save-fails-once"]
         app.launch()
-        app.buttons["New Event"].tap()
-        let title = app.textFields["Title"]
+        openAndParseQuickEntry("Dentist today at 3pm", in: app)
+        let title = app.textFields["quick-entry-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 3))
-        title.tap()
-        title.typeText("Dentist")
-        app.buttons["Save"].tap()
-        let retry = app.buttons["event-save-retry"]
+        app.buttons["quick-entry-save"].tap()
+        let error = app.descendants(matching: .any)["quick-entry-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3))
+        XCTAssertEqual(error.label, "Your event was not saved. Edit it and try again.")
+        let retry = app.buttons["quick-entry-retry"]
         scrollToHittable(retry, in: app)
         for _ in 0..<6 where !title.isHittable { app.swipeDown() }
         XCTAssertTrue(title.isHittable)
-        title.tap()
-        for _ in 0..<7 { title.typeText(XCUIKeyboardKey.delete.rawValue) }
-        title.typeText("Dentist Updated")
+        replaceText(title, with: "Dentist Updated")
+        dismissKeyboard(in: app)
         scrollToHittable(retry, in: app)
         retry.tap()
-        XCTAssertTrue(app.staticTexts["Dentist Updated"].waitForExistence(timeout: 3))
+        finishSavedQuickEntry("Event saved", in: app)
+        app.buttons["Expand day"].tap()
+        let created = app.buttons["agenda-open-event-demo-event-2"]
+        XCTAssertTrue(created.waitForExistence(timeout: 3))
+        XCTAssertEqual(created.label, "Open event Dentist Updated")
+        XCTAssertEqual(app.buttons.matching(identifier: "agenda-open-event-demo-event-2").count, 1)
         XCTAssertFalse(app.staticTexts["Dentist"].exists)
     }
 
@@ -351,19 +356,20 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertEqual(restored.value as? String, "Not completed")
     }
 
-    func testCreateTaskAndCompleteRoutineInDemoMode() {
+    func testUniversalQuickEntryCreatesTaskAndExistingRoutineCompletesInDemoMode() {
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing"]
+        app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context"]
         app.launch()
 
         app.tabBars.buttons["Tasks"].tap()
-        app.buttons["New Task"].tap()
-        let title = app.textFields["Task title"]
-        XCTAssertTrue(title.waitForExistence(timeout: 3))
-        title.tap(); title.typeText("Call Alex")
-        app.buttons["Save"].tap()
-        XCTAssertTrue(app.staticTexts["Call Alex"].waitForExistence(timeout: 3))
-        waitForDisappearance(app.navigationBars["New Task"])
+        openAndParseQuickEntry("Call Alex", in: app)
+        XCTAssertEqual(app.descendants(matching: .any)["quick-entry-kind"].value as? String, "Task")
+        app.buttons["quick-entry-save"].tap()
+        finishSavedQuickEntry("Task saved", in: app)
+        let createdTask = app.buttons["task-open-demo-task-2"]
+        XCTAssertTrue(createdTask.waitForExistence(timeout: 3))
+        XCTAssertEqual(createdTask.label, "Open task Call Alex")
+        XCTAssertEqual(app.buttons.matching(identifier: "task-open-demo-task-2").count, 1)
 
         app.tabBars.buttons["Routines"].tap()
         let complete = app.buttons["Mark Read complete"]
@@ -378,27 +384,31 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["14-day history"].exists)
     }
 
-    func testEditedTaskRetryAfterDemoFailOnceCreatesOnlyEditedTask() {
-        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-task-save-fails-once"]; app.launch()
-        app.tabBars.buttons["Tasks"].tap(); app.buttons["New Task"].tap()
-        let title = app.textFields["task-editor-title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("First")
-        app.buttons["task-editor-save"].tap()
-        let retry = app.buttons["task-save-retry"]
+    func testUniversalQuickEntryTaskRetryAfterDemoFailOnceCreatesOnlyEditedTask() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context", "-task-save-fails-once"]; app.launch()
+        app.tabBars.buttons["Tasks"].tap(); openAndParseQuickEntry("First", in: app)
+        let title = app.textFields["quick-entry-title"]; XCTAssertTrue(title.waitForExistence(timeout: 3))
+        app.buttons["quick-entry-save"].tap()
+        let error = app.descendants(matching: .any)["quick-entry-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3)); XCTAssertEqual(error.label, "Your task was not saved. Edit it and try again.")
+        let retry = app.buttons["quick-entry-retry"]
         scrollToHittable(retry, in: app)
         XCTAssertEqual(title.value as? String, "First")
         for _ in 0..<6 where !title.isHittable { app.swipeDown() }
         XCTAssertTrue(title.isHittable)
-        title.tap(); for _ in 0..<5 { title.typeText(XCUIKeyboardKey.delete.rawValue) }; title.typeText("Edited")
-        scrollToHittable(retry, in: app); retry.tap(); XCTAssertTrue(app.staticTexts["Edited"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["First"].exists)
+        replaceText(title, with: "Edited")
+        dismissKeyboard(in: app)
+        scrollToHittable(retry, in: app); retry.tap(); finishSavedQuickEntry("Task saved", in: app)
+        let created = app.buttons["task-open-demo-task-2"]
+        XCTAssertTrue(created.waitForExistence(timeout: 3)); XCTAssertEqual(created.label, "Open task Edited"); XCTAssertEqual(app.buttons.matching(identifier: "task-open-demo-task-2").count, 1); XCTAssertFalse(app.staticTexts["First"].exists)
     }
 
-    func testRoutineCreateFailureCancelReopenAndEditedRetry() {
-        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-routine-create-fails-once"]; app.launch(); app.tabBars.buttons["Routines"].tap()
-        app.buttons["New Routine"].tap(); let title = app.textFields["Routine title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); title.tap(); title.typeText("Draft Routine"); app.keyboards.buttons["Return"].tap(); app.buttons["Daily"].tap()
-        XCTAssertTrue(app.buttons["routine-save"].isHittable); app.buttons["routine-save"].tap(); XCTAssertTrue(findRoutineRetry(in: app).exists); XCTAssertTrue(app.staticTexts["Your routine was not saved. Edit it and try again."].exists)
-        app.buttons["Cancel"].tap(); app.buttons["New Routine"].tap(); let reopenedTitle = app.textFields["Routine title"]; XCTAssertEqual(reopenedTitle.value as? String, "Draft Routine"); XCTAssertTrue(app.buttons["Clear daily"].exists)
-        reopenedTitle.tap(); for _ in 0..<13 { reopenedTitle.typeText(XCUIKeyboardKey.delete.rawValue) }; reopenedTitle.typeText("Edited Routine")
-        findRoutineRetry(in: app).tap(); XCTAssertTrue(app.staticTexts["Edited Routine"].waitForExistence(timeout: 3)); XCTAssertFalse(app.staticTexts["Draft Routine"].exists)
+    func testUniversalQuickEntryRoutineFailureRetainsEditsForRetry() {
+        let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context", "-routine-create-fails-once"]; app.launch(); app.tabBars.buttons["Routines"].tap()
+        openAndParseQuickEntry("Read every night", in: app); let title = app.textFields["quick-entry-title"]; XCTAssertTrue(title.waitForExistence(timeout: 3)); replaceText(title, with: "Draft Routine"); dismissKeyboard(in: app)
+        XCTAssertTrue(app.buttons["quick-entry-save"].isHittable); app.buttons["quick-entry-save"].tap(); let error = app.descendants(matching: .any)["quick-entry-error"]; XCTAssertTrue(error.waitForExistence(timeout: 3)); XCTAssertEqual(error.label, "Your routine was not saved. Edit it and try again."); XCTAssertEqual(title.value as? String, "Draft Routine")
+        replaceText(title, with: "Edited Routine"); dismissKeyboard(in: app)
+        app.buttons["quick-entry-retry"].tap(); finishSavedQuickEntry("Routine saved", in: app); let created = app.staticTexts.matching(NSPredicate(format: "label == %@", "Edited Routine")); XCTAssertTrue(created.firstMatch.waitForExistence(timeout: 3)); XCTAssertEqual(created.count, 1); XCTAssertFalse(app.staticTexts["Draft Routine"].exists)
     }
 
     func testRoutineUpdateFailureCancelReopenAndEditedRetry() {
@@ -742,6 +752,46 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(save.isHittable)
         let delete = app.buttons["task-editor-delete"]
         scrollToHittable(delete, in: app)
+    }
+
+    private func openAndParseQuickEntry(
+        _ text: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let add = app.buttons["universal-add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 3), file: file, line: line)
+        XCTAssertEqual(add.label, "Add event, task, or routine", file: file, line: line)
+        add.tap()
+        let input = app.textFields["quick-entry-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 3), file: file, line: line)
+        XCTAssertEqual(input.label, "Describe what you want to add", file: file, line: line)
+        input.tap()
+        input.typeText(text)
+        dismissKeyboard(in: app)
+        let review = app.buttons["quick-entry-parse"]
+        XCTAssertTrue(review.exists, file: file, line: line)
+        XCTAssertEqual(review.label, "Review", file: file, line: line)
+        review.tap()
+        XCTAssertTrue(app.textFields["quick-entry-title"].waitForExistence(timeout: 3), file: file, line: line)
+    }
+
+    private func finishSavedQuickEntry(
+        _ copy: String,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let saved = app.descendants(matching: .any)["quick-entry-saved"]
+        XCTAssertTrue(saved.waitForExistence(timeout: 3), file: file, line: line)
+        XCTAssertEqual(saved.label, copy, file: file, line: line)
+        let done = app.buttons["quick-entry-done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 3), file: file, line: line)
+        XCTAssertTrue(done.isHittable, file: file, line: line)
+        XCTAssertFalse(app.buttons["quick-entry-save"].exists, file: file, line: line)
+        XCTAssertFalse(app.buttons["quick-entry-retry"].exists, file: file, line: line)
+        done.tap()
     }
 
     private func waitForDisappearance(_ element: XCUIElement, timeout: TimeInterval = 3) {
