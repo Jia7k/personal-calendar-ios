@@ -51,8 +51,14 @@ final class PermissionCoordinatorTests: XCTestCase {
         let notifications = FakeNotificationAuthorizer(access: .granted)
         let subject = PermissionCoordinator(calendar: calendar, reminders: reminders, notifications: notifications)
 
-        async let calendarRequest: Void = subject.requestCalendar()
-        await Task.yield()
+        let calendarRequest = Task { await subject.requestCalendar() }
+        await waitUntil { calendar.isRequestSuspended }
+        guard calendar.isRequestSuspended else {
+            calendar.suspendNextRequest = false
+            await calendarRequest.value
+            XCTFail("Calendar request did not reach its suspension point")
+            return
+        }
         XCTAssertTrue(subject.isPending("calendar"))
         XCTAssertFalse(subject.isPending("reminders"))
         await subject.requestReminders()
@@ -63,7 +69,7 @@ final class PermissionCoordinatorTests: XCTestCase {
         XCTAssertFalse(subject.isPending("reminders"))
         XCTAssertEqual(subject.remindersAccess, .denied)
         calendar.resumeSuspendedRequest()
-        await calendarRequest
+        await calendarRequest.value
         XCTAssertEqual(subject.calendarAccess, .granted)
         XCTAssertFalse(subject.isPending("calendar"))
     }
@@ -218,5 +224,12 @@ final class PermissionCoordinatorTests: XCTestCase {
         XCTAssertEqual(subject.calendarAccess, .restricted)
         XCTAssertEqual(subject.remindersAccess, .granted)
         XCTAssertEqual(subject.notificationAccess, .denied)
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async {
+        for _ in 0..<100 {
+            if condition() { return }
+            await Task.yield()
+        }
     }
 }

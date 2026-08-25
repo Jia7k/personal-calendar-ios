@@ -65,7 +65,7 @@ final class CompletionFlowUITests: XCTestCase {
         app.buttons["Expand day"].tap()
         let created = app.buttons["agenda-open-event-demo-event-2"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
-        XCTAssertEqual(created.label, "Open event Dentist appointment")
+        XCTAssertEqual(created.label, "Event, Dentist appointment, 15:00, Not completed")
         XCTAssertEqual(app.buttons.matching(identifier: "agenda-open-event-demo-event-2").count, 1)
     }
 
@@ -130,7 +130,7 @@ final class CompletionFlowUITests: XCTestCase {
         app.buttons["Expand day"].tap()
         let created = app.buttons["agenda-open-event-demo-event-2"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
-        XCTAssertEqual(created.label, "Open event Dentist retry")
+        XCTAssertEqual(created.label, "Event, Dentist retry, 15:00, Not completed")
         XCTAssertEqual(app.buttons.matching(identifier: "agenda-open-event-demo-event-2").count, 1)
         XCTAssertFalse(app.staticTexts["First dentist draft"].exists)
     }
@@ -175,21 +175,34 @@ final class CompletionFlowUITests: XCTestCase {
         sunday.tap()
         waitForValue("Not selected", on: sunday)
         let reminder = app.switches["quick-entry-reminder-enabled"]
-        XCTAssertTrue(reminder.waitForExistence(timeout: 3))
+        scrollToHittable(reminder, in: app)
         tapSwitch(reminder)
         waitForSwitch(reminder, isOn: true)
-        XCTAssertTrue(app.datePickers["quick-entry-reminder-date"].waitForExistence(timeout: 3))
-        app.buttons["quick-entry-save"].tap()
+        scrollToExistence(app.datePickers["quick-entry-reminder-date"], in: app)
+        let save = app.buttons["quick-entry-save"]
+        scrollToHittable(save, in: app)
+        save.tap()
 
         assertSaveFailure("Your routine was not saved. Edit it and try again.", in: app)
-        XCTAssertEqual(title.value as? String, "Stretch gently")
-        waitForValue("Morning", on: app.descendants(matching: .any)["quick-entry-routine-window"])
-        waitForValue("Not selected", on: sunday)
-        waitForSwitch(reminder, isOn: true)
-        XCTAssertTrue(app.datePickers["quick-entry-reminder-date"].exists)
-        replaceText(title, with: "Stretch gently retry")
+        let retainedTitle = app.textFields["quick-entry-title"]
+        scrollTowardTopToHittable(retainedTitle, in: app)
+        XCTAssertEqual(retainedTitle.value as? String, "Stretch gently")
+        let retainedWindow = app.descendants(matching: .any)["quick-entry-routine-window"]
+        scrollToExistence(retainedWindow, in: app)
+        waitForValue("Morning", on: retainedWindow)
+        let retainedSunday = app.buttons["quick-entry-routine-weekday-1"]
+        scrollToExistence(retainedSunday, in: app)
+        waitForValue("Not selected", on: retainedSunday)
+        let retainedReminder = app.switches["quick-entry-reminder-enabled"]
+        scrollToHittable(retainedReminder, in: app)
+        waitForSwitch(retainedReminder, isOn: true)
+        scrollToExistence(app.datePickers["quick-entry-reminder-date"], in: app)
+        scrollTowardTopToHittable(retainedTitle, in: app)
+        replaceText(retainedTitle, with: "Stretch gently retry")
         dismissKeyboard(in: app)
-        app.buttons["quick-entry-retry"].tap()
+        let retry = app.buttons["quick-entry-retry"]
+        scrollToHittable(retry, in: app)
+        retry.tap()
 
         assertSaved("Routine saved", in: app)
         app.buttons["quick-entry-done"].tap()
@@ -261,12 +274,12 @@ final class CompletionFlowUITests: XCTestCase {
         app.buttons["quick-entry-cancel"].tap()
 
         XCTAssertTrue(app.staticTexts["Discard quick entry?"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["quick-entry-discard"].exists)
-        XCTAssertTrue(app.buttons["quick-entry-keep-editing"].exists)
-        app.buttons["quick-entry-keep-editing"].tap()
+        XCTAssertTrue(app.buttons["Discard"].exists)
+        XCTAssertTrue(app.buttons["Keep Editing"].exists)
+        app.buttons["Keep Editing"].tap()
         XCTAssertEqual(input.value as? String, "Journal privately")
         app.buttons["quick-entry-cancel"].tap()
-        app.buttons["quick-entry-discard"].tap()
+        app.buttons["Discard"].tap()
 
         waitForDisappearance(input)
         app.tabBars.buttons["Tasks"].tap()
@@ -327,6 +340,14 @@ final class CompletionFlowUITests: XCTestCase {
         XCTAssertFalse(add.frame.intersects(tabBar.frame))
         XCTAssertTrue(app.buttons["calendar-day-today"].isHittable)
 
+        app.buttons["Next month"].tap()
+        let calendar = Calendar.current
+        let nextMonth = calendar.date(byAdding: .month, value: 1, to: Date())!
+        let components = calendar.dateComponents([.year, .month, .day], from: nextMonth)
+        let nextMonthSelection = app.buttons["calendar-day-\(components.year!)-\(components.month!)-\(components.day!)"]
+        XCTAssertTrue(nextMonthSelection.waitForExistence(timeout: 3))
+        XCTAssertTrue(nextMonthSelection.isHittable)
+
         parse("Read every night", in: app)
         assertKind("Routine", in: app)
         let category = app.descendants(matching: .any)["quick-entry-category"]
@@ -345,7 +366,7 @@ final class CompletionFlowUITests: XCTestCase {
     ) {
         let app = launch()
         if tab != "Calendar" { app.tabBars.buttons[tab].tap() }
-        XCTAssertTrue(app.navigationBars[tab].waitForExistence(timeout: 3), file: file, line: line)
+        XCTAssertTrue(app.tabBars.buttons[tab].isSelected, file: file, line: line)
         let adds = app.buttons.matching(identifier: "universal-add")
         XCTAssertEqual(adds.count, 1, "There must be one root-owned Add action", file: file, line: line)
         let add = adds.firstMatch
@@ -358,7 +379,7 @@ final class CompletionFlowUITests: XCTestCase {
         }
         add.tap()
         XCTAssertTrue(app.textFields["quick-entry-input"].waitForExistence(timeout: 3), file: file, line: line)
-        XCTAssertEqual(app.textFields["quick-entry-input"].label, "Describe what you want to add", file: file, line: line)
+        XCTAssertEqual(app.textFields["quick-entry-input"].placeholderValue, "Describe what you want to add", file: file, line: line)
         app.buttons["quick-entry-cancel"].tap()
     }
 
@@ -375,7 +396,7 @@ final class CompletionFlowUITests: XCTestCase {
         add.tap()
         let input = app.textFields["quick-entry-input"]
         XCTAssertTrue(input.waitForExistence(timeout: 3), file: file, line: line)
-        XCTAssertEqual(input.label, "Describe what you want to add", file: file, line: line)
+        XCTAssertEqual(input.placeholderValue, "Describe what you want to add", file: file, line: line)
         XCTAssertTrue(app.buttons["quick-entry-parse"].exists, file: file, line: line)
         XCTAssertEqual(app.buttons["quick-entry-parse"].label, "Review", file: file, line: line)
     }
@@ -419,8 +440,7 @@ final class CompletionFlowUITests: XCTestCase {
     private func assertCategoryNone(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         let category = app.descendants(matching: .any)["quick-entry-category"]
         scrollToExistence(category, in: app, file: file, line: line)
-        XCTAssertEqual(category.label, "Category", file: file, line: line)
-        XCTAssertEqual(category.value as? String, "None", file: file, line: line)
+        XCTAssertEqual(category.label, "Category, No Category", file: file, line: line)
     }
 
     private func assertSaved(_ copy: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
@@ -522,5 +542,15 @@ final class CompletionFlowUITests: XCTestCase {
     ) {
         for _ in 0..<12 where !element.exists { app.swipeUp() }
         XCTAssertTrue(element.exists, "Expected \(element) to be reachable", file: file, line: line)
+    }
+
+    private func scrollTowardTopToHittable(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for _ in 0..<12 where !element.isHittable { app.swipeDown() }
+        XCTAssertTrue(element.isHittable, "Expected \(element) to be reachable and hittable", file: file, line: line)
     }
 }

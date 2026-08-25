@@ -26,12 +26,23 @@ struct RootTabView: View {
         Group {
             if environment.settings.didCompleteOnboarding {
                 TabView(selection: $selection) {
-                    CalendarHomeView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings).tabItem { Label("Calendar", systemImage: "calendar") }.tag(RootTab.calendar)
-                    TodayView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings).tabItem { Label("Today", systemImage: "sun.max") }.tag(RootTab.today)
-                    TasksView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal).tabItem { Label("Tasks", systemImage: "checklist") }.tag(RootTab.tasks)
-                    RoutinesView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal).tabItem { Label("Routines", systemImage: "repeat") }.tag(RootTab.routines)
+                    CalendarHomeView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
+                        .universalQuickEntry(onAdd: presentQuickEntry)
+                        .tabItem { Label("Calendar", systemImage: "calendar") }
+                        .tag(RootTab.calendar)
+                    TodayView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
+                        .universalQuickEntry(onAdd: presentQuickEntry)
+                        .tabItem { Label("Today", systemImage: "sun.max") }
+                        .tag(RootTab.today)
+                    TasksView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal)
+                        .universalQuickEntry(onAdd: presentQuickEntry)
+                        .tabItem { Label("Tasks", systemImage: "checklist") }
+                        .tag(RootTab.tasks)
+                    RoutinesView(environment: environment, revision: lifecycle.revision, quickEntryRefresh: refreshSignal)
+                        .universalQuickEntry(onAdd: presentQuickEntry)
+                        .tabItem { Label("Routines", systemImage: "repeat") }
+                        .tag(RootTab.routines)
                 }
-                .universalQuickEntry(onAdd: presentQuickEntry)
                 .sheet(item: $presentation, onDismiss: presentationDidDismiss) { presentation in
                     switch presentation {
                     case .settings:

@@ -209,6 +209,12 @@ final class CalendarViewModel {
     func moveMonth(by value: Int) async {
         let moved = systemCalendar.date(byAdding: .month, value: value, to: displayedMonth.startDate(in: systemCalendar))!
         displayedMonth = LocalDay(date: moved, calendar: systemCalendar)
+        let lastDay = systemCalendar.range(of: .day, in: .month, for: moved)!.count
+        selectedDay = LocalDay(
+            year: displayedMonth.year,
+            month: displayedMonth.month,
+            day: min(selectedDay.day, lastDay)
+        )
         await load()
     }
 

@@ -481,18 +481,19 @@ final class QuickEntryViewModelTests: XCTestCase {
         XCTAssertTrue(saver.received.isEmpty)
     }
 
-    func testNonnilCategoryIsRejectedLocallyUntilCategoryStorageExists() {
+    func testNonnilCategoryIsForwardedToTheSaver() {
         let saver = RecordingQuickEntrySaver()
         var parsed = taskPreview()
-        parsed.categoryID = UUID()
+        let categoryID = UUID()
+        parsed.categoryID = categoryID
         let subject = makeSubject(result: .success(parsed), saver: saver)
         subject.text = "Submit"
         subject.parse()
 
         subject.confirmSave()
 
-        XCTAssertEqual(subject.phase, .confirmation(.failed(.validation)))
-        XCTAssertTrue(saver.received.isEmpty)
+        XCTAssertEqual(subject.phase, .committed(.task(id: "saved-task")))
+        XCTAssertEqual(saver.received.map(\.categoryID), [categoryID])
     }
 
     func testNilSystemDefaultRequiresAtLeastOneWritableSource() {

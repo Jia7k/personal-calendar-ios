@@ -152,7 +152,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["Expand day"].tap()
         let created = app.buttons["agenda-open-event-demo-event-2"]
         XCTAssertTrue(created.waitForExistence(timeout: 3))
-        XCTAssertEqual(created.label, "Open event Dentist Updated")
+        XCTAssertEqual(created.label, "Event, Dentist Updated, 15:00, Not completed")
         XCTAssertEqual(app.buttons.matching(identifier: "agenda-open-event-demo-event-2").count, 1)
         XCTAssertFalse(app.staticTexts["Dentist"].exists)
     }
@@ -766,7 +766,7 @@ final class FoundationFlowUITests: XCTestCase {
         add.tap()
         let input = app.textFields["quick-entry-input"]
         XCTAssertTrue(input.waitForExistence(timeout: 3), file: file, line: line)
-        XCTAssertEqual(input.label, "Describe what you want to add", file: file, line: line)
+        XCTAssertEqual(input.placeholderValue, "Describe what you want to add", file: file, line: line)
         input.tap()
         input.typeText(text)
         dismissKeyboard(in: app)

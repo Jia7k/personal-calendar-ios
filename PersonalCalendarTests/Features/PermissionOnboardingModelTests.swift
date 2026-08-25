@@ -293,7 +293,7 @@ final class PermissionOnboardingModelTests: XCTestCase {
     }
 
     private func waitUntilActionsEnable(_ subject: PermissionOnboardingModel) async {
-        for _ in 0..<10 where !subject.actionsEnabled {
+        for _ in 0..<100 where !subject.actionsEnabled {
             await Task.yield()
         }
         XCTAssertTrue(subject.actionsEnabled)

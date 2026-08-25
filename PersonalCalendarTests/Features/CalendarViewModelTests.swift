@@ -121,12 +121,13 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Tomorrow"])
     }
 
-    func testMovingMonthChangesDisplayedMonth() async {
+    func testMovingMonthKeepsSelectedDayAlignedWithDisplayedMonth() async {
         let model = makeModel()
 
         await model.moveMonth(by: 1)
 
         XCTAssertEqual(model.displayedMonth, LocalDay(year: 2026, month: 9, day: 1))
+        XCTAssertEqual(model.selectedDay, LocalDay(year: 2026, month: 9, day: 24))
     }
 
     func testTrayStateChanges() {

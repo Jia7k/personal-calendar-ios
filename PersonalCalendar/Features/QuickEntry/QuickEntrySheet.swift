@@ -20,19 +20,16 @@ struct QuickEntrySheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { navigationToolbar }
         }
-        .confirmationDialog(
+        .alert(
             "Discard quick entry?",
-            isPresented: $showsDiscardConfirmation,
-            titleVisibility: .visible
+            isPresented: $showsDiscardConfirmation
         ) {
+            Button("Keep Editing", role: .cancel) {}
+
             Button("Discard", role: .destructive) {
                 model.confirmDiscard()
                 onDismiss()
             }
-            .accessibilityIdentifier("quick-entry-discard")
-
-            Button("Keep Editing", role: .cancel) {}
-                .accessibilityIdentifier("quick-entry-keep-editing")
         } message: {
             Text("Your unsaved quick-entry changes will be discarded.")
         }
@@ -143,6 +140,7 @@ struct QuickEntrySheet: View {
     private func confirmationForm(state: QuickEntryConfirmationState) -> some View {
         Form {
             kindSection
+            sourceAccessSection
 
             if case let .failed(failure) = state {
                 Section("Couldn’t save") {
@@ -584,26 +582,7 @@ struct QuickEntrySheet: View {
     }
 
     @ViewBuilder
-    private var informationSections: some View {
-        if let transformationNotice = model.transformationNotice {
-            Section("Adjusted for this type") {
-                Label(transformationNotice, systemImage: "arrow.triangle.2.circlepath")
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("quick-entry-transformation-notice")
-            }
-        }
-
-        if let warning = model.warningMessage {
-            Section("Check this date") {
-                Label(warning, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityIdentifier("quick-entry-warning")
-            }
-        }
-
+    private var sourceAccessSection: some View {
         if let explanation = sourceExplanation {
             Section("Source access") {
                 Text(explanation)
@@ -626,6 +605,29 @@ struct QuickEntrySheet: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var informationSections: some View {
+        if let transformationNotice = model.transformationNotice {
+            Section("Adjusted for this type") {
+                Label(transformationNotice, systemImage: "arrow.triangle.2.circlepath")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("quick-entry-transformation-notice")
+            }
+        }
+
+        if let warning = model.warningMessage {
+            Section("Check this date") {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("quick-entry-warning")
+            }
+        }
+
     }
 
     private func weekdayButton(_ day: Int, inRecurrence: Bool) -> some View {

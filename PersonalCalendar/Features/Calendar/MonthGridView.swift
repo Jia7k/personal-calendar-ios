@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MonthGridView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let cells: [CalendarCell]
     let displayedMonth: LocalDay
     let selectedDay: LocalDay
@@ -10,13 +11,34 @@ struct MonthGridView: View {
     let onSelect: (LocalDay) -> Void
 
     var body: some View {
-        VStack(spacing: 4) {
-            weekdayHeader
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(cells) { cell in
-                    dayButton(cell)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                LazyVStack(spacing: 4) {
+                    ForEach(cells) { cell in
+                        dayButton(cell)
+                    }
+                }
+            } else {
+                VStack(spacing: 4) {
+                    weekdayHeader
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
+                        ForEach(cells) { cell in
+                            dayButton(cell)
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func dayTitle(_ day: LocalDay, isSelected: Bool) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Text(day.startDate(in: calendar).formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
+                .font(.body.weight(isSelected ? .bold : .regular))
+        } else {
+            Text(day.day, format: .number)
+                .font(.body.weight(isSelected ? .bold : .regular))
         }
     }
 
@@ -42,8 +64,7 @@ struct MonthGridView: View {
             onSelect(cell.day)
         } label: {
             VStack(spacing: 2) {
-                Text(cell.day.day, format: .number)
-                    .font(.body.weight(isSelected ? .bold : .regular))
+                dayTitle(cell.day, isSelected: isSelected)
                 HStack(spacing: 3) {
                     ForEach(Array(items.prefix(3))) { item in
                         Image(systemName: indicatorSymbol(for: item))
@@ -60,6 +81,7 @@ struct MonthGridView: View {
             .opacity(cell.belongsToDisplayedMonth ? 1 : 0.45)
         }
         .buttonStyle(.plain)
+        .id(cell.day)
         .accessibilityIdentifier(cell.day == today ? "calendar-day-today" : "calendar-day-\(cell.day.year)-\(cell.day.month)-\(cell.day.day)")
         .accessibilityLabel(accessibilityDateLabel(for: cell.day))
         .accessibilityValue(accessibilityValue(isToday: isToday, isSelected: isSelected, itemCount: itemCount))

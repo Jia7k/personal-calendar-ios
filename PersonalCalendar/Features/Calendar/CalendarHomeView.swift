@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CalendarHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var viewModel: CalendarViewModel
     @State private var editorPresentation: CalendarEditorPresentation?
     @State private var refreshRegistrationID = UUID()
@@ -27,14 +28,20 @@ struct CalendarHomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    monthHeader
-                    grid
-                    DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } }, onOpenItem: openAgendaItem, onSetTaskCompleted: { item, completed in Task { await viewModel.setTaskCompleted(item, completed: completed) } })
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 16) {
+                        monthHeader
+                        grid
+                        DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } }, onOpenItem: openAgendaItem, onSetTaskCompleted: { item, completed in Task { await viewModel.setTaskCompleted(item, completed: completed) } })
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .onChange(of: viewModel.selectedDay) { _, selectedDay in
+                    guard dynamicTypeSize.isAccessibilitySize else { return }
+                    proxy.scrollTo(selectedDay, anchor: .center)
+                }
             }
             .navigationTitle("Calendar")
             .toolbar {
@@ -80,11 +87,12 @@ struct CalendarHomeView: View {
 
     private var grid: some View {
         let builder = MonthGridBuilder(calendar: calendar)
-        let cells = viewModel.trayState == .expanded
+        let showsSelectedWeek = viewModel.trayState == .expanded || dynamicTypeSize.isAccessibilitySize
+        let cells = showsSelectedWeek
             ? builder.week(containing: viewModel.selectedDay, displayedMonth: viewModel.displayedMonth)
             : builder.days(containing: viewModel.displayedMonth)
         return MonthGridView(cells: cells, displayedMonth: viewModel.displayedMonth, selectedDay: viewModel.selectedDay, today: LocalDay(date: .now, calendar: calendar), agendaByDay: viewModel.visibleAgendas, calendar: calendar, onSelect: { day in Task { await viewModel.select(day) } })
-            .accessibilityIdentifier(viewModel.trayState == .expanded ? "selected-week-strip" : "month-grid")
+            .accessibilityIdentifier(showsSelectedWeek ? "selected-week-strip" : "month-grid")
             .gesture(DragGesture(minimumDistance: 20).onEnded { value in
                 if abs(value.translation.width) > abs(value.translation.height), abs(value.translation.width) >= 60 {
                     Task { await viewModel.moveMonth(by: value.translation.width < 0 ? 1 : -1) }
