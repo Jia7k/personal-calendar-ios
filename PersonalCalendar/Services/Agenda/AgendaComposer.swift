@@ -6,7 +6,14 @@ struct DayAgenda: Equatable, Sendable {
     var priority: [AgendaItem]
 }
 
+@MainActor
 struct AgendaComposer {
+    private let categories: (any CategoryRepository)?
+
+    init(categories: (any CategoryRepository)? = nil) {
+        self.categories = categories
+    }
+
     func compose(
         day: LocalDay,
         events: [CalendarEventSnapshot],
@@ -19,16 +26,31 @@ struct AgendaComposer {
         let start = day.startDate(in: calendar)
         let end = calendar.date(byAdding: .day, value: 1, to: start)!
         let interval = DateInterval(start: start, end: end)
+        let categoriesByID = categoryLookup()
         let eventItems = events
             .filter { $0.start < interval.end && $0.end > interval.start }
-            .map(AgendaItem.init(event:))
+            .map { event in
+                let category = event.mutationID.flatMap { try? categories?.category(for: .event, externalID: $0) }
+                return AgendaItem(event: event, category: category)
+            }
         let reminderItems = reminders
             .filter { shouldInclude($0, on: day, interval: interval, includeOverdueTasks: includeOverdueTasks, calendar: calendar) }
-            .map(AgendaItem.init(reminder:))
+            .map { reminder in
+                let category = try? categories?.category(for: .task, externalID: reminder.id)
+                return AgendaItem(reminder: reminder, category: category)
+            }
         let weekday = calendar.component(.weekday, from: start)
         let routineItems = routines
             .filter { !$0.isPaused && !$0.isArchived && $0.weekdays.contains(weekday) }
-            .map { AgendaItem(routine: $0, completed: completedRoutineIDs.contains($0.id), day: day, calendar: calendar) }
+            .map { routine in
+                AgendaItem(
+                    routine: routine,
+                    completed: completedRoutineIDs.contains(routine.id),
+                    day: day,
+                    calendar: calendar,
+                    category: routine.categoryID.flatMap { categoriesByID[$0] }
+                )
+            }
         let items = eventItems + reminderItems + routineItems
 
         return DayAgenda(
@@ -36,6 +58,11 @@ struct AgendaComposer {
             scheduled: items.filter { $0.placement.isScheduled }.sorted(by: AgendaItem.stableSort),
             priority: items.filter { $0.placement.isPriority }.sorted(by: AgendaItem.prioritySort)
         )
+    }
+
+    private func categoryLookup() -> [UUID: CategorySnapshot] {
+        guard let values = try? categories?.list() else { return [:] }
+        return Dictionary(uniqueKeysWithValues: values.map { ($0.id, $0) })
     }
 
     private func shouldInclude(

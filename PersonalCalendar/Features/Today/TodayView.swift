@@ -101,6 +101,7 @@ struct TodayView: View {
             let editorModel = EventEditorViewModel.edit(
                 displayID: displayID,
                 service: environment.calendar,
+                categories: environment.categories,
                 onCommitted: { commit in finishEventEditorAndReload(commit) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
@@ -109,6 +110,7 @@ struct TodayView: View {
             let editorModel = TaskEditorViewModel.editing(
                 reminderID: reminderID,
                 service: environment.reminders,
+                categories: environment.categories,
                 onCommitted: { commit in finishTaskEditorAndReload(commit) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )

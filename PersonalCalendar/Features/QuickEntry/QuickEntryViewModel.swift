@@ -90,6 +90,7 @@ final class QuickEntryViewModel {
     var preview: QuickEntryPreview?
     private(set) var phase: QuickEntryPhase = .entry(parseError: nil)
     private(set) var destinations: QuickEntryDestinationOptions
+    private(set) var categories: [CategorySnapshot]
     private(set) var transformationNotice: String?
 
     @ObservationIgnored private let parser: any QuickEntryParsing
@@ -108,12 +109,14 @@ final class QuickEntryViewModel {
         saver: any QuickEntrySaving,
         context: QuickEntryParseContext,
         destinations: QuickEntryDestinationOptions = .empty,
+        categories: [CategorySnapshot] = [],
         onCommitted: @escaping @MainActor (QuickEntrySaveOutcome) -> Void = { _ in }
     ) {
         self.parser = parser
         self.saver = saver
         self.context = context
         self.destinations = destinations
+        self.categories = categories.sorted { $0.sortOrder < $1.sortOrder }
         self.onCommitted = onCommitted
         eventDestinationID = destinations.defaultCalendarID
         taskDestinationID = destinations.defaultReminderListID
@@ -430,7 +433,6 @@ final class QuickEntryViewModel {
     }
 
     private func localFailure(for preview: QuickEntryPreview) -> QuickEntryFailure? {
-        guard preview.categoryID == nil else { return .validation }
         guard !preview.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .validation }
         switch preview.kind {
         case .event:

@@ -34,17 +34,20 @@ struct SaveRouter: QuickEntrySaving {
     private let calendar: any CalendarServicing
     private let reminders: any RemindersServicing
     private let routines: any RoutineRepository
+    private let categories: (any CategoryRepository)?
     private let localCalendar: Calendar
 
     init(
         calendar: any CalendarServicing,
         reminders: any RemindersServicing,
         routines: any RoutineRepository,
+        categories: (any CategoryRepository)? = nil,
         localCalendar: Calendar
     ) {
         self.calendar = calendar
         self.reminders = reminders
         self.routines = routines
+        self.categories = categories
         self.localCalendar = localCalendar
     }
 
@@ -55,12 +58,16 @@ struct SaveRouter: QuickEntrySaving {
         case .event:
             let draft = try eventDraft(from: preview)
             try validateEventAuthority(destinationID: draft.calendarID)
-            return .event(id: try calendar.createEvent(draft))
+            let id = try calendar.createEvent(draft)
+            assign(preview.categoryID, to: .event, externalID: id)
+            return .event(id: id)
 
         case .task:
             let draft = try reminderDraft(from: preview)
             try validateTaskAuthority(destinationID: draft.listID)
-            return .task(id: try reminders.createReminder(draft))
+            let id = try reminders.createReminder(draft)
+            assign(preview.categoryID, to: .task, externalID: id)
+            return .task(id: id)
 
         case .routine:
             let draft = try routineDraft(from: preview)
@@ -71,9 +78,6 @@ struct SaveRouter: QuickEntrySaving {
     private func validateCommonFields(in preview: QuickEntryPreview) throws {
         guard !preview.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw QuickEntrySaveError.invalidTitle
-        }
-        guard preview.categoryID == nil else {
-            throw QuickEntrySaveError.unsupportedCategory
         }
     }
 
@@ -194,8 +198,20 @@ struct SaveRouter: QuickEntrySaving {
             weekdays: preview.weekdays,
             window: window,
             reminderHour: reminderComponents.hour,
-            reminderMinute: reminderComponents.minute
+            reminderMinute: reminderComponents.minute,
+            categoryID: preview.categoryID
         )
+    }
+
+    private func assign(
+        _ categoryID: UUID?,
+        to source: ExternalItemSource,
+        externalID: String?
+    ) {
+        guard let categories,
+              let externalID,
+              !externalID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        try? categories.assign(categoryID: categoryID, to: source, externalID: externalID)
     }
 
     private func recurrenceIntent(

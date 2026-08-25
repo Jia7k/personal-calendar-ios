@@ -32,6 +32,15 @@ struct SettingsView: View {
             Section("Visible calendars") { ForEach(environment.calendar.calendars()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleCalendarIDs(availableIDs: Set(environment.calendar.calendars().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleCalendar(id: value.id, availableIDs: Set(environment.calendar.calendars().map(\.id))); onContentChanged() })) } }
             Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))); onContentChanged() })) } }
             defaults
+            Section("Organization") {
+                NavigationLink("Categories") {
+                    CategorySettingsView(
+                        repository: environment.categories,
+                        onContentChanged: onContentChanged
+                    )
+                }
+                .accessibilityIdentifier("settings-categories")
+            }
         }.navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); loading = false } }
     }
     @ViewBuilder private var defaults: some View {

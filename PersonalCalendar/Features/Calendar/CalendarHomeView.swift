@@ -96,6 +96,7 @@ struct CalendarHomeView: View {
             let model = EventEditorViewModel.edit(
                 displayID: displayID,
                 service: environment.calendar,
+                categories: environment.categories,
                 onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
@@ -104,6 +105,7 @@ struct CalendarHomeView: View {
             let model = TaskEditorViewModel.editing(
                 reminderID: reminderID,
                 service: environment.reminders,
+                categories: environment.categories,
                 onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )

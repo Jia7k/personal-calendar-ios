@@ -416,7 +416,7 @@ final class DemoRoutineRepository: RoutineRepository {
     func create(_ draft: RoutineDraft) throws -> UUID {
         if shouldFailNextCreate { shouldFailNextCreate = false; throw DemoCreateError.failed }
         let id = UUID()
-        values.append(.init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: false, isArchived: false))
+        values.append(.init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: false, isArchived: false, categoryID: draft.categoryID))
         return id
     }
 
@@ -424,15 +424,15 @@ final class DemoRoutineRepository: RoutineRepository {
         if shouldFailNextUpdate { shouldFailNextUpdate = false; throw DemoCreateError.failed }
         guard let index = values.firstIndex(where: { $0.id == id }) else { throw RoutineRepositoryError.routineNotFound }
         let old = values[index]
-        values[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived)
+        values[index] = .init(id: id, title: draft.title, weekdays: draft.weekdays, window: draft.window, reminderHour: draft.reminderHour, reminderMinute: draft.reminderMinute, isPaused: old.isPaused, isArchived: old.isArchived, categoryID: draft.categoryID)
     }
 
     func setPaused(id: UUID, paused: Bool) throws {
-        try mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: paused, isArchived: $0.isArchived) }
+        try mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: paused, isArchived: $0.isArchived, categoryID: $0.categoryID) }
     }
 
     func setArchived(id: UUID, archived: Bool) throws {
-        try mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: $0.isPaused, isArchived: archived) }
+        try mutate(id) { .init(id: $0.id, title: $0.title, weekdays: $0.weekdays, window: $0.window, reminderHour: $0.reminderHour, reminderMinute: $0.reminderMinute, isPaused: $0.isPaused, isArchived: archived, categoryID: $0.categoryID) }
     }
 
     func delete(id: UUID) throws {

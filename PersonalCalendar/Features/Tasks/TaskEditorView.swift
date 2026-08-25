@@ -38,6 +38,7 @@ struct TaskEditorView: View {
                 detailsSection
                 scheduleSection
                 destinationSection
+                categorySection
                 alarmSection
                 recurrenceSection
                 recurringInformationSection
@@ -159,6 +160,31 @@ struct TaskEditorView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var categorySection: some View {
+        Section("App Color") {
+            Picker("Category", selection: categoryBinding) {
+                Text("No Category").tag(UUID?.none)
+                ForEach(model.availableCategories) { category in
+                    HStack {
+                        Circle()
+                            .fill(CalendarTheme.color(hex: category.colorHex) ?? .secondary)
+                            .frame(width: 12, height: 12)
+                        Text(category.name)
+                    }
+                    .tag(Optional(category.id))
+                }
+            }
+            .frame(minHeight: CalendarTheme.minimumTapSize)
+            .disabled(isUnavailable)
+            .accessibilityIdentifier("task-editor-category")
+            if let warning = model.categoryWarning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -402,6 +428,10 @@ struct TaskEditorView: View {
             if let id { model.selectDestination(.explicit(id: id)) }
             else { model.selectDestination(.nilDestination) }
         })
+    }
+
+    private var categoryBinding: Binding<UUID?> {
+        Binding(get: { model.categoryID }, set: { model.categoryID = $0 })
     }
 
     private var alarmChoiceBinding: Binding<TaskAlarmChoice> {

@@ -97,6 +97,7 @@ struct TasksView: View {
         let editorModel = TaskEditorViewModel.editing(
             reminderID: task.id,
             service: environment.reminders,
+            categories: environment.categories,
             onCommitted: { commit in finishEditorAndReload(commit) },
             onReconciliationNeeded: reconcileEditorWithoutDismissing
         )

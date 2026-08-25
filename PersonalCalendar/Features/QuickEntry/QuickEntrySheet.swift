@@ -464,16 +464,17 @@ struct QuickEntrySheet: View {
 
     private var categorySection: some View {
         Section("Organization") {
-            LabeledContent("Category", value: "None")
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Category")
-                .accessibilityValue("None")
+            Picker(
+                "Category",
+                selection: previewBinding(\.categoryID, fallback: model.preview?.categoryID)
+            ) {
+                Text("No Category").tag(UUID?.none)
+                ForEach(model.categories) { category in
+                    Text(category.name).tag(Optional(category.id))
+                }
+            }
+                .frame(minHeight: CalendarTheme.minimumTapSize)
                 .accessibilityIdentifier("quick-entry-category")
-
-            Text("Categories will be available in a future update.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

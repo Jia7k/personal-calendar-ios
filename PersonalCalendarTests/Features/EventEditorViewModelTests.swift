@@ -8,6 +8,32 @@ import XCTest
 /// resolved snapshot's opaque mutation ID.
 @MainActor
 final class EventEditorViewModelTests: XCTestCase {
+    func testCreateAssignsSelectedCategoryToReturnedOpaqueIdentifier() async {
+        let category = CategorySnapshot(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000077")!,
+            name: "Personal",
+            colorHex: "#3A8D7C",
+            sortOrder: 0
+        )
+        let categories = EditorCategoryRepositoryStub(values: [category])
+        let service = RecordingCalendarService(createID: "opaque-created-event")
+        let subject = EventEditorViewModel.create(
+            service: service,
+            savedDefaultCalendarID: nil,
+            categories: categories
+        )
+        subject.title = "Dinner"
+        subject.categoryID = category.id
+
+        await subject.requestSave()
+
+        XCTAssertEqual(
+            categories.assignments,
+            [.init(categoryID: category.id, source: .event, externalID: "opaque-created-event")]
+        )
+        XCTAssertEqual(subject.phase, .created(id: "opaque-created-event"))
+    }
+
     func testSaveEligibilityRejectsPurelyInvalidEventFormValuesWithoutLookingUpOrWriting() async {
         let service = RecordingCalendarService(event: event())
         let subject = EventEditorViewModel.edit(displayID: "display", service: service)
@@ -672,6 +698,34 @@ final class EventEditorViewModelTests: XCTestCase {
             (.removeFailed, .failed(action: action, error: .retryableWriteFailure))
         ]
     }
+}
+
+@MainActor
+private final class EditorCategoryRepositoryStub: CategoryRepository {
+    struct Assignment: Equatable {
+        let categoryID: UUID?
+        let source: ExternalItemSource
+        let externalID: String
+    }
+
+    let values: [CategorySnapshot]
+    private(set) var assignments: [Assignment] = []
+
+    init(values: [CategorySnapshot]) {
+        self.values = values
+    }
+
+    func list() throws -> [CategorySnapshot] { values }
+    func create(name: String, colorHex: String) throws -> UUID { fatalError("Unused") }
+    func update(id: UUID, name: String, colorHex: String) throws { fatalError("Unused") }
+    func reorder(ids: [UUID]) throws { fatalError("Unused") }
+    func delete(id: UUID, reassignedTo replacementID: UUID?) throws { fatalError("Unused") }
+    func assign(categoryID: UUID?, to source: ExternalItemSource, externalID: String) throws {
+        assignments.append(.init(categoryID: categoryID, source: source, externalID: externalID))
+    }
+    func category(for source: ExternalItemSource, externalID: String) throws -> CategorySnapshot? { nil }
+    func removeUnresolvedLinks(for source: ExternalItemSource, validExternalIDs: Set<String>) throws { fatalError("Unused") }
+    func seedDefaultsIfNeeded(settings: AppSettingsStore) throws { fatalError("Unused") }
 }
 
 @MainActor

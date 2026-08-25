@@ -68,6 +68,7 @@ final class EventEditorViewModel {
     var location: String?
     var url: URL?
     var destinationCalendarID: String?
+    var categoryID: UUID?
     var alarmIntent: EventAlarmMutationIntent = .preserve
     var recurrenceIntent: RecurrenceMutationIntent = .preserve {
         didSet { scopeExplanation = nil }
@@ -78,6 +79,8 @@ final class EventEditorViewModel {
     private(set) var currentCalendarTitle: String?
     private(set) var alarmSnapshot: EventAlarmSnapshot = .none
     private(set) var recurrenceSnapshot: RecurrenceSnapshot = .none
+    private(set) var availableCategories: [CategorySnapshot] = []
+    private(set) var categoryWarning: String?
     private(set) var availableSaveScopes: [RecurrenceEditScope] = [.thisOccurrence]
     private(set) var scopeExplanation: String?
     private(set) var phase: EventEditorPhase = .idle
@@ -121,6 +124,7 @@ final class EventEditorViewModel {
 
     @ObservationIgnored private let mode: Mode
     @ObservationIgnored private let service: any CalendarServicing
+    @ObservationIgnored private let categories: (any CategoryRepository)?
     @ObservationIgnored private let onCommitted: @MainActor (EventEditorCommit) -> Void
     @ObservationIgnored private let onReconciliationNeeded: @MainActor () -> Void
     @ObservationIgnored private var cleanBaseline: FormState
@@ -141,11 +145,13 @@ final class EventEditorViewModel {
         initialStart: Date,
         initialEnd: Date,
         initialIsAllDay: Bool,
+        categories: (any CategoryRepository)?,
         onCommitted: @escaping @MainActor (EventEditorCommit) -> Void = { _ in },
         onReconciliationNeeded: @escaping @MainActor () -> Void = {}
     ) {
         self.mode = mode
         self.service = service
+        self.categories = categories
         self.onCommitted = onCommitted
         self.onReconciliationNeeded = onReconciliationNeeded
         title = ""
@@ -156,6 +162,8 @@ final class EventEditorViewModel {
         location = nil
         url = nil
         destinationCalendarID = nil
+        categoryID = nil
+        availableCategories = categories.flatMap { try? $0.list() } ?? []
         cleanBaseline = .empty(start: initialStart, end: initialEnd, isAllDay: initialIsAllDay)
 
         if case .create = mode {
@@ -176,6 +184,7 @@ final class EventEditorViewModel {
         initialStart: Date = .now,
         initialEnd: Date? = nil,
         isAllDay: Bool = false,
+        categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping @MainActor (EventEditorCommit) -> Void = { _ in }
     ) -> EventEditorViewModel {
         EventEditorViewModel(
@@ -185,6 +194,7 @@ final class EventEditorViewModel {
             initialStart: initialStart,
             initialEnd: initialEnd ?? initialStart.addingTimeInterval(3_600),
             initialIsAllDay: isAllDay,
+            categories: categories,
             onCommitted: onCommitted
         )
     }
@@ -192,6 +202,7 @@ final class EventEditorViewModel {
     static func edit(
         displayID: String,
         service: any CalendarServicing,
+        categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping @MainActor (EventEditorCommit) -> Void = { _ in },
         onReconciliationNeeded: @escaping @MainActor () -> Void = {}
     ) -> EventEditorViewModel {
@@ -202,6 +213,7 @@ final class EventEditorViewModel {
             initialStart: initialStart,
             initialEnd: initialStart.addingTimeInterval(3_600),
             initialIsAllDay: false,
+            categories: categories,
             onCommitted: onCommitted,
             onReconciliationNeeded: onReconciliationNeeded
         )
@@ -371,6 +383,9 @@ final class EventEditorViewModel {
         currentCalendarTitle = snapshot.calendarTitle
         alarmSnapshot = snapshot.alarms
         recurrenceSnapshot = snapshot.recurrence
+        if let externalID = snapshot.mutationID {
+            categoryID = try? categories?.category(for: .event, externalID: externalID)?.id
+        }
         alarmIntent = .preserve
         recurrenceIntent = .preserve
         alarmDisplay = unsupportedAlarmSummary(snapshot.alarms)
@@ -430,6 +445,7 @@ final class EventEditorViewModel {
         phase = .writing(action: .save)
         do {
             let identifier = try service.createEvent(materializedDraft())
+            if let identifier { assignCategory(to: identifier) }
             phase = .created(id: identifier)
             commit(.created(id: identifier))
         } catch {
@@ -454,6 +470,7 @@ final class EventEditorViewModel {
         phase = .writing(action: .save)
         do {
             try service.updateEvent(id: current.mutationID!, draft: materializedDraft(), scope: effectiveScope)
+            assignCategory(to: current.mutationID!)
             phase = .updated
             commit(.updated)
         } catch {
@@ -495,6 +512,16 @@ final class EventEditorViewModel {
             alarms: alarmIntent,
             recurrence: recurrenceIntent
         )
+    }
+
+    private func assignCategory(to externalID: String) {
+        guard let categories else { return }
+        do {
+            try categories.assign(categoryID: categoryID, to: .event, externalID: externalID)
+            categoryWarning = nil
+        } catch {
+            categoryWarning = "The item was saved, but its app color was not applied."
+        }
     }
 
     private func handle(_ error: Error, action: EventEditorAction) {
@@ -573,6 +600,7 @@ final class EventEditorViewModel {
             location: location,
             url: url,
             destinationCalendarID: destinationCalendarID,
+            categoryID: categoryID,
             alarmIntent: alarmIntent,
             recurrenceIntent: recurrenceIntent
         )
@@ -588,10 +616,11 @@ private struct FormState: Equatable {
     let location: String?
     let url: URL?
     let destinationCalendarID: String?
+    let categoryID: UUID?
     let alarmIntent: EventAlarmMutationIntent
     let recurrenceIntent: RecurrenceMutationIntent
 
     static func empty(start: Date, end: Date, isAllDay: Bool) -> FormState {
-        FormState(title: "", start: start, end: end, isAllDay: isAllDay, notes: nil, location: nil, url: nil, destinationCalendarID: nil, alarmIntent: .preserve, recurrenceIntent: .preserve)
+        FormState(title: "", start: start, end: end, isAllDay: isAllDay, notes: nil, location: nil, url: nil, destinationCalendarID: nil, categoryID: nil, alarmIntent: .preserve, recurrenceIntent: .preserve)
     }
 }

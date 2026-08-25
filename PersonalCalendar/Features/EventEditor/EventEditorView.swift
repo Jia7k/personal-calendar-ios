@@ -20,6 +20,7 @@ struct EventEditorView: View {
             Form {
                 detailsSection.disabled(isUnavailable)
                 destinationSection.disabled(isUnavailable)
+                categorySection.disabled(isUnavailable)
                 alarmsSection.disabled(isUnavailable)
                 recurrenceSection.disabled(isUnavailable)
                 mutationSection
@@ -110,6 +111,30 @@ struct EventEditorView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var categorySection: some View {
+        Section("App Color") {
+            Picker("Category", selection: binding(\.categoryID)) {
+                Text("No Category").tag(UUID?.none)
+                ForEach(model.availableCategories) { category in
+                    HStack {
+                        Circle()
+                            .fill(CalendarTheme.color(hex: category.colorHex) ?? .secondary)
+                            .frame(width: 12, height: 12)
+                        Text(category.name)
+                    }
+                    .tag(Optional(category.id))
+                }
+            }
+            .frame(minHeight: CalendarTheme.minimumTapSize)
+            .accessibilityIdentifier("event-editor-category")
+            if let warning = model.categoryWarning {
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

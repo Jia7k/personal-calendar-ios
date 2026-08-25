@@ -423,16 +423,27 @@ final class SaveRouterTests: XCTestCase {
         }
     }
 
-    func testEveryKindRejectsTaskFiveCategoryBeforeAnyCreateAttempt() {
+    func testEventSaveAssignsSelectedCategoryToCreatedOpaqueIdentifier() throws {
         let categoryID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
-        var previews = [eventPreview(), taskPreview(), routinePreview()]
-        for index in previews.indices {
-            previews[index].categoryID = categoryID
-        }
+        let calendar = RouterCalendarSpy(createID: "opaque-event-id")
+        let reminders = RouterRemindersSpy()
+        let routines = RouterRoutineSpy()
+        let categories = RouterCategorySpy()
+        var preview = eventPreview()
+        preview.categoryID = categoryID
 
-        for preview in previews {
-            assertRejected(preview, as: .unsupportedCategory)
-        }
+        let outcome = try makeSubject(
+            calendar: calendar,
+            reminders: reminders,
+            routines: routines,
+            categories: categories
+        ).save(preview)
+
+        XCTAssertEqual(outcome, .event(id: "opaque-event-id"))
+        XCTAssertEqual(categories.assignedCategoryID, categoryID)
+        XCTAssertEqual(categories.assignedSource, .event)
+        XCTAssertEqual(categories.assignedExternalID, "opaque-event-id")
+        assertCreateAttempts(event: 1, task: 0, routine: 0, calendar, reminders, routines)
     }
 
     func testConversionFailurePrecedesUnavailableSourceAndCreatesNothing() {
@@ -746,12 +757,14 @@ final class SaveRouterTests: XCTestCase {
         calendar: RouterCalendarSpy,
         reminders: RouterRemindersSpy,
         routines: RouterRoutineSpy,
+        categories: RouterCategorySpy? = nil,
         localCalendar: Calendar? = nil
     ) -> SaveRouter {
         SaveRouter(
             calendar: calendar,
             reminders: reminders,
             routines: routines,
+            categories: categories,
             localCalendar: localCalendar ?? configuredCalendar(timeZoneID: "UTC")
         )
     }
@@ -1009,6 +1022,27 @@ private final class RouterRoutineSpy: RoutineRepository {
         XCTFail("SaveRouter must not read routine completion history")
         return []
     }
+}
+
+@MainActor
+private final class RouterCategorySpy: CategoryRepository {
+    private(set) var assignedCategoryID: UUID?
+    private(set) var assignedSource: ExternalItemSource?
+    private(set) var assignedExternalID: String?
+
+    func list() throws -> [CategorySnapshot] { [] }
+    func create(name: String, colorHex: String) throws -> UUID { XCTFail("Unexpected category create"); return UUID() }
+    func update(id: UUID, name: String, colorHex: String) throws { XCTFail("Unexpected category update") }
+    func reorder(ids: [UUID]) throws { XCTFail("Unexpected category reorder") }
+    func delete(id: UUID, reassignedTo replacementID: UUID?) throws { XCTFail("Unexpected category delete") }
+    func assign(categoryID: UUID?, to source: ExternalItemSource, externalID: String) throws {
+        assignedCategoryID = categoryID
+        assignedSource = source
+        assignedExternalID = externalID
+    }
+    func category(for source: ExternalItemSource, externalID: String) throws -> CategorySnapshot? { nil }
+    func removeUnresolvedLinks(for source: ExternalItemSource, validExternalIDs: Set<String>) throws {}
+    func seedDefaultsIfNeeded(settings: AppSettingsStore) throws {}
 }
 
 private extension Array {

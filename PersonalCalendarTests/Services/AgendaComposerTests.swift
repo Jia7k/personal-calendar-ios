@@ -1,7 +1,45 @@
 import XCTest
 @testable import PersonalCalendar
 
+@MainActor
 final class AgendaComposerTests: XCTestCase {
+    func testResolvesEventCategoryUsingOpaqueProviderIdentifier() throws {
+        let category = CategorySnapshot(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
+            name: "Work",
+            colorHex: "#CB6B4F",
+            sortOrder: 0
+        )
+        let categories = AgendaCategoryRepositoryStub(
+            eventCategories: ["opaque-event-id": category]
+        )
+        let subject = AgendaComposer(categories: categories)
+        let event = CalendarEventSnapshot(
+            id: "display-event-id",
+            mutationID: "opaque-event-id",
+            title: "Planning",
+            start: date(hour: 9),
+            end: date(hour: 10),
+            isAllDay: false,
+            calendarID: "calendar",
+            calendarTitle: "Work",
+            allowsModification: true,
+            hasRecurrence: false
+        )
+
+        let result = subject.compose(
+            day: day,
+            events: [event],
+            reminders: [],
+            routines: [],
+            completedRoutineIDs: [],
+            includeOverdueTasks: false,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(result.scheduled.first?.category, category)
+    }
+
     // Break caught: merging sources without sectioning or chronological ordering would make a day unreadable.
     func testPlacesAllDayItemsBeforeChronologicalScheduledItemsAndPriorityItems() throws {
         let result = compose(
@@ -152,4 +190,25 @@ final class AgendaComposerTests: XCTestCase {
     private func routine(id: String, title: String, window: RoutineWindow, weekdays: Set<Int> = [2], isPaused: Bool = false, isArchived: Bool = false) -> RoutineSnapshot {
         .init(id: UUID(uuidString: id)!, title: title, weekdays: weekdays, window: window, reminderHour: nil, reminderMinute: nil, isPaused: isPaused, isArchived: isArchived)
     }
+}
+
+@MainActor
+private final class AgendaCategoryRepositoryStub: CategoryRepository {
+    private let eventCategories: [String: CategorySnapshot]
+
+    init(eventCategories: [String: CategorySnapshot]) {
+        self.eventCategories = eventCategories
+    }
+
+    func list() throws -> [CategorySnapshot] { Array(eventCategories.values) }
+    func create(name: String, colorHex: String) throws -> UUID { fatalError("Unused") }
+    func update(id: UUID, name: String, colorHex: String) throws { fatalError("Unused") }
+    func reorder(ids: [UUID]) throws { fatalError("Unused") }
+    func delete(id: UUID, reassignedTo replacementID: UUID?) throws { fatalError("Unused") }
+    func assign(categoryID: UUID?, to source: ExternalItemSource, externalID: String) throws { fatalError("Unused") }
+    func category(for source: ExternalItemSource, externalID: String) throws -> CategorySnapshot? {
+        source == .event ? eventCategories[externalID] : nil
+    }
+    func removeUnresolvedLinks(for source: ExternalItemSource, validExternalIDs: Set<String>) throws { fatalError("Unused") }
+    func seedDefaultsIfNeeded(settings: AppSettingsStore) throws { fatalError("Unused") }
 }

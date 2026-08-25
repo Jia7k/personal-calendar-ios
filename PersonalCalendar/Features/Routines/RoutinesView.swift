@@ -8,12 +8,14 @@ struct RoutinesView: View {
     @State private var deleteRequest: DeleteRequest?
     private let revision: Int
     private let quickEntryRefresh: QuickEntryRefreshSignal?
+    private let categories: [CategorySnapshot]
     init(
         environment: AppEnvironment,
         revision: Int = 0,
         quickEntryRefresh: QuickEntryRefreshSignal? = nil
     ) {
         _model = State(initialValue: RoutinesViewModel(repository: environment.routines))
+        categories = (try? environment.categories.list()) ?? []
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
     }
@@ -23,7 +25,7 @@ struct RoutinesView: View {
         Section("Active") { if model.active.isEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Use Add to create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
     }.navigationTitle("Routines")
-    .sheet(item: $editing) { RoutineEditorView(model: model, row: $0) }.sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) { deleteConfirmation($0) }
+    .sheet(item: $editing) { RoutineEditorView(model: model, row: $0, categories: categories) }.sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) { deleteConfirmation($0) }
     .task(id: revision) { model.reload() }
     .onChange(of: quickEntryRefresh, initial: true) { _, signal in
         guard let signal else { return }

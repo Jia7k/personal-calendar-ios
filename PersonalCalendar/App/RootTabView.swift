@@ -73,6 +73,7 @@ struct RootTabView: View {
             calendar: environment.calendar,
             reminders: environment.reminders,
             routines: environment.routines,
+            categories: environment.categories,
             localCalendar: context.calendar
         )
         let model = QuickEntryViewModel(
@@ -80,6 +81,7 @@ struct RootTabView: View {
             saver: router,
             context: context,
             destinations: options,
+            categories: (try? environment.categories.list()) ?? [],
             onCommitted: { outcome in
                 refreshSignal = .init(id: UUID(), outcome: outcome)
             }

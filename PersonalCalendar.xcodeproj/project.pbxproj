@@ -58,6 +58,7 @@
 		6B92A96ECD46D36DC7183AA9 /* CalendarHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C577F2D32A0F22D8B27D82 /* CalendarHomeView.swift */; };
 		700C19B52F5FAE04E330F889 /* TaskEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5198B0025A74BC69D26436 /* TaskEditorView.swift */; };
 		71B22C66BCD3664D3ADB3663 /* RoutineCompletionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */; };
+		754B0BE7ECF0AC3ADA488C51 /* CategorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B5325E23DF35D3A1A134CE9 /* CategorySettingsView.swift */; };
 		75FA73B5C086D773A2880516 /* AgendaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A2DB4BF0174A16CB6A441A1 /* AgendaItem.swift */; };
 		76E79E47320E4FD982DADC38 /* Fakes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D0F4CAF444E648C867C92FD /* Fakes.swift */; };
 		7BC4A396299E8CB6229A40DE /* FeatureViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */; };
@@ -65,6 +66,7 @@
 		85AB5DCA3D670D2D1B4F7F5C /* RoutineRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */; };
 		874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AD119EADEB4886F8A223D8 /* RootLifecycleControllerTests.swift */; };
 		8A5DF308EE185223FA1FF14B /* EditorReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FCBF7F7DC1AF2645B93CCA8 /* EditorReviewUITests.swift */; };
+		924CA9594E04B816274E90E7 /* CategorySettingsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CC220EB378608FB0F557D8 /* CategorySettingsModelTests.swift */; };
 		92FF7E0D6802682F8402625E /* LocalDayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 579876904A537535665E94EB /* LocalDayTests.swift */; };
 		931008EEDB5CE4C3231C735B /* CalendarViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7261E6F213FC6E05FED739F /* CalendarViewModel.swift */; };
 		952A0B4306645ECF687FC8E1 /* TodayViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEBD43AD5FDEAE6099FF11DE /* TodayViewModel.swift */; };
@@ -118,6 +120,7 @@
 
 /* Begin PBXFileReference section */
 		012FE84C82D1D4E773C4F71F /* AppSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsStore.swift; sourceTree = "<group>"; };
+		01CC220EB378608FB0F557D8 /* CategorySettingsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorySettingsModelTests.swift; sourceTree = "<group>"; };
 		0301807D2E3D787BF7934E52 /* Recurrence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recurrence.swift; sourceTree = "<group>"; };
 		0305691ED4EE8A7D16468599 /* MonthGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthGridView.swift; sourceTree = "<group>"; };
 		0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRecord.swift; sourceTree = "<group>"; };
@@ -175,6 +178,7 @@
 		9635321CC649FEA69B57A29F /* PersonalCalendar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PersonalCalendar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		99B52C8A386EC9982A48F656 /* RuleBasedQuickEntryParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleBasedQuickEntryParser.swift; sourceTree = "<group>"; };
 		99CD5638BB582030245CBBD2 /* EventKitMappingContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMappingContractTests.swift; sourceTree = "<group>"; };
+		9B5325E23DF35D3A1A134CE9 /* CategorySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorySettingsView.swift; sourceTree = "<group>"; };
 		9B884E1B989F29A6A05BE6D4 /* QuickEntryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickEntryViewModelTests.swift; sourceTree = "<group>"; };
 		9F52FDDC8AE40431E2751215 /* CalendarEventSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventSnapshot.swift; sourceTree = "<group>"; };
 		A0AD119EADEB4886F8A223D8 /* RootLifecycleControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootLifecycleControllerTests.swift; sourceTree = "<group>"; };
@@ -260,6 +264,7 @@
 		062B23B02FA2422EDE49F26C /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				9B5325E23DF35D3A1A134CE9 /* CategorySettingsView.swift */,
 				29E5A68FE9293E4CA53E0168 /* PermissionCard.swift */,
 				6A90E041D77D826E579974FA /* SettingsView.swift */,
 			);
@@ -311,6 +316,7 @@
 			isa = PBXGroup;
 			children = (
 				DB9A9562279429E312F626F7 /* CalendarViewModelTests.swift */,
+				01CC220EB378608FB0F557D8 /* CategorySettingsModelTests.swift */,
 				A6B60543E56C451F8E67ED4B /* EventEditorViewModelTests.swift */,
 				C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */,
 				94F43A03F235594E97C87F1C /* MonthGridBuilderTests.swift */,
@@ -708,6 +714,7 @@
 				931008EEDB5CE4C3231C735B /* CalendarViewModel.swift in Sources */,
 				19BD7BEDDB638B07996D027F /* CategoryRecord.swift in Sources */,
 				06B5C4CB776B5AA12B77E84D /* CategoryRepository.swift in Sources */,
+				754B0BE7ECF0AC3ADA488C51 /* CategorySettingsView.swift in Sources */,
 				5507919C00277E8FA55CB5FC /* DayTrayView.swift in Sources */,
 				DB74C74071E502004BE24BEF /* DemoEnvironment.swift in Sources */,
 				0326E0C3B09C29FD9F233CE4 /* Drafts.swift in Sources */,
@@ -769,6 +776,7 @@
 				F0CA35D58C79407DA7D7A46E /* AppSettingsStoreTests.swift in Sources */,
 				A290AB09195325167FF261AA /* CalendarViewModelTests.swift in Sources */,
 				2AC6BB8C8B1E3E13778B2233 /* CategoryRepositoryTests.swift in Sources */,
+				924CA9594E04B816274E90E7 /* CategorySettingsModelTests.swift in Sources */,
 				F122954B32F22BAF1FA664A5 /* DemoEnvironmentTests.swift in Sources */,
 				202A93927B5D075E9D2B5149 /* EventEditorViewModelTests.swift in Sources */,
 				46CFA3CF00AC1220693040B0 /* EventKitMappingContractTests.swift in Sources */,

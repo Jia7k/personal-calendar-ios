@@ -35,7 +35,7 @@ struct AppEnvironment {
             categories: categories,
             notificationAuthorization: notifications,
             permissions: permissions,
-            agendaComposer: AgendaComposer(),
+            agendaComposer: AgendaComposer(categories: categories),
             settings: settings,
             reduceMotionOverride: false,
             quickEntryContext: { currentQuickEntryContext() }
@@ -89,7 +89,7 @@ struct AppEnvironment {
             categories: categories,
             notificationAuthorization: notifications,
             permissions: permissions,
-            agendaComposer: AgendaComposer(),
+            agendaComposer: AgendaComposer(categories: categories),
             settings: settings,
             reduceMotionOverride: arguments.contains("-reduce-motion"),
             quickEntryContext: quickEntryContext

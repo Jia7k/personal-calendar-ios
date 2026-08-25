@@ -50,8 +50,14 @@ struct AgendaRow: View {
 
     private var primaryContent: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
+            if let categoryColor {
+                Capsule()
+                    .fill(categoryColor)
+                    .frame(width: 4, height: 30)
+                    .accessibilityHidden(true)
+            }
             Image(systemName: sourceSymbol)
-                .foregroundStyle(sourceColor)
+                .foregroundStyle(categoryColor ?? sourceColor)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title).font(.body).strikethrough(item.isCompleted)
@@ -59,8 +65,29 @@ struct AgendaRow: View {
             }
             Spacer(minLength: 8)
         }
+        .padding(.horizontal, item.category == nil ? 0 : 8)
+        .background(categoryBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(Self.sourceDescription(item.source)), \(item.title), \(timeDescription)")
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var categoryColor: Color? {
+        item.category.flatMap { CalendarTheme.color(hex: $0.colorHex) }
+    }
+
+    @ViewBuilder private var categoryBackground: some View {
+        if let categoryColor {
+            categoryColor.opacity(item.placement == .allDay ? 0.22 : 0.09)
+        } else {
+            Color.clear
+        }
+    }
+
+    private var accessibilityDescription: String {
+        let base = "\(Self.sourceDescription(item.source)), \(item.title), \(timeDescription)"
+        guard let category = item.category else { return base }
+        return "\(base), category \(category.name)"
     }
 
     private var openMetadata: (identifier: String, label: String)? {

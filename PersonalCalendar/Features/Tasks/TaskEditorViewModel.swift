@@ -28,6 +28,7 @@ enum TaskEditorPhase: Equatable, Sendable {
 @Observable
 final class TaskEditorViewModel {
     var form: ReminderDraft
+    var categoryID: UUID?
     private(set) var destination: TaskEditorDestination
     private(set) var phase: TaskEditorPhase = .idle
     private(set) var providerAlarmSnapshot: ReminderAlarmSnapshot?
@@ -35,6 +36,8 @@ final class TaskEditorViewModel {
     private(set) var providerAlarmSummary: String?
     private(set) var providerRecurrenceSummary: String?
     private(set) var mutationExplanation: String?
+    private(set) var availableCategories: [CategorySnapshot] = []
+    private(set) var categoryWarning: String?
     /// Identifies the rendered delete confirmation. Passive dismissal is valid
     /// only for the generation that produced the presentation.
     private(set) var deleteConfirmationGeneration = 0
@@ -65,16 +68,18 @@ final class TaskEditorViewModel {
         case .idle, .confirming, .writing, .failed, .unavailable: break
         }
         if case .failed = phase { return true }
-        return form != initialForm
+        return form != initialForm || categoryID != initialCategoryID
     }
 
     private enum Mode { case create, edit(reminderID: String) }
 
     private let mode: Mode
     private let service: any RemindersServicing
+    private let categories: (any CategoryRepository)?
     private let onCommitted: (TaskEditorCommit) -> Void
     private let onReconciliationNeeded: () -> Void
     private let initialForm: ReminderDraft
+    private let initialCategoryID: UUID?
     private let nilDestination: TaskEditorDestination
     private var didCommit = false
     private var didRequestReconciliation = false
@@ -88,6 +93,7 @@ final class TaskEditorViewModel {
         destination: TaskEditorDestination,
         snapshot: ReminderSnapshot?,
         service: any RemindersServicing,
+        categories: (any CategoryRepository)?,
         onCommitted: @escaping (TaskEditorCommit) -> Void,
         onReconciliationNeeded: @escaping () -> Void
     ) {
@@ -96,9 +102,14 @@ final class TaskEditorViewModel {
         self.destination = destination
         self.currentSnapshot = snapshot
         self.service = service
+        self.categories = categories
         self.onCommitted = onCommitted
         self.onReconciliationNeeded = onReconciliationNeeded
         self.initialForm = form
+        availableCategories = categories.flatMap { try? $0.list() } ?? []
+        let loadedCategoryID = snapshot.flatMap { try? categories?.category(for: .task, externalID: $0.id)?.id }
+        categoryID = loadedCategoryID
+        initialCategoryID = loadedCategoryID
         self.nilDestination = switch mode {
         case .create: .systemDefault
         case .edit: snapshot.map { .preserveCurrent(id: $0.listID, title: $0.listTitle) } ?? destination
@@ -112,6 +123,7 @@ final class TaskEditorViewModel {
     static func creating(
         service: any RemindersServicing,
         savedDefaultListID: String? = nil,
+        categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping (TaskEditorCommit) -> Void = { _ in }
     ) -> TaskEditorViewModel {
         let selected = service.accessState == .granted
@@ -123,6 +135,7 @@ final class TaskEditorViewModel {
             destination: selected.map { .explicit(id: $0.id, title: $0.title) } ?? .systemDefault,
             snapshot: nil,
             service: service,
+            categories: categories,
             onCommitted: onCommitted,
             onReconciliationNeeded: {}
         )
@@ -131,6 +144,7 @@ final class TaskEditorViewModel {
     static func editing(
         reminderID: String,
         service: any RemindersServicing,
+        categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping (TaskEditorCommit) -> Void = { _ in },
         onReconciliationNeeded: @escaping () -> Void = {}
     ) -> TaskEditorViewModel {
@@ -148,7 +162,7 @@ final class TaskEditorViewModel {
             item.dueDate.map { .init(date: $0, hasTime: item.dueHasTime) }
         })
         let destination: TaskEditorDestination = snapshot.map { .preserveCurrent(id: $0.listID, title: $0.listTitle) } ?? .systemDefault
-        let model = TaskEditorViewModel(mode: .edit(reminderID: reminderID), form: form, destination: destination, snapshot: snapshot, service: service, onCommitted: onCommitted, onReconciliationNeeded: onReconciliationNeeded)
+        let model = TaskEditorViewModel(mode: .edit(reminderID: reminderID), form: form, destination: destination, snapshot: snapshot, service: service, categories: categories, onCommitted: onCommitted, onReconciliationNeeded: onReconciliationNeeded)
         if service.accessState != .granted { model.becomeUnavailable(.accessUnavailable) }
         else if snapshot == nil { model.becomeUnavailable(.itemGone) }
         else if snapshot?.allowsModification == false { model.becomeUnavailable(.readOnlySource) }
@@ -240,6 +254,7 @@ final class TaskEditorViewModel {
             phase = .writing(.save)
             do {
                 let identifier = try service.createReminder(form)
+                if let identifier { assignCategory(to: identifier) }
                 phase = .created(id: identifier)
                 commit(.created(id: identifier))
             } catch {
@@ -255,6 +270,7 @@ final class TaskEditorViewModel {
             phase = .writing(.save)
             do {
                 try service.updateReminder(id: reminderID, draft: form)
+                assignCategory(to: reminderID)
                 phase = .updated
                 commit(.updated)
             } catch {
@@ -334,6 +350,16 @@ final class TaskEditorViewModel {
             return false
         }
         return true
+    }
+
+    private func assignCategory(to externalID: String) {
+        guard let categories else { return }
+        do {
+            try categories.assign(categoryID: categoryID, to: .task, externalID: externalID)
+            categoryWarning = nil
+        } catch {
+            categoryWarning = "The item was saved, but its app color was not applied."
+        }
     }
 
     private func failure(for error: Error) -> TaskEditorFailure {
