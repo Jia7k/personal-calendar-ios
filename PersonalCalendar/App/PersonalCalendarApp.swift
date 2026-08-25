@@ -34,6 +34,7 @@ struct PersonalCalendarApp: App {
                 RoutineCompletionRecord.self,
                 CategoryRecord.self,
                 ExternalCategoryLinkRecord.self,
+                ProfileRecord.self,
                 configurations: configuration
             )
         } catch {

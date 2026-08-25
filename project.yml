@@ -43,6 +43,7 @@ targets:
     sources:
       - path: PersonalCalendarWidgets
       - path: PersonalCalendar/TimetableShared
+      - path: PersonalCalendar/ProfileShared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.personalcalendar.iphone.widgets
