@@ -60,6 +60,9 @@ struct CalendarHomeView: View {
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
+                ToolbarItem(placement: .topBarTrailing) {
+                    ProfileSelectorToolbar(selection: environment.profileSelection)
+                }
             }
             .task(id: revision) { await viewModel.load() }
             .task(id: quickEntryRefresh?.id) {

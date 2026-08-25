@@ -39,6 +39,11 @@ struct TasksView: View {
             .scrollContentBackground(.hidden)
             .background(CalendarTheme.background)
             .navigationTitle("Tasks")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ProfileSelectorToolbar(selection: environment.profileSelection)
+                }
+            }
             .sheet(item: $editorPresentation) { presentation in
                 TaskEditorView(
                     model: presentation.model,

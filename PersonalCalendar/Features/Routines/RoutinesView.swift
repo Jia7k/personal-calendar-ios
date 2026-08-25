@@ -9,6 +9,7 @@ struct RoutinesView: View {
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
     private let categories: [CategorySnapshot]
+    private let profileSelection: ProfileSelectionController
     init(
         environment: AppEnvironment,
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
@@ -27,6 +28,7 @@ struct RoutinesView: View {
             rescheduleNotifications: environment.rescheduleNotifications
         ))
         categories = (try? environment.categories.list()) ?? []
+        profileSelection = selection
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
     }
@@ -40,6 +42,11 @@ struct RoutinesView: View {
     .scrollContentBackground(.hidden)
     .background(CalendarTheme.background)
     .navigationTitle("Routines")
+    .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+            ProfileSelectorToolbar(selection: profileSelection)
+        }
+    }
     .sheet(item: $editing) { RoutineEditorView(model: model, row: $0, categories: categories) }.sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) { deleteConfirmation($0) }
     .task(id: revision) { model.reload() }
     .onChange(of: quickEntryRefresh, initial: true) { _, signal in

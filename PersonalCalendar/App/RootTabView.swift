@@ -8,7 +8,6 @@ struct RootTabView: View {
     @State private var selection: RootTab = .calendar
     @State private var presentation: RootPresentation?
     @State private var refreshSignal: QuickEntryRefreshSignal?
-    @State private var refreshAfterPresentationDismissal = false
     @State private var lifecycle: RootLifecycleController
     @Environment(\.scenePhase) private var scenePhase
     init(environment: AppEnvironment) {
@@ -47,7 +46,7 @@ struct RootTabView: View {
                         .tabItem { Label("Routines", systemImage: "repeat") }
                         .tag(RootTab.routines)
                 }
-                .sheet(item: $presentation, onDismiss: presentationDidDismiss) { presentation in
+                .sheet(item: $presentation) { presentation in
                     switch presentation {
                     case .settings:
                         SettingsView(environment: environment, onContentChanged: { lifecycle.advanceRevision() })
@@ -78,7 +77,6 @@ struct RootTabView: View {
 
     private func presentSettings() {
         guard presentation == nil else { return }
-        refreshAfterPresentationDismissal = true
         presentation = .settings(id: UUID())
     }
 
@@ -108,14 +106,7 @@ struct RootTabView: View {
                 Task { await environment.rescheduleNotifications() }
             }
         )
-        refreshAfterPresentationDismissal = false
         presentation = .quickEntry(.init(model: model))
-    }
-
-    private func presentationDidDismiss() {
-        guard refreshAfterPresentationDismissal else { return }
-        refreshAfterPresentationDismissal = false
-        lifecycle.advanceRevision()
     }
 
     private func requestAccess(for kind: QuickEntryKind, model: QuickEntryViewModel) {

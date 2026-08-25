@@ -65,6 +65,11 @@ struct TodayView: View {
             .background(CalendarTheme.background)
             .overlay { if model.isLoading && !model.hasLoaded { ProgressView() } }
             .navigationTitle("Today")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ProfileSelectorToolbar(selection: environment.profileSelection)
+                }
+            }
             .task(id: revision) { await model.load() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
