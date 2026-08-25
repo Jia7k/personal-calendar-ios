@@ -11,6 +11,7 @@ struct AppEnvironment {
     let permissions: PermissionCoordinator
     let agendaComposer: AgendaComposer
     let settings: AppSettingsStore
+    let backup: BackupService
     let notificationCoordinator: NotificationCoordinator
     let rescheduleNotifications: @MainActor @Sendable () async -> Void
     let reduceMotionOverride: Bool
@@ -26,6 +27,7 @@ struct AppEnvironment {
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
         let routines = SwiftDataRoutineRepository(context: container.mainContext)
         let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
+        let backup = BackupService(context: container.mainContext, settings: settings)
         try! categories.seedDefaultsIfNeeded(settings: settings)
         let permissions = PermissionCoordinator(
             calendar: calendar,
@@ -41,6 +43,7 @@ struct AppEnvironment {
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
             settings: settings,
+            backup: backup,
             notificationCoordinator: notificationCoordinator,
             rescheduleNotifications: makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator),
             reduceMotionOverride: false,
@@ -76,6 +79,7 @@ struct AppEnvironment {
         let settings = AppSettingsStore(defaults: .ephemeral)
         let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"))
         let notificationCoordinator = NotificationCoordinator(scheduler: SystemNotificationScheduler())
+        let backup = BackupService(context: container.mainContext, settings: settings)
         settings.didCompleteOnboarding = !arguments.contains("-show-onboarding")
         let categories = SwiftDataCategoryRepository(context: container.mainContext)
         try! categories.seedDefaultsIfNeeded(settings: settings)
@@ -99,6 +103,7 @@ struct AppEnvironment {
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
             settings: settings,
+            backup: backup,
             notificationCoordinator: notificationCoordinator,
             rescheduleNotifications: makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, composer: AgendaComposer(categories: categories), settings: settings, authorization: notifications, coordinator: notificationCoordinator),
             reduceMotionOverride: arguments.contains("-reduce-motion"),

@@ -43,6 +43,14 @@ struct SettingsView: View {
                 }
                 .accessibilityIdentifier("settings-categories")
             }
+            Section("Data") {
+                NavigationLink("Backup & Restore") {
+                    BackupSettingsView(backup: environment.backup, onRestored: {
+                        onContentChanged()
+                        Task { await environment.rescheduleNotifications() }
+                    })
+                }
+            }
         }.navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()); await environment.rescheduleNotifications(); loading = false }.onDisappear { guard sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.rescheduleNotifications() } } }
     }
     @ViewBuilder private var defaults: some View {

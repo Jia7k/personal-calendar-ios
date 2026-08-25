@@ -110,6 +110,25 @@ final class AppSettingsStore {
         }
     }
 
+    func applyBackupValue(_ value: SettingsBackup) {
+        selectedCalendarIDs = Set(value.selectedCalendarIDs)
+        selectedReminderListIDs = Set(value.selectedReminderListIDs)
+        defaultCalendarID = value.defaultCalendarID
+        defaultReminderListID = value.defaultReminderListID
+        calendarSelectionIsExplicit = value.calendarSelectionIsExplicit
+        reminderSelectionIsExplicit = value.reminderSelectionIsExplicit
+        morningSummaryEnabled = value.morningSummaryEnabled
+        morningSummaryHour = value.morningSummaryHour
+        morningSummaryMinute = value.morningSummaryMinute
+        showNextItemOnLockScreen = value.showNextItemOnLockScreen
+        didSeedCategories = value.didSeedCategories
+        didCompleteOnboarding = value.didCompleteOnboarding
+        persistCalendarSelection()
+        persistReminderSelection()
+        defaults.set(defaultCalendarID, forKey: Key.defaultCalendar)
+        defaults.set(defaultReminderListID, forKey: Key.defaultList)
+    }
+
     private func toggle(id: String, selection: inout Set<String>, explicit: inout Bool, availableIDs: Set<String>) {
         guard availableIDs.contains(id) else { return }
         if !explicit { selection = availableIDs; explicit = true }

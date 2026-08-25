@@ -1,0 +1,68 @@
+import SwiftData
+import XCTest
+@testable import PersonalCalendar
+
+@MainActor
+final class BackupServiceTests: XCTestCase {
+    func testRoundTripRestoresAppOwnedDataWithoutEventKitDependencies() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: RoutineRecord.self,
+            RoutineCompletionRecord.self,
+            CategoryRecord.self,
+            ExternalCategoryLinkRecord.self,
+            configurations: configuration
+        )
+        let context = container.mainContext
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        let routines = SwiftDataRoutineRepository(context: context)
+        let categories = SwiftDataCategoryRepository(context: context)
+        let categoryID = try categories.create(name: "Personal", colorHex: "#3A8D7C")
+        let routineID = try routines.create(.init(
+            title: "Read",
+            weekdays: [1, 2, 3, 4, 5, 6, 7],
+            window: .evening,
+            reminderHour: 18,
+            reminderMinute: 30,
+            categoryID: categoryID
+        ))
+        let completedDay = LocalDay(year: 2026, month: 8, day: 25)
+        try routines.setCompleted(routineID: routineID, day: completedDay, completed: true)
+        settings.replaceSelectedCalendarIDs(["calendar-1"], availableIDs: ["calendar-1"])
+        settings.replaceSelectedReminderListIDs(["list-1"], availableIDs: ["list-1"])
+        settings.didSeedCategories = true
+        settings.didCompleteOnboarding = true
+        settings.morningSummaryEnabled = true
+        settings.morningSummaryHour = 7
+        settings.morningSummaryMinute = 45
+        settings.showNextItemOnLockScreen = true
+
+        let service = BackupService(context: context, settings: settings)
+        let data = try service.exportData()
+        try routines.delete(id: routineID)
+        try categories.delete(id: categoryID, reassignedTo: nil)
+        settings.didSeedCategories = false
+        settings.didCompleteOnboarding = false
+        settings.morningSummaryEnabled = false
+        settings.morningSummaryHour = 8
+        settings.morningSummaryMinute = 0
+        settings.showNextItemOnLockScreen = false
+
+        try service.restore(data: data)
+
+        XCTAssertEqual(try routines.list(includeArchived: true).map(\.title), ["Read"])
+        XCTAssertEqual(try categories.list().map(\.name), ["Personal"])
+        XCTAssertTrue(try routines.isCompleted(routineID: routineID, day: completedDay))
+        XCTAssertEqual(try routines.list(includeArchived: true).first?.categoryID, categoryID)
+        XCTAssertEqual(settings.selectedCalendarIDs, ["calendar-1"])
+        XCTAssertEqual(settings.selectedReminderListIDs, ["list-1"])
+        XCTAssertTrue(settings.calendarSelectionIsExplicit)
+        XCTAssertTrue(settings.reminderSelectionIsExplicit)
+        XCTAssertTrue(settings.didSeedCategories)
+        XCTAssertTrue(settings.didCompleteOnboarding)
+        XCTAssertTrue(settings.morningSummaryEnabled)
+        XCTAssertEqual(settings.morningSummaryHour, 7)
+        XCTAssertEqual(settings.morningSummaryMinute, 45)
+        XCTAssertTrue(settings.showNextItemOnLockScreen)
+    }
+}
