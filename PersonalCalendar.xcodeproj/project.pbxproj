@@ -68,6 +68,7 @@
 		5A08DDB71E8B5D3EF64F80D9 /* TaskRecurrenceEndDateSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 478412E6AABD19C77569FEAB /* TaskRecurrenceEndDateSeed.swift */; };
 		5B87A661FF0C52717D55F243 /* TimetableActivityDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38DFF69BE4ECFD239DE4C4C /* TimetableActivityDriver.swift */; };
 		5D898AC859448124EB0809E1 /* TimetableSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1008A1F56F8A1FD12DDE16B1 /* TimetableSnapshotStore.swift */; };
+		5DB55CBEA8727BFCC3C1F050 /* ProfileSettingsStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */; };
 		5E30DAD9C22BCDB9AFB013A9 /* SwiftDataProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEBE4F7EBDF4E2C371E1410 /* SwiftDataProfileRepository.swift */; };
 		5E7A91F1A66E2D9CE3C86560 /* TaskRecurrenceEndDateSeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D04AEA8887078006C35E50 /* TaskRecurrenceEndDateSeedTests.swift */; };
 		67F5EBBB97AD60FF649FAFA6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B2FC04E5363299D6D14B5C06 /* Assets.xcassets */; };
@@ -241,6 +242,7 @@
 		5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCoordinator.swift; sourceTree = "<group>"; };
 		5D0F4CAF444E648C867C92FD /* Fakes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fakes.swift; sourceTree = "<group>"; };
 		601C1B2C329102F7A07180BD /* RoutinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutinesView.swift; sourceTree = "<group>"; };
+		62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingsStateTests.swift; sourceTree = "<group>"; };
 		653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		654046F51502ACBECF9AAD7F /* PersonalCalendarWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PersonalCalendarWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6701BC3732DB260CE0FB7AB0 /* PermissionOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionOnboardingView.swift; sourceTree = "<group>"; };
@@ -702,6 +704,7 @@
 			isa = PBXGroup;
 			children = (
 				FC4216599AFDC4F9B31CA748 /* ProfileRepositoryTests.swift */,
+				62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */,
 			);
 			path = Profiles;
 			sourceTree = "<group>";
@@ -1141,6 +1144,7 @@
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
 				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
 				91304125657CFA0AD48974B9 /* ProfileRepositoryTests.swift in Sources */,
+				5DB55CBEA8727BFCC3C1F050 /* ProfileSettingsStateTests.swift in Sources */,
 				DD4D840C121A997E6864D136 /* QuickEntryViewModelTests.swift in Sources */,
 				874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */,
 				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,

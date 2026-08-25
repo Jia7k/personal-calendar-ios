@@ -13,6 +13,22 @@ enum SourceDescriptorOrdering {
     private static func areInAscendingOrder(_ left: ReminderListDescriptor, _ right: ReminderListDescriptor) -> Bool { areInAscendingOrder(id: left.id, title: left.title, id: right.id, title: right.title) }
 }
 
+struct LegacyProfileSelectionSnapshot: Equatable, Sendable {
+    let calendarIDs: Set<String>
+    let reminderListIDs: Set<String>
+    let defaultCalendarID: String?
+    let defaultReminderListID: String?
+    let calendarSelectionWasExplicit: Bool
+    let reminderSelectionWasExplicit: Bool
+}
+
+enum ProfileMigrationPart: String, CaseIterable, Hashable, Sendable {
+    case records
+    case calendar
+    case reminders
+    case routines
+}
+
 @MainActor
 @Observable
 final class AppSettingsStore {
@@ -29,6 +45,12 @@ final class AppSettingsStore {
         static let morningSummaryHour = "morningSummaryHour"
         static let morningSummaryMinute = "morningSummaryMinute"
         static let showNextItemOnLockScreen = "showNextItemOnLockScreen"
+        static let activeProfile = "activeProfileIdentity"
+        static let lastActiveSavedProfile = "lastActiveSavedProfileID"
+
+        static func profileMigration(_ part: ProfileMigrationPart) -> String {
+            "profileMigration.\(part.rawValue)"
+        }
     }
 
     private let defaults: UserDefaults
@@ -44,24 +66,83 @@ final class AppSettingsStore {
     var showNextItemOnLockScreen: Bool { didSet { defaults.set(showNextItemOnLockScreen, forKey: Key.showNextItemOnLockScreen) } }
     private(set) var calendarSelectionIsExplicit: Bool
     private(set) var reminderSelectionIsExplicit: Bool
+    private(set) var legacyProfileSelection: LegacyProfileSelectionSnapshot
+    private(set) var activeProfileIdentity: ProfileIdentity
+    private(set) var lastActiveSavedProfileID: UUID?
+    private(set) var completedProfileMigrationParts: Set<ProfileMigrationPart>
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let storedCalendarIDs = Set(defaults.stringArray(forKey: Key.selectedCalendars) ?? [])
         let storedReminderListIDs = Set(defaults.stringArray(forKey: Key.selectedLists) ?? [])
+        let storedDefaultCalendarID = defaults.string(forKey: Key.defaultCalendar)
+        let storedDefaultReminderListID = defaults.string(forKey: Key.defaultList)
+        let storedCalendarSelectionIsExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendarIDs.isEmpty
+        let storedReminderSelectionIsExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedReminderListIDs.isEmpty
         selectedCalendarIDs = storedCalendarIDs
         selectedReminderListIDs = storedReminderListIDs
-        defaultCalendarID = defaults.string(forKey: Key.defaultCalendar)
-        defaultReminderListID = defaults.string(forKey: Key.defaultList)
+        defaultCalendarID = storedDefaultCalendarID
+        defaultReminderListID = storedDefaultReminderListID
         didCompleteOnboarding = defaults.bool(forKey: Key.onboarding)
         didSeedCategories = defaults.bool(forKey: Key.categoriesSeeded)
         morningSummaryEnabled = defaults.bool(forKey: Key.morningSummaryEnabled)
         morningSummaryHour = (defaults.object(forKey: Key.morningSummaryHour) as? Int).flatMap { (0...23).contains($0) ? $0 : nil } ?? 8
         morningSummaryMinute = (defaults.object(forKey: Key.morningSummaryMinute) as? Int).flatMap { (0...59).contains($0) ? $0 : nil } ?? 0
         showNextItemOnLockScreen = defaults.bool(forKey: Key.showNextItemOnLockScreen)
-        calendarSelectionIsExplicit = defaults.object(forKey: Key.calendarsExplicit) as? Bool ?? !storedCalendarIDs.isEmpty
-        reminderSelectionIsExplicit = defaults.object(forKey: Key.listsExplicit) as? Bool ?? !storedReminderListIDs.isEmpty
+        calendarSelectionIsExplicit = storedCalendarSelectionIsExplicit
+        reminderSelectionIsExplicit = storedReminderSelectionIsExplicit
+        legacyProfileSelection = LegacyProfileSelectionSnapshot(
+            calendarIDs: storedCalendarIDs,
+            reminderListIDs: storedReminderListIDs,
+            defaultCalendarID: storedDefaultCalendarID,
+            defaultReminderListID: storedDefaultReminderListID,
+            calendarSelectionWasExplicit: storedCalendarSelectionIsExplicit,
+            reminderSelectionWasExplicit: storedReminderSelectionIsExplicit
+        )
+        activeProfileIdentity = defaults.string(forKey: Key.activeProfile)
+            .flatMap(ProfileIdentity.init(storageKey:)) ?? .everything
+        lastActiveSavedProfileID = defaults.string(forKey: Key.lastActiveSavedProfile)
+            .flatMap(UUID.init(uuidString:))
+        completedProfileMigrationParts = Set(ProfileMigrationPart.allCases.filter {
+            defaults.bool(forKey: Key.profileMigration($0))
+        })
         persistSelectionMarkers()
+        persistProfileSelection()
+    }
+
+    func setActiveProfile(_ identity: ProfileIdentity) {
+        activeProfileIdentity = identity
+        if case let .saved(id) = identity {
+            lastActiveSavedProfileID = id
+        }
+        persistProfileSelection()
+    }
+
+    func markProfileMigrationComplete(_ part: ProfileMigrationPart) {
+        completedProfileMigrationParts.insert(part)
+        defaults.set(true, forKey: Key.profileMigration(part))
+    }
+
+    func didMigrateProfilePart(_ part: ProfileMigrationPart) -> Bool {
+        completedProfileMigrationParts.contains(part)
+    }
+
+    func resetProfileMigration(legacy: LegacyProfileSelectionSnapshot) {
+        legacyProfileSelection = legacy
+        selectedCalendarIDs = legacy.calendarIDs
+        selectedReminderListIDs = legacy.reminderListIDs
+        defaultCalendarID = legacy.defaultCalendarID
+        defaultReminderListID = legacy.defaultReminderListID
+        calendarSelectionIsExplicit = legacy.calendarSelectionWasExplicit
+        reminderSelectionIsExplicit = legacy.reminderSelectionWasExplicit
+        completedProfileMigrationParts.removeAll()
+        for part in ProfileMigrationPart.allCases {
+            defaults.set(false, forKey: Key.profileMigration(part))
+        }
+        persistCalendarSelection()
+        persistReminderSelection()
+        defaults.set(defaultCalendarID, forKey: Key.defaultCalendar)
+        defaults.set(defaultReminderListID, forKey: Key.defaultList)
     }
 
     func toggleCalendar(id: String, availableIDs: Set<String>) {
@@ -100,11 +181,15 @@ final class AppSettingsStore {
     }
 
     func validateDefaults(calendarAccess: AccessState, calendars: [CalendarDescriptor], remindersAccess: AccessState, lists: [ReminderListDescriptor]) {
-        if calendarAccess == .granted, defaultCalendarID.map({ id in !calendars.contains { $0.id == id && $0.allowsContentModifications } }) == true {
+        if !didMigrateProfilePart(.calendar),
+           calendarAccess == .granted,
+           defaultCalendarID.map({ id in !calendars.contains { $0.id == id && $0.allowsContentModifications } }) == true {
             defaultCalendarID = nil
             defaults.removeObject(forKey: Key.defaultCalendar)
         }
-        if remindersAccess == .granted, defaultReminderListID.map({ id in !lists.contains { $0.id == id && $0.allowsContentModifications } }) == true {
+        if !didMigrateProfilePart(.reminders),
+           remindersAccess == .granted,
+           defaultReminderListID.map({ id in !lists.contains { $0.id == id && $0.allowsContentModifications } }) == true {
             defaultReminderListID = nil
             defaults.removeObject(forKey: Key.defaultList)
         }
@@ -118,7 +203,7 @@ final class AppSettingsStore {
         remindersAccess: AccessState,
         lists: [ReminderListDescriptor]
     ) {
-        if calendarAccess == .granted {
+        if calendarAccess == .granted, !didMigrateProfilePart(.calendar) {
             reconcileSelection(
                 selection: &selectedCalendarIDs,
                 explicit: &calendarSelectionIsExplicit,
@@ -126,7 +211,7 @@ final class AppSettingsStore {
             )
             persistCalendarSelection()
         }
-        if remindersAccess == .granted {
+        if remindersAccess == .granted, !didMigrateProfilePart(.reminders) {
             reconcileSelection(
                 selection: &selectedReminderListIDs,
                 explicit: &reminderSelectionIsExplicit,
@@ -203,6 +288,10 @@ final class AppSettingsStore {
     private func persistSelectionMarkers() {
         defaults.set(calendarSelectionIsExplicit, forKey: Key.calendarsExplicit)
         defaults.set(reminderSelectionIsExplicit, forKey: Key.listsExplicit)
+    }
+    private func persistProfileSelection() {
+        defaults.set(activeProfileIdentity.storageKey, forKey: Key.activeProfile)
+        defaults.set(lastActiveSavedProfileID?.uuidString, forKey: Key.lastActiveSavedProfile)
     }
 }
 
