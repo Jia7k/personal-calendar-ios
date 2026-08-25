@@ -123,8 +123,11 @@ struct AppEnvironment {
         authorization: any NotificationAuthorizing,
         coordinator: NotificationCoordinator
     ) -> @MainActor @Sendable () async -> Void {
-        {
+        let generationState = NotificationRescheduleGeneration()
+        return {
+            let generation = generationState.begin()
             guard await authorization.accessState == .granted else {
+                guard generationState.isLatest(generation) else { return }
                 await coordinator.reschedule(summary: nil, routines: [], completedDays: [:], now: .now, calendar: .current)
                 return
             }
@@ -172,6 +175,7 @@ struct AppEnvironment {
             }
             let completedRoutineIDs = Set(routineSnapshots.filter { completedDays[$0.id]?.contains(summaryDay) == true }.map(\.id))
             let agenda = composer.compose(day: summaryDay, events: events, reminders: taskSnapshots, routines: routineSnapshots, completedRoutineIDs: completedRoutineIDs, includeOverdueTasks: false, calendar: localCalendar)
+            guard generationState.isLatest(generation) else { return }
             await coordinator.reschedule(
                 summary: .init(enabled: settings.morningSummaryEnabled, hour: settings.morningSummaryHour, minute: settings.morningSummaryMinute, day: summaryDay, agenda: agenda, showsNextTitle: settings.showNextItemOnLockScreen),
                 routines: routineSnapshots,
@@ -199,5 +203,19 @@ struct AppEnvironment {
             )
         )!
         return .init(now: now, calendar: calendar, locale: locale, timeZone: timeZone)
+    }
+}
+
+@MainActor
+private final class NotificationRescheduleGeneration {
+    private var latest = 0
+
+    func begin() -> Int {
+        latest &+= 1
+        return latest
+    }
+
+    func isLatest(_ generation: Int) -> Bool {
+        generation == latest
     }
 }

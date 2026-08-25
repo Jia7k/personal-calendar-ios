@@ -73,3 +73,16 @@ xcodebuild test -project PersonalCalendar.xcodeproj -scheme PersonalCalendar -de
 Focused verification output: `NotificationCoordinatorTests` executed 1 test with 0 failures; `TEST SUCCEEDED`.
 
 Review-fix commit: `7bef970f8747edb77d1aeea9d3ef2c424a4698ec` (`fix: serialize notification replacements`).
+
+## Pipeline ordering follow-up
+
+- Added a shared, main-actor generation token at the entry point of `AppEnvironment.rescheduleNotifications`.
+- Each invocation claims a generation before awaiting authorization or source data; a stale invocation returns before clearing or scheduling notifications. The adapter’s serialized replacement then preserves ordering for invocations that reached it before a newer call began.
+
+Focused verification command:
+
+```sh
+xcodebuild test -project PersonalCalendar.xcodeproj -scheme PersonalCalendar -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:PersonalCalendarTests/NotificationCoordinatorTests
+```
+
+Focused verification output: `NotificationCoordinatorTests` executed 1 test with 0 failures; `TEST SUCCEEDED`.
