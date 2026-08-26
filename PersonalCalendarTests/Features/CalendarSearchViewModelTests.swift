@@ -78,6 +78,26 @@ final class CalendarSearchViewModelTests: XCTestCase {
         XCTAssertEqual(model.notices.map(\.source), [.calendar])
     }
 
+    func testDeniedCalendarAccessPublishesSettingsRecoveryWithoutFetching() async {
+        let scope = makeScope(calendarIDs: ["calendar"])
+        let events = SearchCalendarService(events: [event(id: "hidden", title: "Match hidden", calendarID: "calendar")])
+        events.accessState = .denied
+        let model = makeModel(events: events, scope: { scope })
+
+        model.query = "match"
+        await model.load()
+        await settle()
+
+        XCTAssertTrue(events.requestedIDs.isEmpty)
+        XCTAssertEqual(model.sections, .empty)
+        XCTAssertEqual(model.notices.count, 1)
+        XCTAssertEqual(model.notices.first?.source, .calendar)
+        XCTAssertEqual(model.notices.first?.accessState, .denied)
+        XCTAssertEqual(model.notices.first?.message, "Calendar access is unavailable. Calendar events are hidden.")
+        XCTAssertEqual(model.notices.first?.settingsActionIdentifier, "calendar-permission-settings")
+        XCTAssertTrue(model.notices.first?.canOpenSettings == true)
+    }
+
     func testSameProfileFailureRetainsConfirmedStillScopedCorpus() async {
         let scope = makeScope(calendarIDs: ["calendar"], reminderListIDs: [], routineIDs: [])
         let events = SearchCalendarService(events: [event(id: "confirmed", title: "Match confirmed", calendarID: "calendar")])

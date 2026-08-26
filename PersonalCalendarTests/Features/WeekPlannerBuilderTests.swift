@@ -197,6 +197,24 @@ final class WeekPlannerBuilderTests: XCTestCase {
         XCTAssertEqual(result.timedItems.map(\.overlapColumnCount), [2, 2, 2])
     }
 
+    func testTimelineMetricsKeepDenseEventAndTaskControlsAtLeastFortyFourPoints() {
+        let dayWidth = WeekPlannerTimelineMetrics.dayWidth(
+            availableWidth: 402,
+            timeGutterWidth: 40,
+            dayCount: 7,
+            maximumOverlapCount: 3
+        )
+
+        XCTAssertGreaterThanOrEqual(
+            WeekPlannerTimelineMetrics.eventWidth(dayWidth: dayWidth, overlapCount: 3),
+            44
+        )
+        XCTAssertGreaterThanOrEqual(
+            WeekPlannerTimelineMetrics.taskWidth(dayWidth: dayWidth),
+            44
+        )
+    }
+
     private func makeCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_SG")

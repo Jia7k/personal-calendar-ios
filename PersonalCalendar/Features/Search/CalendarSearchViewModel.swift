@@ -10,8 +10,27 @@ struct CalendarSearchNotice: Identifiable, Equatable, Sendable {
 
     let source: Source
     let message: String
+    let accessState: AccessState?
+
+    init(source: Source, message: String, accessState: AccessState? = nil) {
+        self.source = source
+        self.message = message
+        self.accessState = accessState
+    }
 
     var id: Source { source }
+
+    var canOpenSettings: Bool {
+        accessState == .denied || accessState == .notDetermined
+    }
+
+    var settingsActionIdentifier: String? {
+        switch source {
+        case .calendar: "calendar-permission-settings"
+        case .reminders: "reminders-permission-settings"
+        case .routines: nil
+        }
+    }
 }
 
 @MainActor
@@ -103,7 +122,7 @@ final class CalendarSearchViewModel {
             confirmedEvents = []
         } else if calendarService.accessState != .granted {
             confirmedEvents = []
-            nextNotices.append(.init(source: .calendar, message: "Calendar events are unavailable for this profile."))
+            nextNotices.append(accessNotice(source: .calendar, state: calendarService.accessState))
         } else {
             do {
                 let reference = now()
@@ -124,7 +143,7 @@ final class CalendarSearchViewModel {
             confirmedReminders = []
         } else if remindersService.accessState != .granted {
             confirmedReminders = []
-            nextNotices.append(.init(source: .reminders, message: "Tasks are unavailable for this profile."))
+            nextNotices.append(accessNotice(source: .reminders, state: remindersService.accessState))
         } else {
             do {
                 let fetched = try await remindersService.fetchReminders(listIDs: scope.reminderListIDs)
@@ -213,5 +232,26 @@ final class CalendarSearchViewModel {
 
     private func publishSearch() {
         sections = matcher.sections(matching: query, corpus: corpus)
+    }
+
+    private func accessNotice(source: CalendarSearchNotice.Source, state: AccessState) -> CalendarSearchNotice {
+        let message: String
+        switch (source, state) {
+        case (.calendar, .restricted):
+            message = "Calendar access is restricted. Calendar events are hidden because this access is controlled by your device or account."
+        case (.reminders, .restricted):
+            message = "Reminders access is restricted. Tasks are hidden because this access is controlled by your device or account."
+        case (.calendar, .denied), (.calendar, .notDetermined):
+            message = "Calendar access is unavailable. Calendar events are hidden."
+        case (.reminders, .denied), (.reminders, .notDetermined):
+            message = "Reminders access is unavailable. Tasks are hidden."
+        case (.calendar, .granted):
+            message = "Calendar access is available."
+        case (.reminders, .granted):
+            message = "Reminders access is available."
+        case (.routines, _):
+            message = "Routines could not be refreshed."
+        }
+        return .init(source: source, message: message, accessState: state)
     }
 }

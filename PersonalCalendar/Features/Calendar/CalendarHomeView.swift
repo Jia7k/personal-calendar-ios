@@ -70,7 +70,11 @@ struct CalendarHomeView: View {
                 }
             }
             .navigationDestination(isPresented: $showingSearch) {
-                CalendarSearchView(environment: environment, onSelect: selectSearchResult)
+                CalendarSearchView(
+                    environment: environment,
+                    onSelect: selectSearchResult,
+                    onOpenSettings: openSettings
+                )
             }
             .task(id: revision) { await viewModel.load() }
             .task(id: quickEntryRefresh?.id) {

@@ -4,14 +4,17 @@ struct CalendarSearchView: View {
     @State private var model: CalendarSearchViewModel
     private let environment: AppEnvironment
     private let onSelect: @MainActor (AgendaItemOrigin) -> Void
+    private let onOpenSettings: @MainActor () -> Void
     private let calendar: Calendar
 
     init(
         environment: AppEnvironment,
-        onSelect: @escaping @MainActor (AgendaItemOrigin) -> Void
+        onSelect: @escaping @MainActor (AgendaItemOrigin) -> Void,
+        onOpenSettings: @escaping @MainActor () -> Void = {}
     ) {
         self.environment = environment
         self.onSelect = onSelect
+        self.onOpenSettings = onOpenSettings
         let calendar = Calendar.current
         self.calendar = calendar
         let selection = environment.profileSelection
@@ -108,9 +111,16 @@ struct CalendarSearchView: View {
             if !model.notices.isEmpty {
                 Section("Some sources need attention") {
                     ForEach(model.notices) { notice in
-                        Label(notice.message, systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Label(notice.message, systemImage: "exclamationmark.triangle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if notice.canOpenSettings, let identifier = notice.settingsActionIdentifier {
+                                Button("Open Settings", action: onOpenSettings)
+                                    .accessibilityIdentifier(identifier)
+                            }
+                        }
                     }
                     Button("Retry") { Task { await model.retry() } }
                         .accessibilityIdentifier("calendar-search-retry")

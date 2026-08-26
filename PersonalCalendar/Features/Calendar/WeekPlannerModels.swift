@@ -39,3 +39,26 @@ struct WeekPlannerSnapshot: Equatable, Sendable {
         endHour: 18
     )
 }
+
+struct WeekPlannerTimelineMetrics {
+    static let minimumControlSize: CGFloat = 44
+
+    static func dayWidth(
+        availableWidth: CGFloat,
+        timeGutterWidth: CGFloat,
+        dayCount: Int,
+        maximumOverlapCount: Int
+    ) -> CGFloat {
+        let visibleWidth = max(1, (availableWidth - timeGutterWidth) / CGFloat(max(1, dayCount)))
+        let controlWidth = 6 + minimumControlSize * CGFloat(max(1, maximumOverlapCount))
+        return max(visibleWidth, controlWidth)
+    }
+
+    static func eventWidth(dayWidth: CGFloat, overlapCount: Int) -> CGFloat {
+        max(minimumControlSize, (dayWidth - 6) / CGFloat(max(1, overlapCount)))
+    }
+
+    static func taskWidth(dayWidth: CGFloat) -> CGFloat {
+        max(minimumControlSize, dayWidth - 6)
+    }
+}

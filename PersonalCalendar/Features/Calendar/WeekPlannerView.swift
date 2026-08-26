@@ -117,21 +117,27 @@ struct WeekPlannerView: View {
     }
 
     private var timeline: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            GeometryReader { proxy in
-                let dayWidth = max(1, (proxy.size.width - timeGutterWidth) / CGFloat(max(1, snapshot.days.count)))
+        GeometryReader { proxy in
+            let dayWidth = WeekPlannerTimelineMetrics.dayWidth(
+                availableWidth: proxy.size.width,
+                timeGutterWidth: timeGutterWidth,
+                dayCount: snapshot.days.count,
+                maximumOverlapCount: maximumOverlapCount
+            )
+            let contentWidth = timeGutterWidth + dayWidth * CGFloat(snapshot.days.count)
+            ScrollView([.horizontal, .vertical], showsIndicators: true) {
                 ZStack(alignment: .topLeading) {
-                    hourRules(width: proxy.size.width)
+                    hourRules(width: contentWidth)
                     dayDividers(dayWidth: dayWidth)
                     currentTimeLine(dayWidth: dayWidth)
                     ForEach(snapshot.timedItems) { value in
                         timedItem(value, dayWidth: dayWidth)
                     }
                 }
+                .frame(width: contentWidth, height: timelineHeight, alignment: .topLeading)
             }
-            .frame(height: timelineHeight)
         }
-        .frame(maxHeight: min(timelineHeight, 440))
+        .frame(height: min(timelineHeight, 440))
         .background(CalendarTheme.surface, in: RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius)
@@ -194,7 +200,7 @@ struct WeekPlannerView: View {
             switch value.kind {
             case .event:
                 let end = value.end ?? value.start
-                let height = max(28, (minuteOffset(for: end, on: value.day) ?? y) - y)
+                let height = max(CalendarTheme.minimumTapSize, (minuteOffset(for: end, on: value.day) ?? y) - y)
                 Button {
                     select(day: value.day, item: value.item, identifier: value.id)
                 } label: {
@@ -237,7 +243,7 @@ struct WeekPlannerView: View {
                     .background(CalendarTheme.surface.opacity(0.94), in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .frame(width: max(28, dayWidth - 6), height: CalendarTheme.minimumTapSize, alignment: .leading)
+                .frame(width: WeekPlannerTimelineMetrics.taskWidth(dayWidth: dayWidth), height: CalendarTheme.minimumTapSize, alignment: .leading)
                 .offset(x: timeGutterWidth + CGFloat(dayIndex) * dayWidth + 3, y: y - CalendarTheme.minimumTapSize / 2)
                 .accessibilityIdentifier("week-task-\(originIdentifier(value.item.origin) ?? value.item.id)")
                 .accessibilityLabel("Task due, \(value.item.title), \(value.start.formatted(date: .omitted, time: .shortened)), \(dayLabel(value.day))")
@@ -381,7 +387,17 @@ struct WeekPlannerView: View {
     }
 
     private func eventWidth(_ value: WeekPlannerTimedItem, dayWidth: CGFloat) -> CGFloat {
-        max(18, (dayWidth - 6) / CGFloat(max(1, value.overlapColumnCount)))
+        WeekPlannerTimelineMetrics.eventWidth(
+            dayWidth: dayWidth,
+            overlapCount: value.overlapColumnCount
+        )
+    }
+
+    private var maximumOverlapCount: Int {
+        snapshot.timedItems
+            .filter { $0.kind == .event }
+            .map(\.overlapColumnCount)
+            .max() ?? 1
     }
 
     private func select(day: LocalDay, item: AgendaItem, identifier: String) {
