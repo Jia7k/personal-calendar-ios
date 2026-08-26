@@ -1,19 +1,40 @@
 import SwiftUI
 
+struct RoutineDeepLinkSignal: Equatable, Sendable {
+    let id: UUID
+    let routineID: UUID
+}
+
+struct RoutineDeepLinkResolver {
+    private(set) var lastSignalID: UUID?
+
+    mutating func resolve(
+        _ signal: RoutineDeepLinkSignal?,
+        rows: [RoutineRowState]
+    ) -> RoutineRowState? {
+        guard let signal, signal.id != lastSignalID else { return nil }
+        lastSignalID = signal.id
+        return rows.first { $0.id == signal.routineID }
+    }
+}
+
 struct RoutinesView: View {
     private struct DeleteRequest: Identifiable { let id: UUID; let title: String }
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: RoutinesViewModel
     @State private var editing: RoutineRowState?
     @State private var deleteRequest: DeleteRequest?
+    @State private var deepLinkResolver = RoutineDeepLinkResolver()
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
+    private let routineDeepLink: RoutineDeepLinkSignal?
     private let categories: [CategorySnapshot]
     private let profileSelection: ProfileSelectionController
     init(
         environment: AppEnvironment,
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
-        quickEntryRefresh: QuickEntryRefreshSignal? = nil
+        quickEntryRefresh: QuickEntryRefreshSignal? = nil,
+        routineDeepLink: RoutineDeepLinkSignal? = nil
     ) {
         let selection = environment.profileSelection
         _model = State(initialValue: RoutinesViewModel(
@@ -31,6 +52,7 @@ struct RoutinesView: View {
         profileSelection = selection
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
+        self.routineDeepLink = routineDeepLink
     }
     var body: some View { NavigationStack { List {
         if let error = model.refreshErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry Refresh") { model.reload() }.frame(minWidth: 44, minHeight: 44) } }
@@ -52,6 +74,11 @@ struct RoutinesView: View {
     .onChange(of: quickEntryRefresh, initial: true) { _, signal in
         guard let signal else { return }
         model.refreshAfterQuickEntry(signal)
+    }
+    .onChange(of: routineDeepLink, initial: true) { _, signal in
+        guard signal != nil else { return }
+        model.reload()
+        editing = deepLinkResolver.resolve(signal, rows: model.active + model.archived)
     }
     .refreshable { model.reload() }
     }

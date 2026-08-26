@@ -8,6 +8,7 @@ struct CalendarHomeView: View {
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
+    private let onOpenRoutine: @MainActor (UUID) -> Void
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
     private var calendar: Calendar { .current }
@@ -16,10 +17,12 @@ struct CalendarHomeView: View {
         environment: AppEnvironment,
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil,
-        openSettings: @escaping @MainActor () -> Void = {}
+        openSettings: @escaping @MainActor () -> Void = {},
+        onOpenRoutine: @escaping @MainActor (UUID) -> Void = { _ in }
     ) {
         self.environment = environment
         self.openSettings = openSettings
+        self.onOpenRoutine = onOpenRoutine
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
         let systemCalendar = Calendar.current
@@ -41,22 +44,18 @@ struct CalendarHomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 16) {
-                        monthHeader
-                        grid
-                        DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } }, onOpenItem: openAgendaItem, onSetTaskCompleted: { item, completed in Task { await viewModel.setTaskCompleted(item, completed: completed) } })
-                    }
+            VStack(spacing: 0) {
+                displayModePicker
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                }
-                .background(CalendarTheme.background)
-                .onChange(of: viewModel.selectedDay) { _, selectedDay in
-                    guard dynamicTypeSize.isAccessibilitySize else { return }
-                    proxy.scrollTo(selectedDay, anchor: .center)
+                    .padding(.top, 8)
+                switch viewModel.displayMode {
+                case .month:
+                    monthContent
+                case .week:
+                    weekContent
                 }
             }
+            .background(CalendarTheme.background)
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
@@ -89,16 +88,113 @@ struct CalendarHomeView: View {
         }
     }
 
-    private var monthHeader: some View {
+    private var displayModePicker: some View {
+        Picker("Calendar view", selection: Binding(
+            get: { viewModel.displayMode },
+            set: { mode in Task { await viewModel.setDisplayMode(mode) } }
+        )) {
+            Text("Month")
+                .tag(CalendarDisplayMode.month)
+                .accessibilityIdentifier("calendar-mode-month")
+            Text("Week")
+                .tag(CalendarDisplayMode.week)
+                .accessibilityIdentifier("calendar-mode-week")
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var monthContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 16) {
+                    periodHeader
+                    grid
+                    DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } }, onOpenItem: openAgendaItem, onSetTaskCompleted: { item, completed in Task { await viewModel.setTaskCompleted(item, completed: completed) } })
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .onChange(of: viewModel.selectedDay) { _, selectedDay in
+                guard dynamicTypeSize.isAccessibilitySize else { return }
+                proxy.scrollTo(selectedDay, anchor: .center)
+            }
+        }
+    }
+
+    private var weekContent: some View {
+        VStack(spacing: 12) {
+            periodHeader
+                .padding(.horizontal, 16)
+            weekStatus
+                .padding(.horizontal, 16)
+            WeekPlannerView(
+                snapshot: viewModel.weekPlanner,
+                selectedDay: viewModel.selectedDay,
+                now: .now,
+                calendar: calendar,
+                onSelectDay: { day in Task { await viewModel.select(day) } },
+                onOpenItem: openAgendaItem
+            )
+        }
+        .padding(.vertical, 12)
+    }
+
+    @ViewBuilder private var weekStatus: some View {
+        if viewModel.isLoading {
+            ProgressView("Loading your week")
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if let errorMessage = viewModel.errorMessage {
+            HStack {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                Spacer()
+                Button("Retry") { Task { await viewModel.load() } }
+            }
+        }
+        ForEach(viewModel.sourceAccessNotices) { notice in
+            HStack {
+                Label(notice.message, systemImage: "lock.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if notice.canOpenSettings {
+                    Button("Open Settings", action: openSettings)
+                        .accessibilityIdentifier(notice.settingsActionIdentifier)
+                }
+            }
+        }
+    }
+
+    private var periodHeader: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-            Button { Task { await viewModel.moveMonth(by: -1) } } label: { Image(systemName: "chevron.left") }.accessibilityLabel("Previous month").frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-            Spacer()
-            Text(viewModel.displayedMonth.startDate(in: calendar).formatted(.dateTime.month(.wide).year())).font(.title2.weight(.semibold))
-            Spacer()
-            Button { Task { await viewModel.moveMonth(by: 1) } } label: { Image(systemName: "chevron.right") }.accessibilityLabel("Next month").frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                Button { Task { await viewModel.movePeriod(by: -1) } } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel(viewModel.displayMode == .week ? "Previous week" : "Previous month")
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                Spacer()
+                Text(periodTitle).font(.title2.weight(.semibold))
+                Spacer()
+                Button { Task { await viewModel.movePeriod(by: 1) } } label: { Image(systemName: "chevron.right") }
+                    .accessibilityLabel(viewModel.displayMode == .week ? "Next week" : "Next month")
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
             }
             Button("Today") { Task { await viewModel.showToday() } }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+        }
+    }
+
+    private var periodTitle: String {
+        switch viewModel.displayMode {
+        case .month:
+            return viewModel.displayedMonth.startDate(in: calendar)
+                .formatted(.dateTime.month(.wide).year())
+        case .week:
+            guard let first = viewModel.visibleDays.first,
+                  let last = viewModel.visibleDays.last else { return "Week" }
+            let start = first.startDate(in: calendar)
+                .formatted(.dateTime.month(.abbreviated).day())
+            let end = last.startDate(in: calendar)
+                .formatted(.dateTime.month(.abbreviated).day().year())
+            return "\(start) – \(end)"
         }
     }
 
@@ -112,7 +208,7 @@ struct CalendarHomeView: View {
             .accessibilityIdentifier(showsSelectedWeek ? "selected-week-strip" : "month-grid")
             .gesture(DragGesture(minimumDistance: 20).onEnded { value in
                 if abs(value.translation.width) > abs(value.translation.height), abs(value.translation.width) >= 60 {
-                    Task { await viewModel.moveMonth(by: value.translation.width < 0 ? 1 : -1) }
+                    Task { await viewModel.movePeriod(by: value.translation.width < 0 ? 1 : -1) }
                 } else if abs(value.translation.height) >= 60 {
                     setTray(value.translation.height < 0 ? .expanded : .resting)
                 }
@@ -144,7 +240,9 @@ struct CalendarHomeView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .task(model: model, lists: environment.reminders.lists()))
-        case .routine, .synthetic:
+        case let .routine(id, _):
+            onOpenRoutine(id)
+        case .synthetic:
             break
         }
     }

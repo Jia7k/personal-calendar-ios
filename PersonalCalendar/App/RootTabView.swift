@@ -9,6 +9,7 @@ struct RootTabView: View {
     @State private var presentation: RootPresentation?
     @State private var creationProfileChoice: CreationProfileChoice?
     @State private var refreshSignal: QuickEntryRefreshSignal?
+    @State private var routineDeepLink: RoutineDeepLinkSignal?
     @State private var lifecycle: RootLifecycleController
     @Environment(\.scenePhase) private var scenePhase
     init(environment: AppEnvironment) {
@@ -30,7 +31,13 @@ struct RootTabView: View {
         Group {
             if environment.settings.didCompleteOnboarding {
                 TabView(selection: $selection) {
-                    CalendarHomeView(environment: environment, revision: contentRevision, quickEntryRefresh: refreshSignal, openSettings: presentSettings)
+                    CalendarHomeView(
+                        environment: environment,
+                        revision: contentRevision,
+                        quickEntryRefresh: refreshSignal,
+                        openSettings: presentSettings,
+                        onOpenRoutine: openRoutine
+                    )
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Calendar", systemImage: "calendar") }
                         .tag(RootTab.calendar)
@@ -42,7 +49,12 @@ struct RootTabView: View {
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Tasks", systemImage: "checklist") }
                         .tag(RootTab.tasks)
-                    RoutinesView(environment: environment, revision: contentRevision, quickEntryRefresh: refreshSignal)
+                    RoutinesView(
+                        environment: environment,
+                        revision: contentRevision,
+                        quickEntryRefresh: refreshSignal,
+                        routineDeepLink: routineDeepLink
+                    )
                         .universalQuickEntry(onAdd: presentQuickEntry)
                         .tabItem { Label("Routines", systemImage: "repeat") }
                         .tag(RootTab.routines)
@@ -107,6 +119,11 @@ struct RootTabView: View {
     private func presentSettings() {
         guard presentation == nil else { return }
         presentation = .settings(id: UUID())
+    }
+
+    private func openRoutine(_ id: UUID) {
+        routineDeepLink = RoutineDeepLinkSignal(id: UUID(), routineID: id)
+        selection = .routines
     }
 
     private func presentQuickEntry() {

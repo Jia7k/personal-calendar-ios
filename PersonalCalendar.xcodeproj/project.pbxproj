@@ -161,6 +161,7 @@
 		DB74C74071E502004BE24BEF /* DemoEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 859D87BBAC87EF206016C3E8 /* DemoEnvironment.swift */; };
 		DD4D840C121A997E6864D136 /* QuickEntryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B884E1B989F29A6A05BE6D4 /* QuickEntryViewModelTests.swift */; };
 		DE6499CAB15E7D8E13625667 /* QuickEntryParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF568880E1F8DB12CB2AE99 /* QuickEntryParsing.swift */; };
+		DFAE4445D8FF598A8E2508E8 /* WeekPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07DBE486124BAB25813956C3 /* WeekPlannerView.swift */; };
 		E3F00C8B2BE2A11B793C24CB /* CalendarServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */; };
 		E9AF60A9B0B2B3224BC25DB5 /* EventKitMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C30CD53CF9716208915AEEB /* EventKitMutationTests.swift */; };
 		EA109F1C24B3F290A8494F8F /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0301807D2E3D787BF7934E52 /* Recurrence.swift */; };
@@ -174,6 +175,7 @@
 		F611FB9A1AE5A2672B306F0F /* ProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C0E124762C7E50A80F0ECF /* ProfileRepository.swift */; };
 		F6DF516226B8DAE7C32266C1 /* CalendarTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B766A1797C82BCFBE072693F /* CalendarTheme.swift */; };
 		F7BFE8179FBD374DFF96896B /* ProfileSelectionControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98D0B42FE22A2EBACDFAB6C8 /* ProfileSelectionControllerTests.swift */; };
+		F808F9CE58B43D3B10BAFE9F /* RoutineDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8CCCCF7F766C24F5223CD98 /* RoutineDeepLinkTests.swift */; };
 		F87E7C5DE0847CD2644D39EF /* RoutineSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8AFDE9101C25A37974150A8 /* RoutineSnapshot.swift */; };
 		F999BE73A2CDCF435D955986 /* TimetableProfileIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0929EE13E5497E7C4A23B46 /* TimetableProfileIntent.swift */; };
 		FA07FD39EF715E47C715B7F7 /* AppRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36BFD56120650C8D2F986B9F /* AppRefreshCoordinatorTests.swift */; };
@@ -231,6 +233,7 @@
 		0407F5ABDAF7BA11019F155F /* RoutineRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRecord.swift; sourceTree = "<group>"; };
 		068C18572713D479F8631959 /* ProfileFeatureScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFeatureScopeTests.swift; sourceTree = "<group>"; };
 		07201320C3E78179E4EF63A5 /* PersonalCalendarWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalCalendarWidgetsBundle.swift; sourceTree = "<group>"; };
+		07DBE486124BAB25813956C3 /* WeekPlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekPlannerView.swift; sourceTree = "<group>"; };
 		0A6FBFD8323EE15EF1F4D82A /* WeekPlannerBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekPlannerBuilderTests.swift; sourceTree = "<group>"; };
 		0E9B9D6B59D700174A556740 /* RemindersServicing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersServicing.swift; sourceTree = "<group>"; };
 		1008A1F56F8A1FD12DDE16B1 /* TimetableSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableSnapshotStore.swift; sourceTree = "<group>"; };
@@ -350,6 +353,7 @@
 		B2FC04E5363299D6D14B5C06 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B38DFF69BE4ECFD239DE4C4C /* TimetableActivityDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableActivityDriver.swift; sourceTree = "<group>"; };
 		B766A1797C82BCFBE072693F /* CalendarTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarTheme.swift; sourceTree = "<group>"; };
+		B8CCCCF7F766C24F5223CD98 /* RoutineDeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineDeepLinkTests.swift; sourceTree = "<group>"; };
 		B92CB7D40732AC4D6A34CC88 /* ProfileMigrationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileMigrationCoordinatorTests.swift; sourceTree = "<group>"; };
 		BB9440C3EFC013DC6EE2087E /* CategoryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryRecord.swift; sourceTree = "<group>"; };
 		BEBD43AD5FDEAE6099FF11DE /* TodayViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayViewModel.swift; sourceTree = "<group>"; };
@@ -563,6 +567,7 @@
 				C23EC10A463FCB4CA0ACFBBA /* FeatureViewModelTests.swift */,
 				94F43A03F235594E97C87F1C /* MonthGridBuilderTests.swift */,
 				58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */,
+				B8CCCCF7F766C24F5223CD98 /* RoutineDeepLinkTests.swift */,
 				F647A85B6C60046288ECF3B7 /* TaskEditorViewModelTests.swift */,
 				40D04AEA8887078006C35E50 /* TaskRecurrenceEndDateSeedTests.swift */,
 				0A6FBFD8323EE15EF1F4D82A /* WeekPlannerBuilderTests.swift */,
@@ -931,6 +936,7 @@
 				0305691ED4EE8A7D16468599 /* MonthGridView.swift */,
 				9E4EC1953F8833F4D04EFF02 /* WeekPlannerBuilder.swift */,
 				DCCF232EDA85C58289389836 /* WeekPlannerModels.swift */,
+				07DBE486124BAB25813956C3 /* WeekPlannerView.swift */,
 			);
 			path = Calendar;
 			sourceTree = "<group>";
@@ -1229,6 +1235,7 @@
 				A2CF6BE636BD248498B7E0E4 /* UniversalQuickEntryModifier.swift in Sources */,
 				0C5F7A747B632F92C02C0819 /* WeekPlannerBuilder.swift in Sources */,
 				FC955CED054ACA699E6375C9 /* WeekPlannerModels.swift in Sources */,
+				DFAE4445D8FF598A8E2508E8 /* WeekPlannerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1270,6 +1277,7 @@
 				5DB55CBEA8727BFCC3C1F050 /* ProfileSettingsStateTests.swift in Sources */,
 				DD4D840C121A997E6864D136 /* QuickEntryViewModelTests.swift in Sources */,
 				874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */,
+				F808F9CE58B43D3B10BAFE9F /* RoutineDeepLinkTests.swift in Sources */,
 				EA2311E5C3E2AED91933670F /* RoutineProfileMutationCoordinatorTests.swift in Sources */,
 				2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */,
 				39290C76AB5EB3BBBC7ED042 /* RuleBasedQuickEntryParserTests.swift in Sources */,
