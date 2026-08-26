@@ -391,6 +391,12 @@ final class CalendarViewModel {
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
+        guard case let .reminder(id) = item.origin,
+              item.allowsModification else { return }
+        await setTaskCompleted(reminderID: id, completed: completed)
+    }
+
+    func setTaskCompleted(reminderID id: String, completed: Bool) async {
         let scope: ProfileScope
         do {
             scope = try currentScope()
@@ -400,16 +406,16 @@ final class CalendarViewModel {
         }
         adopt(scope)
 
-        guard case let .reminder(id) = item.origin,
-              item.allowsModification,
-              !mutatingItemIDs.contains(item.id),
-              let snapshot = cachedReminders.first(where: {
-                  $0.id == id && $0.allowsModification
-              }),
+        let mutationID = "task|\(id)"
+        guard !mutatingItemIDs.contains(mutationID),
+              cachedReminders.contains(where: { $0.id == id }),
+              let snapshot = remindersService.reminder(id: id),
+              snapshot.allowsModification,
+              snapshot.isCompleted != completed,
               usesLegacyScope || scope.reminderListIDs.contains(snapshot.listID)
         else { return }
-        mutatingItemIDs.insert(item.id)
-        defer { mutatingItemIDs.remove(item.id) }
+        mutatingItemIDs.insert(mutationID)
+        defer { mutatingItemIDs.remove(mutationID) }
         do {
             try remindersService.setCompleted(id: id, completed: completed)
             cachedReminders = cachedReminders.map { $0.id == id ? $0.withCompletion(completed) : $0 }

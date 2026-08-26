@@ -284,6 +284,65 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(reminders.completedCalls, [.init(id: reminder.id, completed: true)])
     }
 
+    func testCalendarTaskCompletionRejectsLiveReminderThatIsNoLongerWritableInScope() async {
+        let due = today.startDate(in: calendar).addingTimeInterval(3_600)
+        let original = ReminderSnapshot(
+            id: "task",
+            title: "Task",
+            notes: nil,
+            dueDate: due,
+            dueHasTime: true,
+            priority: 1,
+            listID: "school",
+            listTitle: "School",
+            isCompleted: false,
+            allowsModification: true,
+            hasRecurrence: false
+        )
+        let invalidLiveValues: [ReminderSnapshot?] = [
+            nil,
+            ReminderSnapshot(
+                id: "task", title: "Task", notes: nil, dueDate: due,
+                dueHasTime: true, priority: 1, listID: "work", listTitle: "Work",
+                isCompleted: false, allowsModification: true, hasRecurrence: false
+            ),
+            ReminderSnapshot(
+                id: "task", title: "Task", notes: nil, dueDate: due,
+                dueHasTime: true, priority: 1, listID: "school", listTitle: "School",
+                isCompleted: false, allowsModification: false, hasRecurrence: false
+            ),
+            original.withCompletion(true)
+        ]
+
+        for invalidLive in invalidLiveValues {
+            let reminders = FakeRemindersService(
+                access: .granted,
+                reminders: [original],
+                descriptors: [
+                    .init(id: "school", title: "School", colorHex: "#000000", allowsContentModifications: true),
+                    .init(id: "work", title: "Work", colorHex: "#000000", allowsContentModifications: true)
+                ]
+            )
+            let model = makeScopedModel(
+                reminders: reminders,
+                scope: .init(
+                    identity: .saved(UUID()),
+                    calendarIDs: [],
+                    reminderListIDs: ["school"],
+                    routineIDs: [],
+                    defaultCalendarID: nil,
+                    defaultReminderListID: nil
+                )
+            )
+            await model.load()
+            reminders.reminders = invalidLive.map { [$0] } ?? []
+
+            await model.setTaskCompleted(reminderID: original.id, completed: true)
+
+            XCTAssertTrue(reminders.completedCalls.isEmpty)
+        }
+    }
+
     func testVisibleAgendasIncludeNonselectedDaySourceItems() async {
         let other = LocalDay(year: 2026, month: 8, day: 25)
         let start = other.startDate(in: calendar).addingTimeInterval(3_600)

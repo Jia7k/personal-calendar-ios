@@ -295,7 +295,7 @@ final class DemoRemindersService: RemindersServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -305,7 +305,9 @@ final class DemoRemindersService: RemindersServicing {
         self.includeRecurringItems = includeRecurringItems
         self.includeUnsupportedItems = includeUnsupportedItems
         self.profileFixtures = profileFixtures
-        let due = Calendar.current.date(bySettingHour: 14, minute: 0, second: 0, of: .now)!
+        let calendar = Calendar.current
+        let capturedToday = calendar.startOfDay(for: Date())
+        let due = calendar.date(bySettingHour: 14, minute: 0, second: 0, of: capturedToday)!
         if profileFixtures {
             values = [
                 .init(id: "demo-personal-task", title: "Buy milk", notes: nil, dueDate: due, dueHasTime: true, priority: 5, listID: DemoProfileFixture.personalListID, listTitle: "Personal", isCompleted: false, allowsModification: true, hasRecurrence: false),
@@ -316,6 +318,23 @@ final class DemoRemindersService: RemindersServicing {
             values = [
                 .init(id: "demo-task", title: "Buy milk", notes: nil, dueDate: due, dueHasTime: true, priority: 5, listID: "demo-list", listTitle: "Tasks", isCompleted: false, allowsModification: true, hasRecurrence: false)
             ]
+        }
+        if includeOverdueTask {
+            values.append(
+                .init(
+                    id: "demo-overdue-task",
+                    title: "Submit assignment",
+                    notes: nil,
+                    dueDate: calendar.date(byAdding: .day, value: -1, to: due),
+                    dueHasTime: true,
+                    priority: 7,
+                    listID: "demo-list",
+                    listTitle: "Tasks",
+                    isCompleted: false,
+                    allowsModification: true,
+                    hasRecurrence: false
+                )
+            )
         }
         if includeReadOnlySource {
             values.append(

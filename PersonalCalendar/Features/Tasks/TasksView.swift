@@ -3,6 +3,9 @@ import SwiftUI
 struct TasksView: View {
     @State private var model: TasksViewModel
     @State private var editorPresentation: TasksEditorPresentation?
+    @State private var pickedTask: ReminderSnapshot?
+    @State private var pickedDate = Date()
+    @State private var pickedDateHasTime = true
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let revision: AppContentRevision
@@ -32,6 +35,24 @@ struct TasksView: View {
                 else if model.isProfileEmpty { ContentUnavailableView("No tasks in this profile", systemImage: "checklist", description: Text("Add a reminder list to this profile in Settings.")) }
                 if let error = model.refreshErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button("Retry Refresh") { Task { await model.load() } }.frame(minWidth: 44, minHeight: 44) } }
                 if let error = model.mutationErrorMessage { Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary); Button(model.failedMutationOperation?.completed == true ? "Retry Completion" : "Retry Undo") { Task { await model.retryFailedMutation() } }.frame(minWidth: 44, minHeight: 44) } }
+                if let error = model.rescheduleErrorMessage {
+                    Section {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if model.rescheduleUndo != nil {
+                    Section {
+                        Button {
+                            Task { await model.undoQuickReschedule() }
+                        } label: {
+                            Label("Undo reschedule", systemImage: "arrow.uturn.backward")
+                        }
+                        .disabled(!model.mutatingIDs.isEmpty)
+                        .accessibilityIdentifier("task-reschedule-undo")
+                    }
+                }
+                overdueSection
                 taskSection("Today", model.today)
                 taskSection("Upcoming", model.upcoming)
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
@@ -53,6 +74,38 @@ struct TasksView: View {
                     onDismiss: dismissEditor
                 )
             }
+            .sheet(item: $pickedTask) { task in
+                NavigationStack {
+                    Form {
+                        DatePicker(
+                            "Due date",
+                            selection: $pickedDate,
+                            displayedComponents: pickedDateHasTime ? [.date, .hourAndMinute] : .date
+                        )
+                        Toggle("Include time", isOn: $pickedDateHasTime)
+                    }
+                    .navigationTitle("Reschedule")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { pickedTask = nil }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                let date = pickedDate
+                                let hasTime = pickedDateHasTime
+                                pickedTask = nil
+                                Task {
+                                    await model.quickReschedule(
+                                        id: task.id,
+                                        command: .pick(date, hasTime: hasTime)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             .task(id: revision) { await model.load() }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh,
@@ -71,9 +124,21 @@ struct TasksView: View {
         }
     }
 
+    @ViewBuilder private var overdueSection: some View {
+        if !model.overdue.isEmpty {
+            Section("Overdue") {
+                ForEach(model.overdue) { task in
+                    taskRow(task, offersQuickReschedule: true)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("tasks-overdue")
+        }
+    }
+
     @ViewBuilder private func taskSection(_ title: String, _ values: [ReminderSnapshot]) -> some View { if !values.isEmpty { Section(title) { ForEach(values) { taskRow($0) } } } }
 
-    private func taskRow(_ task: ReminderSnapshot) -> some View {
+    private func taskRow(_ task: ReminderSnapshot, offersQuickReschedule: Bool = false) -> some View {
         HStack(spacing: 12) {
             Button {
                 Task { await model.setCompleted(id: task.id, completed: !task.isCompleted) }
@@ -98,7 +163,76 @@ struct TasksView: View {
             .contentShape(Rectangle())
             .accessibilityIdentifier("task-open-\(task.id)")
             .accessibilityLabel("Open task \(task.title)")
+
+            if offersQuickReschedule, canQuickReschedule(task) {
+                Menu {
+                    quickRescheduleMenuActions(task)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title3)
+                }
+                .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityIdentifier("task-reschedule-more-\(task.id)")
+                .accessibilityLabel("More reschedule options for \(task.title)")
+            }
         }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if offersQuickReschedule, canQuickReschedule(task) {
+                Button {
+                    quickReschedule(task, command: .tomorrow)
+                } label: {
+                    Label("Tomorrow", systemImage: "sunrise")
+                }
+                .tint(CalendarTheme.task)
+                .accessibilityIdentifier("task-reschedule-tomorrow-\(task.id)")
+
+                Button {
+                    quickReschedule(task, command: .nextWeek)
+                } label: {
+                    Label("Next Week", systemImage: "calendar.badge.plus")
+                }
+            }
+        }
+        .contextMenu {
+            Button("Open", systemImage: "square.and.pencil") {
+                openTask(task)
+            }
+            if offersQuickReschedule, canQuickReschedule(task) {
+                quickRescheduleMenuActions(task)
+            }
+        }
+    }
+
+    @ViewBuilder private func quickRescheduleMenuActions(_ task: ReminderSnapshot) -> some View {
+        Button("Later Today", systemImage: "clock") {
+            quickReschedule(task, command: .laterToday)
+        }
+        Button("Tomorrow", systemImage: "sunrise") {
+            quickReschedule(task, command: .tomorrow)
+        }
+        Button("Next Week", systemImage: "calendar.badge.plus") {
+            quickReschedule(task, command: .nextWeek)
+        }
+        Button("Pick Date", systemImage: "calendar") {
+            presentDatePicker(for: task)
+        }
+    }
+
+    private func canQuickReschedule(_ task: ReminderSnapshot) -> Bool {
+        !task.isCompleted
+            && task.allowsModification
+            && !task.hasRecurrence
+            && !model.mutatingIDs.contains(task.id)
+    }
+
+    private func quickReschedule(_ task: ReminderSnapshot, command: TaskQuickReschedule) {
+        Task { await model.quickReschedule(id: task.id, command: command) }
+    }
+
+    private func presentDatePicker(for task: ReminderSnapshot) {
+        pickedDate = task.dueDate ?? .now
+        pickedDateHasTime = task.dueHasTime
+        pickedTask = task
     }
 
     private func taskDetails(_ task: ReminderSnapshot) -> some View {

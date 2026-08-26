@@ -176,6 +176,7 @@ struct AppEnvironment {
             includeReadOnlySource: arguments.contains("-demo-editor-read-only"),
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
+            includeOverdueTask: arguments.contains("-demo-overdue-task"),
             profileFixtures: usesProfileFixtures
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted

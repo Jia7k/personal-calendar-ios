@@ -27,6 +27,8 @@ final class TasksViewModel {
     private var confirmed: [ReminderSnapshot] = []
     private var loadGeneration = 0
     private var cachedScopeIdentity: ProfileIdentity?
+    private var rescheduleUndoExpectedSchedule: ReminderScheduleValue?
+    private var rescheduleUndoExpectedListID: String?
 
     private struct CapturedScope {
         let identity: ProfileIdentity?
@@ -183,12 +185,17 @@ final class TasksViewModel {
     func quickReschedule(id: String, command: TaskQuickReschedule) async {
         guard let scope = scopeForMutation() else { return }
         guard service.accessState == .granted,
-              let item = confirmed.first(where: { $0.id == id }),
+              confirmed.contains(where: { $0.id == id }),
+              let item = service.reminder(id: id),
               !item.isCompleted,
               item.allowsModification,
+              !item.hasRecurrence,
               scopeAllows(item, scope: scope),
               !mutatingIDs.contains(id)
-        else { return }
+        else {
+            clearRescheduleUndo(for: id)
+            return
+        }
 
         let projected: ReminderScheduleValue
         do {
@@ -223,6 +230,8 @@ final class TasksViewModel {
             replaceConfirmedSchedule(id: id, with: projected)
             publish(scope: scope)
             rescheduleUndo = .init(reminderID: id, previousSchedule: previous)
+            rescheduleUndoExpectedSchedule = projected
+            rescheduleUndoExpectedListID = item.listID
             rescheduleErrorMessage = nil
             await load()
             if refreshErrorMessage != nil {
@@ -234,15 +243,22 @@ final class TasksViewModel {
     }
 
     func undoQuickReschedule() async {
-        guard let undo = rescheduleUndo,
-              let scope = scopeForMutation(),
+        guard let undo = rescheduleUndo else { return }
+        guard let scope = scopeForMutation(),
               service.accessState == .granted,
-              let item = confirmed.first(where: { $0.id == undo.reminderID }),
+              confirmed.contains(where: { $0.id == undo.reminderID }),
+              let item = service.reminder(id: undo.reminderID),
+              !item.isCompleted,
               !item.hasRecurrence,
               item.allowsModification,
               scopeAllows(item, scope: scope),
+              item.listID == rescheduleUndoExpectedListID,
+              schedulesMatch(currentSchedule(of: item), rescheduleUndoExpectedSchedule),
               !mutatingIDs.contains(item.id)
-        else { return }
+        else {
+            clearRescheduleUndo(for: undo.reminderID)
+            return
+        }
 
         var draft = ReminderDraft(
             title: item.title,
@@ -266,7 +282,7 @@ final class TasksViewModel {
             try service.updateReminder(id: item.id, draft: draft)
             replaceConfirmedSchedule(id: item.id, with: undo.previousSchedule)
             publish(scope: scope)
-            if rescheduleUndo == undo { rescheduleUndo = nil }
+            if rescheduleUndo == undo { clearRescheduleUndo() }
             rescheduleErrorMessage = nil
             await load()
             if refreshErrorMessage != nil {
@@ -333,6 +349,7 @@ final class TasksViewModel {
         if scope.isProfileScope {
             let identityMatches = cachedScopeIdentity == scope.identity
             prepareForLoad(scope)
+            reconcileMutationRecovery(authoritativeFetch: false, scope: scope)
             guard identityMatches else { return nil }
         }
         return scope
@@ -360,10 +377,21 @@ final class TasksViewModel {
         completed = visible.filter(\.isCompleted).sorted(by: sort)
     }
     private func reconcileMutationRecovery(authoritativeFetch: Bool, scope: CapturedScope) {
-        guard let operation = failedMutationOperation else { return }
         let selected = visibleListIDs(for: scope)
-        guard service.accessState == .granted, let item = confirmed.first(where: { $0.id == operation.id }), selected.contains(item.listID), item.allowsModification else { clearMutationRecovery(id: operation.id); return }
-        if authoritativeFetch && item.isCompleted == operation.completed { clearMutationRecovery(id: operation.id) }
+        if let operation = failedMutationOperation {
+            guard service.accessState == .granted,
+                  let item = confirmed.first(where: { $0.id == operation.id }),
+                  selected.contains(item.listID),
+                  item.allowsModification else {
+                clearMutationRecovery(id: operation.id)
+                reconcileRescheduleUndo(authoritativeFetch: authoritativeFetch, selectedListIDs: selected)
+                return
+            }
+            if authoritativeFetch && item.isCompleted == operation.completed {
+                clearMutationRecovery(id: operation.id)
+            }
+        }
+        reconcileRescheduleUndo(authoritativeFetch: authoritativeFetch, selectedListIDs: selected)
     }
     private func scopeAllows(_ item: ReminderSnapshot, scope: CapturedScope) -> Bool {
         visibleListIDs(for: scope).contains(item.listID)
@@ -380,8 +408,72 @@ final class TasksViewModel {
     private func clearAllMutationRecovery() {
         failedMutationOperation = nil
         mutationErrorMessage = nil
-        rescheduleUndo = nil
+        clearRescheduleUndo()
         rescheduleErrorMessage = nil
+    }
+
+    private func reconcileRescheduleUndo(
+        authoritativeFetch: Bool,
+        selectedListIDs: Set<String>
+    ) {
+        guard let undo = rescheduleUndo else {
+            rescheduleUndoExpectedSchedule = nil
+            rescheduleUndoExpectedListID = nil
+            return
+        }
+        guard service.accessState == .granted,
+              let expectedListID = rescheduleUndoExpectedListID,
+              selectedListIDs.contains(expectedListID) else {
+            clearRescheduleUndo()
+            return
+        }
+        guard let item = confirmed.first(where: { $0.id == undo.reminderID }) else {
+            if authoritativeFetch { clearRescheduleUndo() }
+            return
+        }
+        guard item.listID == expectedListID,
+              item.allowsModification,
+              !item.isCompleted,
+              !item.hasRecurrence else {
+            clearRescheduleUndo()
+            return
+        }
+        if authoritativeFetch,
+           !schedulesMatch(currentSchedule(of: item), rescheduleUndoExpectedSchedule) {
+            clearRescheduleUndo()
+        }
+    }
+
+    private func clearRescheduleUndo(for reminderID: String? = nil) {
+        if let reminderID, rescheduleUndo?.reminderID != reminderID { return }
+        rescheduleUndo = nil
+        rescheduleUndoExpectedSchedule = nil
+        rescheduleUndoExpectedListID = nil
+    }
+
+    private func currentSchedule(of item: ReminderSnapshot) -> ReminderScheduleValue? {
+        item.dueDate.map { ReminderScheduleValue(date: $0, hasTime: item.dueHasTime) }
+    }
+
+    private func schedulesMatch(
+        _ lhs: ReminderScheduleValue?,
+        _ rhs: ReminderScheduleValue?
+    ) -> Bool {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            return true
+        case let (lhs?, rhs?):
+            guard lhs.hasTime == rhs.hasTime,
+                  lhs.date.timeIntervalSinceReferenceDate.isFinite,
+                  rhs.date.timeIntervalSinceReferenceDate.isFinite else { return false }
+            let components: Set<Calendar.Component> = lhs.hasTime
+                ? [.year, .month, .day, .hour, .minute]
+                : [.year, .month, .day]
+            return calendar.dateComponents(components, from: lhs.date)
+                == calendar.dateComponents(components, from: rhs.date)
+        case (.none, .some), (.some, .none):
+            return false
+        }
     }
 
     private func replaceConfirmedSchedule(id: String, with schedule: ReminderScheduleValue?) {

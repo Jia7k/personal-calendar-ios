@@ -151,7 +151,15 @@ struct CalendarHomeView: View {
                 now: .now,
                 calendar: calendar,
                 onSelectDay: { day in Task { await viewModel.select(day) } },
-                onOpenItem: openAgendaItem
+                onOpenItem: openAgendaItem,
+                onSetTaskCompleted: { reminderID, completed in
+                    Task {
+                        await viewModel.setTaskCompleted(
+                            reminderID: reminderID,
+                            completed: completed
+                        )
+                    }
+                }
             )
         }
         .padding(.vertical, 12)

@@ -15,6 +15,7 @@ struct WeekPlannerView: View {
     let calendar: Calendar
     let onSelectDay: (LocalDay) -> Void
     let onOpenItem: (AgendaItemOrigin) -> Void
+    let onSetTaskCompleted: (String, Bool) -> Void
 
     init(
         snapshot: WeekPlannerSnapshot,
@@ -22,7 +23,8 @@ struct WeekPlannerView: View {
         now: Date,
         calendar: Calendar,
         onSelectDay: @escaping (LocalDay) -> Void,
-        onOpenItem: @escaping (AgendaItemOrigin) -> Void
+        onOpenItem: @escaping (AgendaItemOrigin) -> Void,
+        onSetTaskCompleted: @escaping (String, Bool) -> Void = { _, _ in }
     ) {
         self.snapshot = snapshot
         self.selectedDay = selectedDay
@@ -30,6 +32,7 @@ struct WeekPlannerView: View {
         self.calendar = calendar
         self.onSelectDay = onSelectDay
         self.onOpenItem = onOpenItem
+        self.onSetTaskCompleted = onSetTaskCompleted
     }
 
     var body: some View {
@@ -263,6 +266,16 @@ struct WeekPlannerView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                if let reminderID = reminderID(for: selectedItem.item),
+                   selectedItem.item.allowsModification,
+                   !selectedItem.item.isCompleted {
+                    Button("Complete") {
+                        self.selectedItem = nil
+                        onSetTaskCompleted(reminderID, true)
+                    }
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("week-task-complete-\(reminderID)")
+                }
                 if canOpen(selectedItem.item.origin) {
                     Button("Open") { onOpenItem(selectedItem.item.origin) }
                         .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
@@ -346,24 +359,36 @@ struct WeekPlannerView: View {
     }
 
     private func accessibleRow(_ item: AgendaItem, prefix: String) -> some View {
-        Button {
-            onOpenItem(item.origin)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: symbol(for: item.source))
-                    .foregroundStyle(itemColor(item))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.title)
-                    Text(prefix)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            Button {
+                onOpenItem(item.origin)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: symbol(for: item.source))
+                        .foregroundStyle(itemColor(item))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.title)
+                        Text(prefix)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(prefix), \(AgendaAccessibilityDescription.build(for: item))")
+
+            if let reminderID = reminderID(for: item),
+               item.allowsModification,
+               !item.isCompleted {
+                Button("Complete") {
+                    onSetTaskCompleted(reminderID, true)
+                }
+                .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityIdentifier("week-task-complete-\(reminderID)")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(prefix), \(AgendaAccessibilityDescription.build(for: item))")
     }
 
     private let timeGutterWidth: CGFloat = 40
@@ -418,6 +443,11 @@ struct WeekPlannerView: View {
         case let .routine(id, _): id.uuidString
         case .synthetic: nil
         }
+    }
+
+    private func reminderID(for item: AgendaItem) -> String? {
+        guard case let .reminder(id) = item.origin else { return nil }
+        return id
     }
 
     private func itemColor(_ item: AgendaItem) -> Color {
