@@ -118,7 +118,11 @@ struct TimeRailsView: View {
         Group {
             switch snapshot.moment(at: now, calendar: localCalendar) {
             case .none:
-                Text("No more events today")
+                Text(
+                    snapshot.omittedEntryCount > 0
+                        ? "More events are not shown"
+                        : "No more events today"
+                )
             case let .current(entry):
                 statusText(prefix: "NOW", entry: entry, boundary: entry.end, boundaryWord: "until")
             case let .next(entry), let .gap(entry):

@@ -128,7 +128,11 @@ private struct CourseStatusDetail: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             } else {
-                Text("No more events today")
+                Text(
+                    state.omittedEntryCount > 0 || state.sourceOmittedEntryCount > 0
+                        ? "More events may not be shown"
+                        : "No more events today"
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

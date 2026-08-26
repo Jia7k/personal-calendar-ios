@@ -246,7 +246,7 @@ final class TimetableLiveActivityCoordinator {
         let snapshotCalendar = calendar(for: snapshot)
         guard snapshot.entries.contains(where: {
             ($0.start <= now && now < $0.end)
-                || snapshotCalendar.isDate($0.start, inSameDayAs: now)
+                || (snapshotCalendar.isDate($0.start, inSameDayAs: now) && $0.start > now)
         }) else {
             return "There are no events today."
         }

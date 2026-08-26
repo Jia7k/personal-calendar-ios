@@ -112,6 +112,42 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(state.entries.map(\.id), ["overnight", "upcoming"])
     }
 
+    func testStartAfterFinalEventEndsExistingActivityWithoutCreatingEmptyState() async {
+        let fixture = TimetableTestFixture()
+        let now = fixture.date(day: 1, hour: 18)
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: now,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: [
+                entry(
+                    id: "finished",
+                    title: "Finished Class",
+                    start: fixture.date(day: 1, hour: 9),
+                    end: fixture.date(day: 1, hour: 10)
+                )
+            ]
+        )
+        let profile = makeProfile(snapshot: snapshot)
+        let driver = RecordingTimetableActivityDriver(
+            existingIDs: ["old-activity"],
+            profile: profile
+        )
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+
+        await subject.start(profile: profile, now: now)
+
+        XCTAssertEqual(driver.requestCount, 0)
+        XCTAssertEqual(driver.updatedIDs, [])
+        XCTAssertEqual(driver.endedIDs, ["old-activity"])
+        XCTAssertEqual(subject.status, .unavailable("There are no events today."))
+    }
+
     func testStartCapsEncodedContentStateAndReportsExactProjectionOmissions() async throws {
         let fixture = TimetableTestFixture()
         let now = fixture.date(day: 1, hour: 9)
