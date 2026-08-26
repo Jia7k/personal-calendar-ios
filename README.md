@@ -30,6 +30,13 @@ For a school timetable synced from Google Calendar:
 
 **Everything** is the deduplicated union of content assigned to saved profiles. A provider calendar that is not assigned anywhere—such as Birthdays—does not appear in Everything. This keeps unrelated calendars out without disabling or deleting them.
 
+### Week Planner and search
+
+- In Calendar, choose **Week** to see events as timed blocks, tasks as due markers, and routines for the selected day.
+- Week Planner follows the active profile, so School stays isolated from unassigned calendars such as Birthdays.
+- Use the Search button in Calendar to find events, tasks, rooms, notes, dates, and routines in the active profile.
+- Event search covers one year in the past through two years in the future. Selecting a result opens the existing editor.
+
 ## Device installation
 
 Open `PersonalCalendar.xcodeproj`, choose your Development Team under Signing & Capabilities, connect an iPhone running iOS 17 or later, and press Run. A free Personal Team installation may need to be renewed periodically.
