@@ -8,18 +8,25 @@ struct TaskEditorView: View {
     /// Pass "System Default" for create and "Preserve Current" for edit.
     let nilDestinationLabel: String
     let showsDelete: Bool
+    let isDuplicateCopy: Bool
     let makeTimeBlockSession: (() -> TaskTimeBlockSession?)?
     let onDismiss: () -> Void
+    private let createNoAlarmChoice: TaskAlarmChoice
+    private let createNeverRecurrenceChoice: TaskRecurrenceChoice
 
     @State private var preservedSchedule: ReminderScheduleValue?
     @State private var showsDiscardConfirmation = false
     @State private var timeBlockSession: TaskTimeBlockSession?
+    @State private var duplicatePresentation: TaskDuplicatePresentation?
+    @State private var pendingDuplicateCommit: TaskEditorCommit?
+    @State private var duplicateErrorMessage: String?
 
     init(
         model: TaskEditorViewModel,
         lists: [ReminderListDescriptor],
         nilDestinationLabel: String,
         showsDelete: Bool,
+        isDuplicateCopy: Bool = false,
         makeTimeBlockSession: (() -> TaskTimeBlockSession?)? = nil,
         onDismiss: @escaping () -> Void
     ) {
@@ -27,8 +34,17 @@ struct TaskEditorView: View {
         self.lists = lists
         self.nilDestinationLabel = nilDestinationLabel
         self.showsDelete = showsDelete
+        self.isDuplicateCopy = isDuplicateCopy
         self.makeTimeBlockSession = makeTimeBlockSession
         self.onDismiss = onDismiss
+        self.createNoAlarmChoice = {
+            if case .clear = model.form.alarm { return .clear }
+            return .preserve
+        }()
+        self.createNeverRecurrenceChoice = {
+            if case .clear = model.form.recurrence { return .clear }
+            return .preserve
+        }()
         if case let .preserve(current) = model.form.schedule {
             _preservedSchedule = State(initialValue: current)
         } else {
@@ -39,6 +55,16 @@ struct TaskEditorView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if isDuplicateCopy {
+                    Section {
+                        Label(
+                            "Duplicated copy — review before saving",
+                            systemImage: "doc.on.doc"
+                        )
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("task-duplicate-editor-screen")
+                    }
+                }
                 detailsSection
                 planningSection
                 scheduleSection
@@ -50,7 +76,9 @@ struct TaskEditorView: View {
                 mutationSection
                 failureSection
             }
-            .accessibilityIdentifier("task-editor-form")
+            .accessibilityIdentifier(
+                isDuplicateCopy ? "task-duplicate-editor-form" : "task-editor-form"
+            )
             .navigationTitle(showsDelete ? "Task" : "New Task")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -83,6 +111,24 @@ struct TaskEditorView: View {
                 Text(model.recurringDeleteExplanation ?? "Deleting this task cannot be undone.")
             }
             .interactiveDismissDisabled(model.requiresDiscardConfirmation || isWriting)
+            .sheet(
+                item: $duplicatePresentation,
+                onDismiss: finishDuplicatePresentation
+            ) { presentation in
+                AnyView(
+                    TaskEditorView(
+                        model: presentation.model,
+                        lists: lists.filter {
+                            presentation.model.creationDestinationListIDs?
+                                .contains($0.id) ?? true
+                        },
+                        nilDestinationLabel: "Choose List",
+                        showsDelete: false,
+                        isDuplicateCopy: true,
+                        onDismiss: { duplicatePresentation = nil }
+                    )
+                )
+            }
             .sheet(item: $timeBlockSession) { session in
                 TaskTimeBlockView(
                     model: session.model,
@@ -232,12 +278,17 @@ struct TaskEditorView: View {
                     Text("Preserve Current").tag(TaskAlarmChoice.preserve)
                     Text("None").tag(TaskAlarmChoice.clear)
                 } else {
-                    Text("None").tag(TaskAlarmChoice.preserve)
+                    Text("None").tag(createNoAlarmChoice)
                 }
                 Text("Set Alert").tag(TaskAlarmChoice.replace)
             }
             .disabled(isUnavailable)
-            .accessibilityIdentifier("task-editor-alarm-intent")
+            .accessibilityIdentifier(
+                isDuplicateCopy
+                    ? "task-duplicate-alarm-intent"
+                    : "task-editor-alarm-intent"
+            )
+            .accessibilityValue(alarmChoiceAccessibilityValue)
 
             if alarmChoice == .replace {
                 DatePicker("Alert", selection: alarmDateBinding, displayedComponents: [.date, .hourAndMinute])
@@ -273,12 +324,17 @@ struct TaskEditorView: View {
                     Text("Preserve Current").tag(TaskRecurrenceChoice.preserve)
                     Text("Never").tag(TaskRecurrenceChoice.clear)
                 } else {
-                    Text("Never").tag(TaskRecurrenceChoice.preserve)
+                    Text("Never").tag(createNeverRecurrenceChoice)
                 }
                 Text("Custom").tag(TaskRecurrenceChoice.replace)
             }
             .disabled(isUnavailable)
-            .accessibilityIdentifier("task-editor-recurrence-intent")
+            .accessibilityIdentifier(
+                isDuplicateCopy
+                    ? "task-duplicate-recurrence-intent"
+                    : "task-editor-recurrence-intent"
+            )
+            .accessibilityValue(recurrenceChoiceAccessibilityValue)
 
             if recurrenceChoice == .replace {
                 recurrenceRuleFields
@@ -370,6 +426,34 @@ struct TaskEditorView: View {
             }
         } else if showsDelete {
             Section {
+                if model.canDuplicate {
+                    Button("Duplicate Task", systemImage: "plus.square.on.square") {
+                        duplicateErrorMessage = nil
+                        guard let duplicateModel = model.makeDuplicate(
+                            onCommitted: { pendingDuplicateCommit = $0 }
+                        ) else {
+                            duplicateErrorMessage = "The task details or destination could not be loaded. Try again."
+                            return
+                        }
+                        duplicatePresentation = .init(model: duplicateModel)
+                    }
+                    .disabled(isWriting || model.requiresDiscardConfirmation)
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("task-editor-duplicate")
+                    if model.requiresDiscardConfirmation {
+                        Text("Save or discard your edits before duplicating this task.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let duplicateErrorMessage {
+                        Label(
+                            duplicateErrorMessage,
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("task-duplicate-error")
+                    }
+                }
                 Button("Delete Task", role: .destructive) { model.requestDelete() }
                     .disabled(!canDelete)
                     .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
@@ -430,6 +514,20 @@ struct TaskEditorView: View {
     private var scheduleChoice: TaskScheduleChoice { TaskScheduleChoice(model.form.schedule) }
     private var alarmChoice: TaskAlarmChoice { TaskAlarmChoice(model.form.alarm) }
     private var recurrenceChoice: TaskRecurrenceChoice { TaskRecurrenceChoice(model.form.recurrence) }
+    private var alarmChoiceAccessibilityValue: String {
+        switch alarmChoice {
+        case .preserve: showsDelete ? "Preserve Current" : "None"
+        case .clear: "None"
+        case .replace: "Set Alert"
+        }
+    }
+    private var recurrenceChoiceAccessibilityValue: String {
+        switch recurrenceChoice {
+        case .preserve: showsDelete ? "Preserve Current" : "Never"
+        case .clear: "Never"
+        case .replace: "Custom"
+        }
+    }
     private var dueHasTime: Bool { effectiveSchedule?.hasTime ?? false }
     private var effectiveSchedule: ReminderScheduleValue? {
         switch model.form.schedule {
@@ -559,6 +657,12 @@ struct TaskEditorView: View {
         }
     }
 
+    private func finishDuplicatePresentation() {
+        guard let commit = pendingDuplicateCommit else { return }
+        pendingDuplicateCommit = nil
+        model.finishDuplicateCommit(commit)
+    }
+
     private func discardAndDismiss() {
         if model.confirmDiscard() == .dismiss { onDismiss() }
     }
@@ -626,6 +730,11 @@ struct TaskEditorView: View {
         }
         return parts.joined(separator: " ")
     }
+}
+
+private struct TaskDuplicatePresentation: Identifiable {
+    let id = UUID()
+    let model: TaskEditorViewModel
 }
 
 private enum TaskScheduleChoice: String, Hashable { case preserve, clear, replace

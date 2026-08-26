@@ -236,6 +236,86 @@ final class AppSettingsStoreTests: XCTestCase {
         XCTAssertEqual(Set(subject.classAlertPreferences.keys), [keptID])
     }
 
+    func testLiveActivityPreferencePersistsEverythingAndSavedProfiles() {
+        let defaults = makeDefaults()
+        let profileID = UUID()
+        let subject = AppSettingsStore(defaults: defaults)
+
+        subject.setPreferredLiveActivityProfile(
+            .everything,
+            validProfileIDs: [profileID]
+        )
+        subject.setAutomaticallyStartsLiveActivityOnForeground(true)
+
+        var reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertEqual(reloaded.preferredLiveActivityProfile, .everything)
+        XCTAssertTrue(reloaded.automaticallyStartsLiveActivityOnForeground)
+
+        reloaded.setPreferredLiveActivityProfile(
+            .saved(profileID),
+            validProfileIDs: [profileID]
+        )
+
+        reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertEqual(
+            reloaded.preferredLiveActivityProfile,
+            .saved(profileID)
+        )
+        XCTAssertTrue(reloaded.automaticallyStartsLiveActivityOnForeground)
+    }
+
+    func testLiveActivityPreferenceFailsClosedWhenProfileIsMissingOrDeleted() {
+        let defaults = makeDefaults()
+        let keptID = UUID()
+        let deletedID = UUID()
+        let subject = AppSettingsStore(defaults: defaults)
+
+        subject.setPreferredLiveActivityProfile(
+            .saved(deletedID),
+            validProfileIDs: [keptID, deletedID]
+        )
+        subject.setAutomaticallyStartsLiveActivityOnForeground(true)
+        subject.reconcileLiveActivityPreference(validProfileIDs: [keptID])
+
+        XCTAssertNil(subject.preferredLiveActivityProfile)
+        XCTAssertFalse(subject.automaticallyStartsLiveActivityOnForeground)
+        let reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertNil(reloaded.preferredLiveActivityProfile)
+        XCTAssertFalse(reloaded.automaticallyStartsLiveActivityOnForeground)
+
+        subject.setPreferredLiveActivityProfile(
+            .saved(deletedID),
+            validProfileIDs: [keptID]
+        )
+        subject.setAutomaticallyStartsLiveActivityOnForeground(true)
+
+        XCTAssertNil(subject.preferredLiveActivityProfile)
+        XCTAssertFalse(subject.automaticallyStartsLiveActivityOnForeground)
+    }
+
+    func testMalformedStoredLiveActivityPreferenceFailsClosedAndRepairsDefaults() {
+        let defaults = makeDefaults()
+        defaults.set(
+            "saved:not-a-uuid",
+            forKey: "preferredLiveActivityProfile"
+        )
+        defaults.set(
+            true,
+            forKey: "automaticallyStartsLiveActivityOnForeground"
+        )
+
+        let subject = AppSettingsStore(defaults: defaults)
+
+        XCTAssertNil(subject.preferredLiveActivityProfile)
+        XCTAssertFalse(subject.automaticallyStartsLiveActivityOnForeground)
+        XCTAssertNil(defaults.string(forKey: "preferredLiveActivityProfile"))
+        XCTAssertFalse(
+            defaults.bool(
+                forKey: "automaticallyStartsLiveActivityOnForeground"
+            )
+        )
+    }
+
     private func makeDefaults() -> UserDefaults {
         let suite = "AppSettingsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

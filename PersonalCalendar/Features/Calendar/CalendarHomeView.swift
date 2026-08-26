@@ -347,12 +347,19 @@ struct CalendarHomeView: View {
     }
 
     private func openAgendaItem(_ origin: AgendaItemOrigin) {
+        let capturedProfileIdentity = environment.profileSelection.activeIdentity
+        let capturedScope = try? environment.profileScopes.resolve(capturedProfileIdentity)
         switch origin {
         case let .event(displayID):
             let model = EventEditorViewModel.edit(
                 displayID: displayID,
                 service: environment.calendar,
                 categories: environment.categories,
+                duplicateDestinationCalendarIDs: capturedScope?.calendarIDs ?? [],
+                resolveDuplicateDestinationCalendarIDs: {
+                    try environment.profileScopes
+                        .resolve(capturedProfileIdentity).calendarIDs
+                },
                 onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
@@ -363,6 +370,11 @@ struct CalendarHomeView: View {
                 reminderID: reminderID,
                 service: environment.reminders,
                 categories: environment.categories,
+                duplicateDestinationListIDs: capturedScope?.reminderListIDs ?? [],
+                resolveDuplicateDestinationListIDs: {
+                    try environment.profileScopes
+                        .resolve(capturedProfileIdentity).reminderListIDs
+                },
                 onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )

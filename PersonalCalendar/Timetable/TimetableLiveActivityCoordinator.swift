@@ -66,6 +66,58 @@ final class TimetableLiveActivityCoordinator {
         await finishWriting()
     }
 
+    func applyForegroundPreference(
+        isEnabled: Bool,
+        preferredProfileIdentity: ProfileIdentity?,
+        catalog: TimetableWidgetCatalogV1,
+        now: Date = .now
+    ) async {
+        guard isEnabled else { return }
+        guard let preferredProfileIdentity,
+              let profile = catalog.profile(for: preferredProfileIdentity) else {
+            await stop()
+            return
+        }
+        await start(profile: profile, now: now)
+    }
+
+    func applyPreferenceSelectionChange(
+        wasAutomaticallyEnabled: Bool,
+        preferredProfileIdentity: ProfileIdentity?,
+        catalog: TimetableWidgetCatalogV1?,
+        now: Date = .now
+    ) async {
+        guard wasAutomaticallyEnabled else { return }
+        guard let catalog else {
+            await stop()
+            return
+        }
+        await applyForegroundPreference(
+            isEnabled: true,
+            preferredProfileIdentity: preferredProfileIdentity,
+            catalog: catalog,
+            now: now
+        )
+    }
+
+    func applyAutomaticStartSettingChange(
+        isEnabled: Bool,
+        preferredProfileIdentity: ProfileIdentity?,
+        catalog: TimetableWidgetCatalogV1?,
+        now: Date = .now
+    ) async {
+        guard isEnabled, let catalog else {
+            await stop()
+            return
+        }
+        await applyForegroundPreference(
+            isEnabled: true,
+            preferredProfileIdentity: preferredProfileIdentity,
+            catalog: catalog,
+            now: now
+        )
+    }
+
     func stop() async {
         guard beginWriting() else {
             pendingStop = true

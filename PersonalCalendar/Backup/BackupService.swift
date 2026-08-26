@@ -13,6 +13,7 @@ final class BackupService: BackupServicing {
         case v1(BackupEnvelopeV1)
         case v2(BackupEnvelopeV2)
         case v3(BackupEnvelopeV3)
+        case v4(BackupEnvelopeV4)
     }
 
     private let context: ModelContext
@@ -59,8 +60,8 @@ final class BackupService: BackupServicing {
                     : $0.sortOrder < $1.sortOrder
             }
 
-        let envelope = BackupEnvelopeV3(
-            version: 3,
+        let envelope = BackupEnvelopeV4(
+            version: 4,
             exportedAt: .now,
             routines: try routines.map(routineBackup),
             completions: completions.map {
@@ -75,7 +76,7 @@ final class BackupService: BackupServicing {
             },
             categoryLinks: try links.map(categoryLinkBackup),
             profiles: profiles.map(profileBackup),
-            settings: settings.backupValueV3
+            settings: settings.backupValueV4
         )
         try BackupValidator.validate(envelope)
         return try encoder.encode(envelope)
@@ -107,6 +108,14 @@ final class BackupService: BackupServicing {
                 categoryLinks: envelope.categoryLinks.count,
                 profiles: envelope.profiles.count
             )
+        case let .v4(envelope):
+            return .init(
+                routines: envelope.routines.count,
+                completions: envelope.completions.count,
+                categories: envelope.categories.count,
+                categoryLinks: envelope.categoryLinks.count,
+                profiles: envelope.profiles.count
+            )
         }
     }
 
@@ -118,6 +127,8 @@ final class BackupService: BackupServicing {
             try restoreV2(envelope)
         case let .v3(envelope):
             try restoreV3(envelope)
+        case let .v4(envelope):
+            try restoreV4(envelope)
         }
         onRestored()
     }
@@ -175,12 +186,53 @@ final class BackupService: BackupServicing {
         )
 
         let validProfileIDs = Set(envelope.profiles.map(\.id))
-        settings.applyBackupValue(
+        applySettingsV3(envelope.settings, validProfileIDs: validProfileIDs)
+        resetLiveActivityPreference()
+    }
+
+    private func restoreV4(_ envelope: BackupEnvelopeV4) throws {
+        try replaceAppOwnedData(
+            routines: envelope.routines,
+            completions: envelope.completions,
+            categories: envelope.categories,
+            categoryLinks: envelope.categoryLinks,
+            profiles: envelope.profiles
+        )
+
+        let validProfileIDs = Set(envelope.profiles.map(\.id))
+        applySettingsV3(
             envelope.settings.legacy,
             validProfileIDs: validProfileIDs
         )
+        settings.setPreferredLiveActivityProfile(
+            envelope.settings.preferredLiveActivityProfile,
+            validProfileIDs: validProfileIDs
+        )
+        settings.setAutomaticallyStartsLiveActivityOnForeground(
+            envelope.settings.automaticallyStartsLiveActivityOnForeground
+        )
+    }
+
+    private func resetSettingsAddedAfterV1() {
         settings.reconcileClassAlertPreferences(validProfileIDs: [])
-        for record in envelope.settings.classAlertPreferences
+        settings.quickEntryHistory.reset()
+        resetLiveActivityPreference()
+    }
+
+    private func resetLiveActivityPreference() {
+        settings.setPreferredLiveActivityProfile(nil, validProfileIDs: [])
+    }
+
+    private func applySettingsV3(
+        _ value: SettingsBackupV3,
+        validProfileIDs: Set<UUID>
+    ) {
+        settings.applyBackupValue(
+            value.legacy,
+            validProfileIDs: validProfileIDs
+        )
+        settings.reconcileClassAlertPreferences(validProfileIDs: [])
+        for record in value.classAlertPreferences
             where validProfileIDs.contains(record.profileID) {
             settings.setClassAlertPreference(
                 record.preference,
@@ -188,14 +240,9 @@ final class BackupService: BackupServicing {
             )
         }
         settings.quickEntryHistory.replace(
-            with: envelope.settings.quickEntryMemory,
+            with: value.quickEntryMemory,
             validProfileIDs: validProfileIDs
         )
-    }
-
-    private func resetSettingsAddedAfterV1() {
-        settings.reconcileClassAlertPreferences(validProfileIDs: [])
-        settings.quickEntryHistory.reset()
     }
 
     private func replaceAppOwnedData(
@@ -295,6 +342,10 @@ final class BackupService: BackupServicing {
             let envelope: BackupEnvelopeV3 = try decode(data)
             try BackupValidator.validate(envelope)
             return .v3(envelope)
+        case 4:
+            let envelope: BackupEnvelopeV4 = try decode(data)
+            try BackupValidator.validate(envelope)
+            return .v4(envelope)
         default:
             throw BackupError.unsupportedVersion(header.version)
         }

@@ -283,6 +283,161 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(subject.status, .idle)
     }
 
+    func testDisabledForegroundPreferenceDoesNotRequestAnActivity() async {
+        let fixture = TimetableTestFixture()
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+        let profile = makeProfile(fixture)
+
+        await subject.applyForegroundPreference(
+            isEnabled: false,
+            preferredProfileIdentity: profile.id,
+            catalog: makeCatalog(profile: profile),
+            now: fixture.tuesday0941
+        )
+
+        XCTAssertEqual(driver.requestCount, 0)
+        XCTAssertEqual(driver.endedIDs, [])
+        XCTAssertEqual(subject.status, .idle)
+    }
+
+    func testDisablingAutomaticStartSettingStopsExistingActivity() async {
+        let fixture = TimetableTestFixture()
+        let profile = makeProfile(fixture)
+        let driver = RecordingTimetableActivityDriver(
+            existingIDs: ["old-activity"],
+            profile: profile
+        )
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+
+        await subject.applyAutomaticStartSettingChange(
+            isEnabled: false,
+            preferredProfileIdentity: profile.id,
+            catalog: nil,
+            now: fixture.tuesday0941
+        )
+
+        XCTAssertEqual(driver.requestCount, 0)
+        XCTAssertEqual(driver.endedIDs, ["old-activity"])
+        XCTAssertNil(subject.activeProfileIdentity)
+        XCTAssertEqual(subject.status, .idle)
+    }
+
+    func testEnabledForegroundPreferenceStartsExactReadyProfile() async {
+        let fixture = TimetableTestFixture()
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+        let profile = makeProfile(fixture)
+
+        await subject.applyForegroundPreference(
+            isEnabled: true,
+            preferredProfileIdentity: profile.id,
+            catalog: makeCatalog(profile: profile),
+            now: fixture.tuesday0941
+        )
+
+        XCTAssertEqual(driver.requestCount, 1)
+        XCTAssertEqual(subject.activeProfileIdentity, profile.id)
+        XCTAssertEqual(subject.status, .running)
+    }
+
+    func testEnabledForegroundPreferenceWithDeletedProfileStopsWithoutFallback() async {
+        let fixture = TimetableTestFixture()
+        let profile = makeProfile(fixture)
+        let driver = RecordingTimetableActivityDriver(
+            existingIDs: ["old-activity"],
+            profile: profile
+        )
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+
+        await subject.applyForegroundPreference(
+            isEnabled: true,
+            preferredProfileIdentity: .saved(UUID()),
+            catalog: makeCatalog(profile: profile),
+            now: fixture.tuesday0941
+        )
+
+        XCTAssertEqual(driver.requestCount, 0)
+        XCTAssertEqual(driver.endedIDs, ["old-activity"])
+        XCTAssertNil(subject.activeProfileIdentity)
+        XCTAssertEqual(subject.status, .idle)
+    }
+
+    func testPreviouslyEnabledPreferenceSelectionClearedStopsExistingActivity() async {
+        let fixture = TimetableTestFixture()
+        let profile = makeProfile(fixture)
+        let driver = RecordingTimetableActivityDriver(
+            existingIDs: ["old-activity"],
+            profile: profile
+        )
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+
+        await subject.applyPreferenceSelectionChange(
+            wasAutomaticallyEnabled: true,
+            preferredProfileIdentity: nil,
+            catalog: makeCatalog(profile: profile),
+            now: fixture.tuesday0941
+        )
+
+        XCTAssertEqual(driver.requestCount, 0)
+        XCTAssertEqual(driver.endedIDs, ["old-activity"])
+        XCTAssertNil(subject.activeProfileIdentity)
+        XCTAssertEqual(subject.status, .idle)
+    }
+
+    func testPreviouslyEnabledPreferenceSelectionSwitchesToExactProfile() async {
+        let fixture = TimetableTestFixture()
+        let oldProfile = makeProfile(fixture)
+        let newIdentity = ProfileIdentity.saved(UUID())
+        let newProfile = TimetableWidgetProfile(
+            id: newIdentity,
+            name: "School",
+            colorHex: "#4F6F64",
+            symbolName: "graduationcap.fill",
+            snapshot: makeSnapshot(fixture)
+        )
+        let driver = RecordingTimetableActivityDriver(
+            existingIDs: ["old-activity"],
+            profile: oldProfile
+        )
+        let subject = TimetableLiveActivityCoordinator(
+            driver: driver,
+            calendar: fixture.calendar
+        )
+        let catalog = TimetableWidgetCatalogV1(
+            version: TimetableWidgetCatalogV1.currentVersion,
+            generatedAt: newProfile.snapshot.generatedAt,
+            profiles: [oldProfile, newProfile]
+        )
+
+        await subject.applyPreferenceSelectionChange(
+            wasAutomaticallyEnabled: true,
+            preferredProfileIdentity: newIdentity,
+            catalog: catalog,
+            now: fixture.tuesday0941
+        )
+
+        XCTAssertEqual(driver.endedIDs, ["old-activity"])
+        XCTAssertEqual(driver.requestCount, 1)
+        XCTAssertEqual(subject.activeProfileIdentity, newIdentity)
+        XCTAssertEqual(subject.status, .running)
+    }
+
     func testStopEndsEveryRecoveredActivityImmediately() async {
         let fixture = TimetableTestFixture()
         let driver = RecordingTimetableActivityDriver(

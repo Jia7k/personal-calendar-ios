@@ -139,6 +139,37 @@ final class RootLifecycleControllerTests: XCTestCase {
         XCTAssertFalse(permissions.isRefreshing)
     }
 
+    func testForegroundLiveActivityReconciliationRunsAfterFullCatalogRefresh() async {
+        var steps: [String] = []
+        let refresh = AppRefreshCoordinator(actions: .init(
+            refreshPermissions: { steps.append("permissions") },
+            migrateProfiles: { steps.append("migration") },
+            refreshSources: { steps.append("sources") },
+            reloadProfiles: { steps.append("profiles") },
+            refreshAgenda: { steps.append("agenda") },
+            cleanCategoryLinks: { steps.append("links") },
+            refreshTimetable: { steps.append("catalog") },
+            rescheduleNotifications: { steps.append("notifications") }
+        ))
+        let subject = RootLifecycleController(
+            permissions: ImmediatePermissionRefresh(),
+            refreshCoordinator: refresh,
+            reconcileForegroundLiveActivity: {
+                steps.append("live activity")
+            }
+        )
+
+        await subject.sceneBecameActive()
+
+        XCTAssertEqual(
+            steps,
+            [
+                "permissions", "migration", "sources", "profiles", "agenda",
+                "links", "catalog", "notifications", "live activity"
+            ]
+        )
+    }
+
     private func waitUntil(_ condition: () -> Bool) async {
         for _ in 0..<30 where !condition() { await Task.yield() }
         XCTAssertTrue(condition())

@@ -80,7 +80,18 @@ struct RoutinesView: View {
             ProfileSelectorToolbar(selection: profileSelection)
         }
     }
-    .sheet(item: $editing) { RoutineEditorView(model: model, row: $0, categories: categories) }.sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) { deleteConfirmation($0) }
+    .sheet(item: $editing) {
+        RoutineEditorView(
+            model: model,
+            row: $0,
+            categories: categories,
+            profiles: profileSelection.profiles,
+            creationIdentity: profileSelection.activeIdentity
+        )
+    }
+    .sheet(item: $deleteRequest, onDismiss: { deleteRequest = nil }) {
+        deleteConfirmation($0)
+    }
     .task(id: revision) {
         guard routineDeepLink == nil else { return }
         model.reload()

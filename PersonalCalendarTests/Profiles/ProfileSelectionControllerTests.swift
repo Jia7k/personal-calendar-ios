@@ -163,6 +163,23 @@ final class ProfileSelectionControllerTests: XCTestCase {
         XCTAssertEqual(fixture.subject.scopeRevision, initialRevision + 1)
     }
 
+    func testReloadClearsDeletedPreferredLiveActivityProfileWithoutFallingBack() throws {
+        let fixture = try makeFixture(active: .everything)
+        fixture.settings.setPreferredLiveActivityProfile(
+            .saved(Self.schoolID),
+            validProfileIDs: [Self.personalID, Self.schoolID]
+        )
+        fixture.settings.setAutomaticallyStartsLiveActivityOnForeground(true)
+        fixture.repository.snapshots.removeAll { $0.id == Self.schoolID }
+
+        try fixture.subject.reloadProfiles()
+
+        XCTAssertNil(fixture.settings.preferredLiveActivityProfile)
+        XCTAssertFalse(
+            fixture.settings.automaticallyStartsLiveActivityOnForeground
+        )
+    }
+
     private func makeFixture(
         active: ProfileIdentity,
         profiles: [ProfileSnapshot]? = nil

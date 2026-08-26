@@ -29,6 +29,9 @@ final class ProfileSelectionController {
         settings.reconcileQuickEntryHistory(
             validProfileIDs: Set(refreshedProfiles.map(\.id))
         )
+        settings.reconcileLiveActivityPreference(
+            validProfileIDs: Set(refreshedProfiles.map(\.id))
+        )
         fallBackIfActiveProfileIsMissing()
     }
 

@@ -47,6 +47,9 @@ final class AppSettingsStore {
         static let showNextItemOnLockScreen = "showNextItemOnLockScreen"
         static let classAlertPreferences = "classAlertPreferences"
         static let quickEntryMemory = "quickEntryMemory"
+        static let preferredLiveActivityProfile = "preferredLiveActivityProfile"
+        static let automaticallyStartsLiveActivityOnForeground =
+            "automaticallyStartsLiveActivityOnForeground"
         static let activeProfile = "activeProfileIdentity"
         static let lastActiveSavedProfile = "lastActiveSavedProfileID"
 
@@ -68,6 +71,8 @@ final class AppSettingsStore {
     var morningSummaryMinute: Int { didSet { defaults.set(morningSummaryMinute, forKey: Key.morningSummaryMinute) } }
     var showNextItemOnLockScreen: Bool { didSet { defaults.set(showNextItemOnLockScreen, forKey: Key.showNextItemOnLockScreen) } }
     private(set) var classAlertPreferences: [UUID: ClassAlertPreference]
+    private(set) var preferredLiveActivityProfile: ProfileIdentity?
+    private(set) var automaticallyStartsLiveActivityOnForeground: Bool
     private(set) var calendarSelectionIsExplicit: Bool
     private(set) var reminderSelectionIsExplicit: Bool
     private(set) var legacyProfileSelection: LegacyProfileSelectionSnapshot
@@ -100,6 +105,15 @@ final class AppSettingsStore {
         classAlertPreferences = Self.decodeClassAlertPreferences(
             defaults.data(forKey: Key.classAlertPreferences)
         )
+        let storedPreferredLiveActivityProfile = defaults
+            .string(forKey: Key.preferredLiveActivityProfile)
+            .flatMap(ProfileIdentity.init(storageKey:))
+        preferredLiveActivityProfile = storedPreferredLiveActivityProfile
+        automaticallyStartsLiveActivityOnForeground =
+            storedPreferredLiveActivityProfile != nil
+                && defaults.bool(
+                    forKey: Key.automaticallyStartsLiveActivityOnForeground
+                )
         calendarSelectionIsExplicit = storedCalendarSelectionIsExplicit
         reminderSelectionIsExplicit = storedReminderSelectionIsExplicit
         legacyProfileSelection = LegacyProfileSelectionSnapshot(
@@ -119,6 +133,7 @@ final class AppSettingsStore {
         })
         persistSelectionMarkers()
         persistProfileSelection()
+        persistLiveActivityPreference()
     }
 
     func classAlertPreference(for profileID: UUID) -> ClassAlertPreference {
@@ -148,6 +163,38 @@ final class AppSettingsStore {
 
     func reconcileQuickEntryHistory(validProfileIDs: Set<UUID>) {
         quickEntryHistory.reconcile(validProfileIDs: validProfileIDs)
+    }
+
+    func setPreferredLiveActivityProfile(
+        _ identity: ProfileIdentity?,
+        validProfileIDs: Set<UUID>
+    ) {
+        preferredLiveActivityProfile = switch identity {
+        case .everything:
+            .everything
+        case let .saved(id) where validProfileIDs.contains(id):
+            .saved(id)
+        case .saved, nil:
+            nil
+        }
+        if preferredLiveActivityProfile == nil {
+            automaticallyStartsLiveActivityOnForeground = false
+        }
+        persistLiveActivityPreference()
+    }
+
+    func setAutomaticallyStartsLiveActivityOnForeground(_ enabled: Bool) {
+        automaticallyStartsLiveActivityOnForeground =
+            enabled && preferredLiveActivityProfile != nil
+        persistLiveActivityPreference()
+    }
+
+    func reconcileLiveActivityPreference(validProfileIDs: Set<UUID>) {
+        guard case let .saved(id)? = preferredLiveActivityProfile,
+              !validProfileIDs.contains(id) else { return }
+        preferredLiveActivityProfile = nil
+        automaticallyStartsLiveActivityOnForeground = false
+        persistLiveActivityPreference()
     }
 
     func setActiveProfile(_ identity: ProfileIdentity) {
@@ -374,6 +421,17 @@ final class AppSettingsStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         defaults.set(try? encoder.encode(serialized), forKey: Key.classAlertPreferences)
+    }
+
+    private func persistLiveActivityPreference() {
+        defaults.set(
+            preferredLiveActivityProfile?.storageKey,
+            forKey: Key.preferredLiveActivityProfile
+        )
+        defaults.set(
+            automaticallyStartsLiveActivityOnForeground,
+            forKey: Key.automaticallyStartsLiveActivityOnForeground
+        )
     }
 
     private static func decodeClassAlertPreferences(

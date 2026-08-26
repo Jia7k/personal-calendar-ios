@@ -36,6 +36,17 @@ struct BackupEnvelopeV3: Codable, Equatable, Sendable {
     let settings: SettingsBackupV3
 }
 
+struct BackupEnvelopeV4: Codable, Equatable, Sendable {
+    let version: Int
+    let exportedAt: Date
+    let routines: [RoutineBackup]
+    let completions: [CompletionBackup]
+    let categories: [CategorySnapshot]
+    let categoryLinks: [CategoryLinkBackup]
+    let profiles: [ProfileSnapshot]
+    let settings: SettingsBackupV4
+}
+
 struct RoutineBackup: Codable, Equatable, Sendable {
     let id: UUID
     let title: String
@@ -92,6 +103,12 @@ struct SettingsBackupV3: Codable, Equatable, Sendable {
     let legacy: SettingsBackupV2
     let classAlertPreferences: [ClassAlertPreferenceBackup]
     let quickEntryMemory: QuickEntryMemoryV1
+}
+
+struct SettingsBackupV4: Codable, Equatable, Sendable {
+    let legacy: SettingsBackupV3
+    let preferredLiveActivityProfile: ProfileIdentity?
+    let automaticallyStartsLiveActivityOnForeground: Bool
 }
 
 enum BackupError: Error, Equatable {
@@ -159,6 +176,37 @@ enum BackupValidator {
             envelope.settings.classAlertPreferences
         )
         try validateQuickEntryMemory(envelope.settings.quickEntryMemory)
+    }
+
+    static func validate(_ envelope: BackupEnvelopeV4) throws {
+        guard envelope.version == 4 else {
+            throw BackupError.unsupportedVersion(envelope.version)
+        }
+        try validate(BackupEnvelopeV3(
+            version: 3,
+            exportedAt: envelope.exportedAt,
+            routines: envelope.routines,
+            completions: envelope.completions,
+            categories: envelope.categories,
+            categoryLinks: envelope.categoryLinks,
+            profiles: envelope.profiles,
+            settings: envelope.settings.legacy
+        ))
+
+        let validProfileIDs = Set(envelope.profiles.map(\.id))
+        if case let .saved(id)? =
+            envelope.settings.preferredLiveActivityProfile,
+            !validProfileIDs.contains(id) {
+            throw BackupError.invalidData(
+                "The preferred Live Activity profile is missing."
+            )
+        }
+        if envelope.settings.automaticallyStartsLiveActivityOnForeground,
+           envelope.settings.preferredLiveActivityProfile == nil {
+            throw BackupError.invalidData(
+                "Automatic Live Activity start requires a profile."
+            )
+        }
     }
 
     private static func validateAppOwnedData(
@@ -433,6 +481,15 @@ extension AppSettingsStore {
                         < $1.profileID.uuidString.lowercased()
                 },
             quickEntryMemory: quickEntryHistory.backupValue
+        )
+    }
+
+    var backupValueV4: SettingsBackupV4 {
+        .init(
+            legacy: backupValueV3,
+            preferredLiveActivityProfile: preferredLiveActivityProfile,
+            automaticallyStartsLiveActivityOnForeground:
+                automaticallyStartsLiveActivityOnForeground
         )
     }
 }

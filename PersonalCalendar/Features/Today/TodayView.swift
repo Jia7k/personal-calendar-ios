@@ -163,12 +163,19 @@ struct TodayView: View {
     }
 
     private func openAgendaItem(_ origin: AgendaItemOrigin) {
+        let capturedProfileIdentity = environment.profileSelection.activeIdentity
+        let capturedScope = try? environment.profileScopes.resolve(capturedProfileIdentity)
         switch origin {
         case let .event(displayID):
             let editorModel = EventEditorViewModel.edit(
                 displayID: displayID,
                 service: environment.calendar,
                 categories: environment.categories,
+                duplicateDestinationCalendarIDs: capturedScope?.calendarIDs ?? [],
+                resolveDuplicateDestinationCalendarIDs: {
+                    try environment.profileScopes
+                        .resolve(capturedProfileIdentity).calendarIDs
+                },
                 onCommitted: { commit in finishEventEditorAndReload(commit) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
@@ -179,6 +186,11 @@ struct TodayView: View {
                 reminderID: reminderID,
                 service: environment.reminders,
                 categories: environment.categories,
+                duplicateDestinationListIDs: capturedScope?.reminderListIDs ?? [],
+                resolveDuplicateDestinationListIDs: {
+                    try environment.profileScopes
+                        .resolve(capturedProfileIdentity).reminderListIDs
+                },
                 onCommitted: { commit in finishTaskEditorAndReload(commit) },
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )

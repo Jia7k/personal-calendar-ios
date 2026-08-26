@@ -108,7 +108,19 @@ struct AppEnvironment {
                 try? profileSelection.select(restoredIdentity)
                 if (try? timetableSnapshotCoordinator.refresh(failClosed: true)) != nil,
                    let catalog = timetableSnapshotCoordinator.latestCatalog {
-                    Task { await timetableLiveActivityCoordinator.reconcile(catalog: catalog) }
+                    Task {
+                        if settings.automaticallyStartsLiveActivityOnForeground {
+                            await timetableLiveActivityCoordinator
+                                .applyForegroundPreference(
+                                    isEnabled: true,
+                                    preferredProfileIdentity:
+                                        settings.preferredLiveActivityProfile,
+                                    catalog: catalog
+                                )
+                        } else {
+                            await timetableLiveActivityCoordinator.stop()
+                        }
+                    }
                 }
             }
         )
@@ -286,7 +298,19 @@ struct AppEnvironment {
                 try? profileSelection.select(restoredIdentity)
                 if (try? timetableSnapshotCoordinator.refresh(failClosed: true)) != nil,
                    let catalog = timetableSnapshotCoordinator.latestCatalog {
-                    Task { await timetableLiveActivityCoordinator.reconcile(catalog: catalog) }
+                    Task {
+                        if settings.automaticallyStartsLiveActivityOnForeground {
+                            await timetableLiveActivityCoordinator
+                                .applyForegroundPreference(
+                                    isEnabled: true,
+                                    preferredProfileIdentity:
+                                        settings.preferredLiveActivityProfile,
+                                    catalog: catalog
+                                )
+                        } else {
+                            await timetableLiveActivityCoordinator.stop()
+                        }
+                    }
                 }
             }
         )

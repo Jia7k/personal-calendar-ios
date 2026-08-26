@@ -38,6 +38,7 @@ final class TaskEditorViewModel {
     private(set) var mutationExplanation: String?
     private(set) var availableCategories: [CategorySnapshot] = []
     private(set) var categoryWarning: String?
+    private(set) var creationDestinationListIDs: Set<String>?
     /// Identifies the rendered delete confirmation. Passive dismissal is valid
     /// only for the generation that produced the presentation.
     private(set) var deleteConfirmationGeneration = 0
@@ -52,6 +53,19 @@ final class TaskEditorViewModel {
         currentSnapshot?.hasRecurrence == true ? "Deleting this task removes the repeating reminder." : nil
     }
     var schedulingSnapshot: ReminderSnapshot? { currentSnapshot }
+    var canDuplicate: Bool {
+        guard case .edit = mode,
+              let currentSnapshot,
+              currentSnapshot.allowsModification,
+              duplicateDestinationListIDs?.contains(currentSnapshot.listID) == true,
+              Self.supportsFaithfulDuplicate(currentSnapshot) else { return false }
+        switch phase {
+        case .idle, .failed:
+            return true
+        case .confirming, .writing, .created, .updated, .deleted, .unavailable:
+            return false
+        }
+    }
     var canRetry: Bool {
         if case .failed = phase { return true }
         return false
@@ -60,7 +74,10 @@ final class TaskEditorViewModel {
     /// still reacquires the provider item and destination immediately before it
     /// mutates either one.
     var canSave: Bool {
-        acceptsNewAction && hasRequiredCreationDestination && formValidationError() == nil
+        acceptsNewAction
+            && hasRequiredCreationDestination
+            && hasLocallyAllowedCreationDestination
+            && formValidationError() == nil
     }
     var requiresDiscardConfirmation: Bool {
         guard !discardWasConfirmed else { return false }
@@ -83,6 +100,9 @@ final class TaskEditorViewModel {
     private let initialForm: ReminderDraft
     private let initialCategoryID: UUID?
     private let nilDestination: TaskEditorDestination
+    private let resolveCreationDestinationListIDs: (@MainActor () throws -> Set<String>)?
+    private let duplicateDestinationListIDs: Set<String>?
+    private let resolveDuplicateDestinationListIDs: (@MainActor () throws -> Set<String>)?
     private var didCommit = false
     private var didRequestReconciliation = false
     private var discardWasConfirmed = false
@@ -97,8 +117,13 @@ final class TaskEditorViewModel {
         service: any RemindersServicing,
         categories: (any CategoryRepository)?,
         requiresExplicitCreationDestination: Bool = false,
+        creationDestinationListIDs: Set<String>? = nil,
+        resolveCreationDestinationListIDs: (@MainActor () throws -> Set<String>)? = nil,
+        duplicateDestinationListIDs: Set<String>? = nil,
+        resolveDuplicateDestinationListIDs: (@MainActor () throws -> Set<String>)? = nil,
         onCommitted: @escaping (TaskEditorCommit) -> Void,
-        onReconciliationNeeded: @escaping () -> Void
+        onReconciliationNeeded: @escaping () -> Void,
+        initialCategoryID: UUID? = nil
     ) {
         self.mode = mode
         self.form = form
@@ -107,13 +132,19 @@ final class TaskEditorViewModel {
         self.service = service
         self.categories = categories
         self.requiresExplicitCreationDestination = requiresExplicitCreationDestination
+        self.creationDestinationListIDs = creationDestinationListIDs
+        self.resolveCreationDestinationListIDs = resolveCreationDestinationListIDs
+        self.duplicateDestinationListIDs = duplicateDestinationListIDs
+        self.resolveDuplicateDestinationListIDs = resolveDuplicateDestinationListIDs
         self.onCommitted = onCommitted
         self.onReconciliationNeeded = onReconciliationNeeded
         self.initialForm = form
         availableCategories = categories.flatMap { try? $0.list() } ?? []
-        let loadedCategoryID = snapshot.flatMap { try? categories?.category(for: .task, externalID: $0.id)?.id }
+        let loadedCategoryID = snapshot.flatMap {
+            try? categories?.category(for: .task, externalID: $0.id)?.id
+        } ?? initialCategoryID
         categoryID = loadedCategoryID
-        initialCategoryID = loadedCategoryID
+        self.initialCategoryID = loadedCategoryID
         self.nilDestination = switch mode {
         case .create: .systemDefault
         case .edit: snapshot.map { .preserveCurrent(id: $0.listID, title: $0.listTitle) } ?? destination
@@ -128,6 +159,10 @@ final class TaskEditorViewModel {
         service: any RemindersServicing,
         savedDefaultListID: String? = nil,
         creationProfile: CreationProfileContext? = nil,
+        initialDraft: ReminderDraft? = nil,
+        initialCategoryID: UUID? = nil,
+        creationDestinationListIDs: Set<String>? = nil,
+        resolveCreationDestinationListIDs: (@MainActor () throws -> Set<String>)? = nil,
         categories: (any CategoryRepository)? = nil,
         onCommitted: @escaping (TaskEditorCommit) -> Void = { _ in }
     ) -> TaskEditorViewModel {
@@ -137,26 +172,193 @@ final class TaskEditorViewModel {
         } else {
             preferredDefaultListID = savedDefaultListID
         }
+        let allowedListIDs = creationDestinationListIDs
+            ?? creationProfile?.memberReminderListIDs
         let selected = service.accessState == .granted
-            ? service.lists().first { $0.id == preferredDefaultListID && $0.allowsContentModifications }
+            ? service.lists().first {
+                $0.id == preferredDefaultListID
+                    && $0.allowsContentModifications
+                    && (allowedListIDs?.contains($0.id) ?? true)
+            }
             : nil
+        var seededForm = initialDraft
+            ?? .init(
+                title: "",
+                notes: nil,
+                dueDate: nil,
+                priority: 0,
+                listID: selected?.id
+            )
+        if initialDraft != nil {
+            seededForm.listID = validCreationListID(
+                seededForm.listID,
+                service: service,
+                allowedListIDs: allowedListIDs
+            )
+        }
+        let seededDestination = service.lists().first {
+            $0.id == seededForm.listID && $0.allowsContentModifications
+        }
         return .init(
             mode: .create,
-            form: .init(title: "", notes: nil, dueDate: nil, priority: 0, listID: selected?.id),
-            destination: selected.map { .explicit(id: $0.id, title: $0.title) } ?? .systemDefault,
+            form: seededForm,
+            destination: seededDestination.map {
+                .explicit(id: $0.id, title: $0.title)
+            } ?? .systemDefault,
             snapshot: nil,
             service: service,
             categories: categories,
-            requiresExplicitCreationDestination: creationProfile?.requiresExplicitReminderDestination == true,
+            requiresExplicitCreationDestination: initialDraft != nil
+                || creationProfile?.requiresExplicitReminderDestination == true,
+            creationDestinationListIDs: allowedListIDs,
+            resolveCreationDestinationListIDs: resolveCreationDestinationListIDs,
             onCommitted: onCommitted,
-            onReconciliationNeeded: {}
+            onReconciliationNeeded: {},
+            initialCategoryID: initialCategoryID
         )
+    }
+
+    static func duplicateDraft(
+        from snapshot: ReminderSnapshot,
+        destinationListID: String,
+        creationProfile: CreationProfileContext,
+        availableLists: [ReminderListDescriptor]
+    ) -> ReminderDraft? {
+        guard creationProfile.memberReminderListIDs.contains(destinationListID),
+              supportsFaithfulDuplicate(snapshot),
+              availableLists.contains(where: {
+                  $0.id == destinationListID && $0.allowsContentModifications
+              }) else {
+            return nil
+        }
+
+        return ReminderDraft(
+            title: snapshot.title,
+            notes: snapshot.notes,
+            dueDate: snapshot.dueDate,
+            dueHasTime: snapshot.dueHasTime,
+            priority: snapshot.priority,
+            listID: destinationListID,
+            alarm: duplicateAlarmIntent(snapshot.alarm),
+            recurrence: duplicateRecurrenceIntent(snapshot.recurrence)
+        )
+    }
+
+    func makeDuplicate(
+        onCommitted duplicateCommitted: @escaping (TaskEditorCommit) -> Void
+    ) -> TaskEditorViewModel? {
+        guard canDuplicate,
+              service.accessState == .granted,
+              case let .edit(reminderID) = mode,
+              let snapshot = service.reminder(id: reminderID),
+              snapshot.allowsModification,
+              Self.supportsFaithfulDuplicate(snapshot),
+              service.lists().contains(where: {
+                  $0.id == snapshot.listID && $0.allowsContentModifications
+              }) else {
+            return nil
+        }
+        let allowedListIDs: Set<String>?
+        do {
+            allowedListIDs = try liveDuplicateDestinationListIDs()
+        } catch {
+            return nil
+        }
+        guard allowedListIDs?.contains(snapshot.listID) ?? true else {
+            return nil
+        }
+
+        let draft = ReminderDraft(
+            title: snapshot.title,
+            notes: snapshot.notes,
+            dueDate: snapshot.dueDate,
+            dueHasTime: snapshot.dueHasTime,
+            priority: snapshot.priority,
+            listID: snapshot.listID,
+            alarm: Self.duplicateAlarmIntent(snapshot.alarm),
+            recurrence: Self.duplicateRecurrenceIntent(snapshot.recurrence)
+        )
+        let copiedCategoryID: UUID?
+        do {
+            if let categories {
+                _ = try categories.list()
+                copiedCategoryID = try categories.category(
+                    for: .task,
+                    externalID: snapshot.id
+                )?.id
+            } else {
+                copiedCategoryID = nil
+            }
+        } catch {
+            return nil
+        }
+        return Self.creating(
+            service: service,
+            initialDraft: draft,
+            initialCategoryID: copiedCategoryID,
+            creationDestinationListIDs: allowedListIDs,
+            resolveCreationDestinationListIDs: resolveDuplicateDestinationListIDs,
+            categories: categories,
+            onCommitted: duplicateCommitted
+        )
+    }
+
+    func finishDuplicateCommit(_ commit: TaskEditorCommit) {
+        onCommitted(commit)
+    }
+
+    private static func validCreationListID(
+        _ id: String?,
+        service: any RemindersServicing,
+        allowedListIDs: Set<String>?
+    ) -> String? {
+        guard let id,
+              service.accessState == .granted,
+              service.lists().contains(where: {
+                  $0.id == id && $0.allowsContentModifications
+              }),
+              allowedListIDs?.contains(id) ?? true else {
+            return nil
+        }
+        return id
+    }
+
+    private static func duplicateAlarmIntent(
+        _ snapshot: ReminderAlarmSnapshot
+    ) -> ReminderAlarmMutationIntent {
+        switch snapshot {
+        case .none, .unsupported:
+            .clear
+        case let .editable(date):
+            .replace(date)
+        }
+    }
+
+    private static func duplicateRecurrenceIntent(
+        _ snapshot: RecurrenceSnapshot
+    ) -> RecurrenceMutationIntent {
+        switch snapshot {
+        case .none, .unsupported:
+            .clear
+        case let .editable(rule):
+            .replace(rule)
+        }
+    }
+
+    private static func supportsFaithfulDuplicate(
+        _ snapshot: ReminderSnapshot
+    ) -> Bool {
+        if case .unsupported = snapshot.alarm { return false }
+        if case .unsupported = snapshot.recurrence { return false }
+        return true
     }
 
     static func editing(
         reminderID: String,
         service: any RemindersServicing,
         categories: (any CategoryRepository)? = nil,
+        duplicateDestinationListIDs: Set<String>? = nil,
+        resolveDuplicateDestinationListIDs: (@MainActor () throws -> Set<String>)? = nil,
         onCommitted: @escaping (TaskEditorCommit) -> Void = { _ in },
         onReconciliationNeeded: @escaping () -> Void = {}
     ) -> TaskEditorViewModel {
@@ -174,7 +376,18 @@ final class TaskEditorViewModel {
             item.dueDate.map { .init(date: $0, hasTime: item.dueHasTime) }
         })
         let destination: TaskEditorDestination = snapshot.map { .preserveCurrent(id: $0.listID, title: $0.listTitle) } ?? .systemDefault
-        let model = TaskEditorViewModel(mode: .edit(reminderID: reminderID), form: form, destination: destination, snapshot: snapshot, service: service, categories: categories, onCommitted: onCommitted, onReconciliationNeeded: onReconciliationNeeded)
+        let model = TaskEditorViewModel(
+            mode: .edit(reminderID: reminderID),
+            form: form,
+            destination: destination,
+            snapshot: snapshot,
+            service: service,
+            categories: categories,
+            duplicateDestinationListIDs: duplicateDestinationListIDs,
+            resolveDuplicateDestinationListIDs: resolveDuplicateDestinationListIDs,
+            onCommitted: onCommitted,
+            onReconciliationNeeded: onReconciliationNeeded
+        )
         if service.accessState != .granted { model.becomeUnavailable(.accessUnavailable) }
         else if snapshot == nil { model.becomeUnavailable(.itemGone) }
         else if snapshot?.allowsModification == false { model.becomeUnavailable(.readOnlySource) }
@@ -188,7 +401,8 @@ final class TaskEditorViewModel {
             form.listID = nil
             destination = nilDestination
         case let .explicit(id):
-            guard let descriptor = service.lists().first(where: { $0.id == id }) else { return }
+            guard creationDestinationListIDs?.contains(id) ?? true,
+                  let descriptor = service.lists().first(where: { $0.id == id }) else { return }
             form.listID = descriptor.id
             destination = .explicit(id: descriptor.id, title: descriptor.title)
         }
@@ -260,6 +474,20 @@ final class TaskEditorViewModel {
     private var hasRequiredCreationDestination: Bool {
         guard case .create = mode, requiresExplicitCreationDestination else { return true }
         return form.listID != nil
+    }
+
+    private var hasLocallyAllowedCreationDestination: Bool {
+        guard case .create = mode,
+              let creationDestinationListIDs,
+              let listID = form.listID else { return true }
+        return creationDestinationListIDs.contains(listID)
+    }
+
+    private func liveDuplicateDestinationListIDs() throws -> Set<String>? {
+        if let resolveDuplicateDestinationListIDs {
+            return try resolveDuplicateDestinationListIDs()
+        }
+        return duplicateDestinationListIDs
     }
 
     private func performSave() {
@@ -371,6 +599,24 @@ final class TaskEditorViewModel {
         guard service.lists().contains(where: { $0.id == id && $0.allowsContentModifications }) else {
             phase = .failed(.save, .invalidDestination)
             return false
+        }
+        if case .create = mode,
+           let creationDestinationListIDs,
+           !creationDestinationListIDs.contains(id) {
+            phase = .failed(.save, .invalidDestination)
+            return false
+        }
+        if case .create = mode,
+           let resolveCreationDestinationListIDs {
+            do {
+                guard try resolveCreationDestinationListIDs().contains(id) else {
+                    phase = .failed(.save, .invalidDestination)
+                    return false
+                }
+            } catch {
+                phase = .failed(.save, .invalidDestination)
+                return false
+            }
         }
         return true
     }

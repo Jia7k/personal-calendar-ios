@@ -39,7 +39,26 @@ struct RootTabView: View {
                 remindersAccess: environment.reminders.accessState,
                 lists: environment.reminders.lists()
             )
-        }, refreshCoordinator: environment.refreshCoordinator))
+        }, refreshCoordinator: environment.refreshCoordinator,
+        reconcileForegroundLiveActivity: {
+            let settings = environment.settings
+            guard settings.automaticallyStartsLiveActivityOnForeground else {
+                return
+            }
+            let snapshots = environment.timetableSnapshotCoordinator
+            guard snapshots.errorMessage == nil,
+                  let catalog = snapshots.latestCatalog else {
+                await environment.timetableLiveActivityCoordinator.stop()
+                return
+            }
+            await environment.timetableLiveActivityCoordinator
+                .applyForegroundPreference(
+                    isEnabled: true,
+                    preferredProfileIdentity:
+                        settings.preferredLiveActivityProfile,
+                    catalog: catalog
+                )
+        }))
     }
     var body: some View {
         let contentRevision = AppContentRevision(
@@ -166,7 +185,7 @@ struct RootTabView: View {
         }
         .task(id: environment.settings.didCompleteOnboarding) {
             guard environment.settings.didCompleteOnboarding else { return }
-            await environment.refreshCoordinator.refreshNow(reason: .launch)
+            await lifecycle.appLaunched()
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }

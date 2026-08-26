@@ -3,6 +3,7 @@ import SwiftUI
 struct TimetableSettingsView: View {
     let snapshotCoordinator: TimetableSnapshotCoordinator
     let activityCoordinator: TimetableLiveActivityCoordinator
+    let settings: AppSettingsStore
     let refresh: @MainActor () async -> Void
 
     @State private var selectedIdentity: ProfileIdentity?
@@ -10,13 +11,18 @@ struct TimetableSettingsView: View {
     init(
         snapshotCoordinator: TimetableSnapshotCoordinator,
         activityCoordinator: TimetableLiveActivityCoordinator,
+        settings: AppSettingsStore,
         initialProfileIdentity: ProfileIdentity? = nil,
         refresh: @escaping @MainActor () async -> Void
     ) {
         self.snapshotCoordinator = snapshotCoordinator
         self.activityCoordinator = activityCoordinator
+        self.settings = settings
         self.refresh = refresh
-        _selectedIdentity = State(initialValue: initialProfileIdentity)
+        _selectedIdentity = State(
+            initialValue: settings.preferredLiveActivityProfile
+                ?? initialProfileIdentity
+        )
     }
 
     var body: some View {
@@ -34,9 +40,52 @@ struct TimetableSettingsView: View {
                         }
                     }
                     .accessibilityIdentifier("timetable-profile")
+                    .onChange(of: selectedIdentity) { _, identity in
+                        let wasAutomaticallyEnabled = settings
+                            .automaticallyStartsLiveActivityOnForeground
+                        savePreferredProfile(identity)
+                        let preferredProfileIdentity = settings
+                            .preferredLiveActivityProfile
+                        let catalog = snapshotCoordinator.errorMessage == nil
+                            ? snapshotCoordinator.latestCatalog
+                            : nil
+                        Task {
+                            await activityCoordinator
+                                .applyPreferenceSelectionChange(
+                                    wasAutomaticallyEnabled:
+                                        wasAutomaticallyEnabled,
+                                    preferredProfileIdentity:
+                                        preferredProfileIdentity,
+                                    catalog: catalog
+                                )
+                        }
+                    }
                 }
 
                 Text(selectionSummary)
+                    .foregroundStyle(.secondary)
+
+                Toggle(
+                    "Start when Personal Calendar opens",
+                    isOn: Binding(
+                        get: {
+                            settings
+                                .automaticallyStartsLiveActivityOnForeground
+                        },
+                        set: { enabled in
+                            updateAutomaticStart(enabled)
+                        }
+                    )
+                )
+                .disabled(
+                    selectedProfile == nil
+                        && !settings
+                            .automaticallyStartsLiveActivityOnForeground
+                )
+                .accessibilityIdentifier("timetable-auto-start")
+
+                Text("This is foreground-only: iOS does not let the app guarantee a background start or transition.")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
 
                 Button("Refresh timetable") {
@@ -50,6 +99,7 @@ struct TimetableSettingsView: View {
                 if let actionTitle {
                     Button(actionTitle) {
                         guard let selectedProfile else { return }
+                        savePreferredProfile(selectedProfile.id)
                         Task { await activityCoordinator.start(profile: selectedProfile) }
                     }
                     .disabled(!canStart)
@@ -57,7 +107,7 @@ struct TimetableSettingsView: View {
                 }
 
                 if activityCoordinator.activeProfileIdentity != nil {
-                    Button("Stop Live Activity", role: .destructive) {
+                    Button("Stop for now", role: .destructive) {
                         Task { await activityCoordinator.stop() }
                     }
                     .accessibilityIdentifier("timetable-stop")
@@ -72,7 +122,7 @@ struct TimetableSettingsView: View {
             }
 
             Section("About updates") {
-                Text("Widgets stay available all week. The live timetable updates while My Calendar is running; fully automatic background transitions require a future push service.")
+                Text("Widgets stay available all week. The live timetable refreshes while Personal Calendar is running. iOS limits one Live Activity to eight active hours, and guaranteed background starts or transitions require a future push service.")
                     .foregroundStyle(.secondary)
             }
         }
@@ -81,7 +131,10 @@ struct TimetableSettingsView: View {
         .navigationTitle("Timetable")
         .task {
             await refresh()
-            if let active = activityCoordinator.activeProfileIdentity {
+            if let preferred = settings.preferredLiveActivityProfile {
+                selectedIdentity = preferred
+            } else if selectedIdentity == nil,
+                      let active = activityCoordinator.activeProfileIdentity {
                 selectedIdentity = active
             }
             validateSelection()
@@ -168,6 +221,45 @@ struct TimetableSettingsView: View {
               let catalog = snapshotCoordinator.latestCatalog else { return }
         if catalog.profile(for: selectedIdentity) == nil {
             self.selectedIdentity = nil
+            savePreferredProfile(nil)
+            Task { await activityCoordinator.stop() }
+        }
+    }
+
+    private var validSavedProfileIDs: Set<UUID> {
+        Set(profiles.compactMap { profile in
+            guard case let .saved(id) = profile.id else { return nil }
+            return id
+        })
+    }
+
+    private func savePreferredProfile(_ identity: ProfileIdentity?) {
+        settings.setPreferredLiveActivityProfile(
+            identity,
+            validProfileIDs: validSavedProfileIDs
+        )
+    }
+
+    private func updateAutomaticStart(_ enabled: Bool) {
+        if enabled {
+            savePreferredProfile(selectedIdentity)
+        }
+        settings.setAutomaticallyStartsLiveActivityOnForeground(enabled)
+        Task {
+            if enabled {
+                await refresh()
+                validateSelection()
+            }
+            let catalog = snapshotCoordinator.errorMessage == nil
+                ? snapshotCoordinator.latestCatalog
+                : nil
+            await activityCoordinator.applyAutomaticStartSettingChange(
+                isEnabled:
+                    settings.automaticallyStartsLiveActivityOnForeground,
+                preferredProfileIdentity:
+                    settings.preferredLiveActivityProfile,
+                catalog: catalog
+            )
         }
     }
 

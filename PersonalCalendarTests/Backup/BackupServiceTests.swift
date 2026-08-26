@@ -52,6 +52,11 @@ final class BackupServiceTests: XCTestCase {
             .init(enabled: true, leadMinutes: 20),
             for: profileID
         )
+        settings.setPreferredLiveActivityProfile(
+            .saved(profileID),
+            validProfileIDs: [profileID]
+        )
+        settings.setAutomaticallyStartsLiveActivityOnForeground(true)
         let quickEntryHistory = settings.quickEntryHistory
         let quickEntryUsedAt = Date(timeIntervalSinceReferenceDate: 123_456)
         quickEntryHistory.record(
@@ -71,6 +76,10 @@ final class BackupServiceTests: XCTestCase {
 
         let service = BackupService(context: context, settings: settings)
         let data = try service.exportData()
+        XCTAssertEqual(
+            try JSONDecoder().decode(BackupVersionHeader.self, from: data).version,
+            4
+        )
         try routines.delete(id: routineID)
         try categories.delete(id: categoryID, reassignedTo: nil)
         settings.didSeedCategories = false
@@ -83,6 +92,7 @@ final class BackupServiceTests: XCTestCase {
             .init(enabled: false, leadMinutes: 10),
             for: profileID
         )
+        settings.setPreferredLiveActivityProfile(nil, validProfileIDs: [])
         quickEntryHistory.record(
             text: "This was added after export",
             profileIdentity: .saved(profileID),
@@ -119,6 +129,11 @@ final class BackupServiceTests: XCTestCase {
             settings.classAlertPreference(for: profileID),
             .init(enabled: true, leadMinutes: 20)
         )
+        XCTAssertEqual(
+            settings.preferredLiveActivityProfile,
+            .saved(profileID)
+        )
+        XCTAssertTrue(settings.automaticallyStartsLiveActivityOnForeground)
         let restoredQuickEntry = settings.quickEntryHistory
         let restoredItems = restoredQuickEntry.items(for: .saved(profileID))
         XCTAssertEqual(restoredItems.count, 1)
@@ -133,6 +148,134 @@ final class BackupServiceTests: XCTestCase {
                 categoryID: categoryID,
                 destinationID: "calendar-1"
             )
+        )
+    }
+
+    func testVersionThreeRestoreDefaultsForegroundLiveActivityPreferenceOff() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: RoutineRecord.self,
+            RoutineCompletionRecord.self,
+            CategoryRecord.self,
+            ExternalCategoryLinkRecord.self,
+            ProfileRecord.self,
+            configurations: configuration
+        )
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        let profiles = SwiftDataProfileRepository(context: container.mainContext)
+        let profileID = try profiles.create(.init(
+            name: "School",
+            colorHex: "#4868A8",
+            symbolName: "graduationcap.fill",
+            calendarIDs: [],
+            reminderListIDs: [],
+            routineIDs: [],
+            defaultCalendarID: nil,
+            defaultReminderListID: nil
+        ))
+        let service = BackupService(
+            context: container.mainContext,
+            settings: settings
+        )
+        let exported = try service.exportData()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let versionFour = try decoder.decode(BackupEnvelopeV4.self, from: exported)
+        let versionThree = BackupEnvelopeV3(
+            version: 3,
+            exportedAt: versionFour.exportedAt,
+            routines: versionFour.routines,
+            completions: versionFour.completions,
+            categories: versionFour.categories,
+            categoryLinks: versionFour.categoryLinks,
+            profiles: versionFour.profiles,
+            settings: versionFour.settings.legacy
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        settings.setPreferredLiveActivityProfile(
+            .saved(profileID),
+            validProfileIDs: [profileID]
+        )
+        settings.setAutomaticallyStartsLiveActivityOnForeground(true)
+
+        try service.restore(data: encoder.encode(versionThree))
+
+        XCTAssertNil(settings.preferredLiveActivityProfile)
+        XCTAssertFalse(settings.automaticallyStartsLiveActivityOnForeground)
+    }
+
+    func testVersionFourRejectsPreferredProfileMissingFromBackup() {
+        let includedProfileID = UUID()
+        let missingProfileID = UUID()
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        settings.setPreferredLiveActivityProfile(
+            .saved(missingProfileID),
+            validProfileIDs: [missingProfileID]
+        )
+        settings.setAutomaticallyStartsLiveActivityOnForeground(true)
+        let envelope = makeVersionFourEnvelope(
+            profileID: includedProfileID,
+            settings: settings.backupValueV4
+        )
+
+        XCTAssertThrowsError(try BackupValidator.validate(envelope)) { error in
+            XCTAssertEqual(
+                error as? BackupError,
+                .invalidData("The preferred Live Activity profile is missing.")
+            )
+        }
+    }
+
+    func testVersionFourRejectsAutomaticStartWithoutPreferredProfile() {
+        let profileID = UUID()
+        let settings = AppSettingsStore(defaults: .ephemeral)
+        let invalidSettings = SettingsBackupV4(
+            legacy: settings.backupValueV3,
+            preferredLiveActivityProfile: nil,
+            automaticallyStartsLiveActivityOnForeground: true
+        )
+        let envelope = makeVersionFourEnvelope(
+            profileID: profileID,
+            settings: invalidSettings
+        )
+
+        XCTAssertThrowsError(try BackupValidator.validate(envelope)) { error in
+            XCTAssertEqual(
+                error as? BackupError,
+                .invalidData(
+                    "Automatic Live Activity start requires a profile."
+                )
+            )
+        }
+    }
+
+    private func makeVersionFourEnvelope(
+        profileID: UUID,
+        settings: SettingsBackupV4
+    ) -> BackupEnvelopeV4 {
+        BackupEnvelopeV4(
+            version: 4,
+            exportedAt: Date(timeIntervalSinceReferenceDate: 123_456),
+            routines: [],
+            completions: [],
+            categories: [],
+            categoryLinks: [],
+            profiles: [
+                ProfileSnapshot(
+                    id: profileID,
+                    name: "School",
+                    colorHex: "#4868A8",
+                    symbolName: "graduationcap.fill",
+                    sortOrder: 0,
+                    calendarIDs: [],
+                    reminderListIDs: [],
+                    routineIDs: [],
+                    defaultCalendarID: nil,
+                    defaultReminderListID: nil
+                )
+            ],
+            settings: settings
         )
     }
 }

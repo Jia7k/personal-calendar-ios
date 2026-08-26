@@ -7,6 +7,7 @@ struct EventEditorView: View {
     let calendars: [CalendarDescriptor]
     let nilDestinationLabel: String
     let showsDelete: Bool
+    let isDuplicateCopy: Bool
     let onDismiss: () -> Void
 
     @State private var showsDiscardConfirmation = false
@@ -14,10 +15,44 @@ struct EventEditorView: View {
     @State private var selectedDeleteScope: RecurrenceEditScope = .thisOccurrence
     @State private var replacementAlarmOffsets: [TimeInterval] = []
     @State private var replacementRecurrence = Self.defaultRecurrence
+    @State private var duplicatePresentation: EventDuplicatePresentation?
+    @State private var pendingDuplicateCommit: EventEditorCommit?
+
+    init(
+        model: EventEditorViewModel,
+        calendars: [CalendarDescriptor],
+        nilDestinationLabel: String,
+        showsDelete: Bool,
+        isDuplicateCopy: Bool = false,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.model = model
+        self.calendars = calendars
+        self.nilDestinationLabel = nilDestinationLabel
+        self.showsDelete = showsDelete
+        self.isDuplicateCopy = isDuplicateCopy
+        self.onDismiss = onDismiss
+        if case let .replace(offsets) = model.alarmIntent {
+            _replacementAlarmOffsets = State(initialValue: offsets)
+        }
+        if case let .replace(rule) = model.recurrenceIntent {
+            _replacementRecurrence = State(initialValue: rule)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
+                if isDuplicateCopy {
+                    Section {
+                        Label(
+                            "Duplicated copy — review before saving",
+                            systemImage: "doc.on.doc"
+                        )
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("event-duplicate-editor-screen")
+                    }
+                }
                 detailsSection.disabled(isUnavailable)
                 destinationSection.disabled(isUnavailable)
                 categorySection.disabled(isUnavailable)
@@ -58,6 +93,18 @@ struct EventEditorView: View {
                 Text(confirmationMessage)
             }
             .interactiveDismissDisabled(isWriting || model.requiresDiscardConfirmation)
+            .sheet(
+                item: $duplicatePresentation,
+                onDismiss: finishDuplicatePresentation
+            ) { presentation in
+                EventDuplicateFlowView(
+                    sourceModel: model,
+                    calendars: calendars,
+                    initialStart: presentation.initialStart,
+                    onCommitted: { pendingDuplicateCommit = $0 },
+                    onDismiss: { duplicatePresentation = nil }
+                )
+            }
             .task {
                 await model.load()
                 synchronizeProviderSeeds()
@@ -310,6 +357,24 @@ struct EventEditorView: View {
             }
         } else if showsDelete {
             Section {
+                if model.canDuplicate {
+                    Button("Duplicate Event", systemImage: "plus.square.on.square") {
+                        let suggested = Calendar.current.date(
+                            byAdding: .weekOfYear,
+                            value: 1,
+                            to: model.start
+                        ) ?? model.start
+                        duplicatePresentation = .init(initialStart: suggested)
+                    }
+                    .disabled(isWriting || model.requiresDiscardConfirmation)
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("event-editor-duplicate")
+                    if model.requiresDiscardConfirmation {
+                        Text("Save or discard your edits before duplicating this event.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 if model.availableSaveScopes.count == 2 {
                     Picker("Delete", selection: $selectedDeleteScope) {
                         Text("This Event").tag(RecurrenceEditScope.thisOccurrence)
@@ -380,7 +445,11 @@ struct EventEditorView: View {
     private var dateComponents: DatePickerComponents { model.isAllDay ? [.date] : [.date, .hourAndMinute] }
 
     private var destinationHelp: String {
-        if model.destinationCalendarID != nil { return "Choose a writable calendar to move this event." }
+        if model.destinationCalendarID != nil {
+            return showsDelete
+                ? "Choose a writable calendar to move this event."
+                : "Choose the writable calendar for this new event."
+        }
         return showsDelete
             ? "Preserve Current keeps the event in \(model.currentCalendarTitle ?? "its current calendar")."
             : "System Default lets Apple Calendar choose the writable default calendar."
@@ -502,6 +571,12 @@ struct EventEditorView: View {
         else { onDismiss() }
     }
 
+    private func finishDuplicatePresentation() {
+        guard let commit = pendingDuplicateCommit else { return }
+        pendingDuplicateCommit = nil
+        model.finishDuplicateCommit(commit)
+    }
+
     private func addAlarm() {
         replacementAlarmOffsets.append(-600)
         model.alarmIntent = .replace(replacementAlarmOffsets)
@@ -528,7 +603,11 @@ struct EventEditorView: View {
     }
 
     private func synchronizeRecurrenceSeed(forceDefault: Bool = false) {
-        guard recurrenceChoice != .replace || model.recurrenceIntent == .preserve else { return }
+        if case let .replace(rule) = model.recurrenceIntent,
+           recurrenceChoice == .replace {
+            replacementRecurrence = rule
+            return
+        }
         if case let .editable(rule) = model.recurrenceSnapshot {
             replacementRecurrence = rule
         } else if forceDefault || !showsDelete {
@@ -595,6 +674,105 @@ struct EventEditorView: View {
     }
 
     private static let defaultRecurrence = RecurrenceRuleDraft(frequency: .daily, interval: 1, weekdays: [], endDate: nil)
+}
+
+private struct EventDuplicatePresentation: Identifiable {
+    let id = UUID()
+    let initialStart: Date
+}
+
+private struct EventDuplicateFlowView: View {
+    let sourceModel: EventEditorViewModel
+    let calendars: [CalendarDescriptor]
+    let onCommitted: @MainActor (EventEditorCommit) -> Void
+    let onDismiss: () -> Void
+
+    @State private var confirmedStart: Date
+    @State private var duplicateModel: EventEditorViewModel?
+    @State private var errorMessage: String?
+
+    init(
+        sourceModel: EventEditorViewModel,
+        calendars: [CalendarDescriptor],
+        initialStart: Date,
+        onCommitted: @escaping @MainActor (EventEditorCommit) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.sourceModel = sourceModel
+        self.calendars = calendars
+        self.onCommitted = onCommitted
+        self.onDismiss = onDismiss
+        _confirmedStart = State(initialValue: initialStart)
+    }
+
+    var body: some View {
+        if let duplicateModel {
+            AnyView(
+                EventEditorView(
+                    model: duplicateModel,
+                    calendars: calendars.filter {
+                        duplicateModel.creationDestinationCalendarIDs?
+                            .contains($0.id) ?? true
+                    },
+                    nilDestinationLabel: "Choose Calendar",
+                    showsDelete: false,
+                    isDuplicateCopy: true,
+                    onDismiss: onDismiss
+                )
+            )
+        } else {
+            NavigationStack {
+                Form {
+                    Section("New event") {
+                        DatePicker(
+                            "Starts",
+                            selection: $confirmedStart,
+                            displayedComponents: sourceModel.isAllDay
+                                ? [.date]
+                                : [.date, .hourAndMinute]
+                        )
+                        .accessibilityIdentifier("event-duplicate-start")
+                        Text("The copy starts with the same duration, details, alerts, repeat rule, color, and calendar. You can change them before saving.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let errorMessage {
+                        Section {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .navigationTitle("Duplicate Event")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", action: onDismiss)
+                            .frame(
+                                minWidth: CalendarTheme.minimumTapSize,
+                                minHeight: CalendarTheme.minimumTapSize
+                            )
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Review") {
+                            guard let model = sourceModel.makeDuplicate(
+                                confirmedStart: confirmedStart,
+                                onCommitted: onCommitted
+                            ) else {
+                                errorMessage = "The event details or destination could not be loaded. Try again."
+                                return
+                            }
+                            duplicateModel = model
+                        }
+                        .frame(
+                            minWidth: CalendarTheme.minimumTapSize,
+                            minHeight: CalendarTheme.minimumTapSize
+                        )
+                        .accessibilityIdentifier("event-duplicate-review")
+                    }
+                }
+            }
+        }
+    }
 }
 
 private enum EventAlarmChoice: Hashable {

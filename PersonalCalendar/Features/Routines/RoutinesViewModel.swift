@@ -103,6 +103,16 @@ final class RoutinesViewModel {
         self.rescheduleNotifications = rescheduleNotifications
     }
     var currentDay: LocalDay { LocalDay(date: now(), calendar: calendar) }
+    static func duplicateDraft(from snapshot: RoutineSnapshot) -> RoutineDraft {
+        RoutineDraft(
+            title: "\(snapshot.title) Copy",
+            weekdays: snapshot.weekdays,
+            window: snapshot.window,
+            reminderHour: snapshot.reminderHour,
+            reminderMinute: snapshot.reminderMinute,
+            categoryID: snapshot.categoryID
+        )
+    }
     var weekdayOrder: [Int] { (0..<7).map { ((calendar.firstWeekday - 1 + $0) % 7) + 1 } }
     func weekdayName(_ weekday: Int) -> String { calendar.weekdaySymbols[weekday - 1] }
     func windowName(_ window: RoutineWindow) -> String { switch window { case .morning: "Morning"; case .afternoon: "Afternoon"; case .evening: "Evening"; case .anytime: "Anytime" } }
@@ -167,12 +177,23 @@ final class RoutinesViewModel {
     }
 
     func create(_ draft: RoutineDraft) -> Bool {
+        create(draft, capturedProfileID: nil)
+    }
+
+    func create(_ draft: RoutineDraft, capturedProfileID: UUID) -> Bool {
+        create(draft, capturedProfileID: Optional(capturedProfileID))
+    }
+
+    private func create(
+        _ draft: RoutineDraft,
+        capturedProfileID: UUID?
+    ) -> Bool {
         guard valid(draft) else { failEditor(.create, draft: draft, message: "Enter a title, choose at least one day, and use a valid reminder time."); return false }
         let clean = normalized(draft)
         do {
             let id: UUID
             if let routineProfileMutations {
-                guard let profileID = selectedProfileID() else {
+                guard let profileID = capturedProfileID ?? selectedProfileID() else {
                     throw RoutineProfileMutationError.savedProfileRequired
                 }
                 id = try routineProfileMutations.create(draft: clean, profileID: profileID)

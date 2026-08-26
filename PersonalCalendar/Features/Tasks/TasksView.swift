@@ -325,10 +325,17 @@ struct TasksView: View {
     }
 
     private func openTask(_ task: ReminderSnapshot) {
+        let capturedProfileIdentity = environment.profileSelection.activeIdentity
+        let capturedScope = try? environment.profileScopes.resolve(capturedProfileIdentity)
         let editorModel = TaskEditorViewModel.editing(
             reminderID: task.id,
             service: environment.reminders,
             categories: environment.categories,
+            duplicateDestinationListIDs: capturedScope?.reminderListIDs ?? [],
+            resolveDuplicateDestinationListIDs: {
+                try environment.profileScopes
+                    .resolve(capturedProfileIdentity).reminderListIDs
+            },
             onCommitted: { commit in finishEditorAndReload(commit) },
             onReconciliationNeeded: reconcileEditorWithoutDismissing
         )

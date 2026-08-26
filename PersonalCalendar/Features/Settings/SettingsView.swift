@@ -46,6 +46,7 @@ struct SettingsView: View {
                     TimetableSettingsView(
                         snapshotCoordinator: environment.timetableSnapshotCoordinator,
                         activityCoordinator: environment.timetableLiveActivityCoordinator,
+                        settings: environment.settings,
                         initialProfileIdentity: environment.profileSelection.activeIdentity,
                         refresh: {
                             await environment.refreshCoordinator.refreshNow(reason: .localMutation)

@@ -77,6 +77,7 @@ final class EventEditorViewModel {
     private(set) var recurrenceDisplay: String?
     private(set) var currentCalendarID: String?
     private(set) var currentCalendarTitle: String?
+    private(set) var creationDestinationCalendarIDs: Set<String>?
     private(set) var alarmSnapshot: EventAlarmSnapshot = .none
     private(set) var recurrenceSnapshot: RecurrenceSnapshot = .none
     private(set) var availableCategories: [CategorySnapshot] = []
@@ -93,11 +94,28 @@ final class EventEditorViewModel {
         return reason
     }
 
+    var canDuplicate: Bool {
+        guard case .edit = mode,
+              let currentCalendarID,
+              duplicateDestinationCalendarIDs?.contains(currentCalendarID) == true,
+              let loadedSnapshot,
+              Self.supportsFaithfulDuplicate(loadedSnapshot) else { return false }
+        switch phase {
+        case .idle, .failed:
+            return true
+        case .confirming, .writing, .created, .updated, .deleted, .unavailable:
+            return false
+        }
+    }
+
     /// A local, side-effect-free preflight for the Save control. Provider
     /// authority (the live item and destination) is deliberately rechecked
     /// only by the mutation path immediately before a write.
     var canSave: Bool {
-        acceptsActions && hasRequiredCreationDestination && formValidationError() == nil
+        acceptsActions
+            && hasRequiredCreationDestination
+            && hasLocallyAllowedCreationDestination
+            && formValidationError() == nil
     }
 
     /// The exact scope whose consent is currently being requested. Confirmation
@@ -128,8 +146,12 @@ final class EventEditorViewModel {
     @ObservationIgnored private let requiresExplicitCreationDestination: Bool
     @ObservationIgnored private let onCommitted: @MainActor (EventEditorCommit) -> Void
     @ObservationIgnored private let onReconciliationNeeded: @MainActor () -> Void
+    @ObservationIgnored private let resolveCreationDestinationCalendarIDs: (@MainActor () throws -> Set<String>)?
+    @ObservationIgnored private let duplicateDestinationCalendarIDs: Set<String>?
+    @ObservationIgnored private let resolveDuplicateDestinationCalendarIDs: (@MainActor () throws -> Set<String>)?
     @ObservationIgnored private var cleanBaseline: FormState
     @ObservationIgnored private var didLoad = false
+    @ObservationIgnored private var loadedSnapshot: CalendarEventSnapshot?
     @ObservationIgnored private var didCommit = false
     @ObservationIgnored private var didRequestReconciliation = false
     @ObservationIgnored private var discardWasConfirmed = false
@@ -148,12 +170,20 @@ final class EventEditorViewModel {
         initialEnd: Date,
         initialIsAllDay: Bool,
         categories: (any CategoryRepository)?,
+        creationDestinationCalendarIDs: Set<String>? = nil,
+        resolveCreationDestinationCalendarIDs: (@MainActor () throws -> Set<String>)? = nil,
+        duplicateDestinationCalendarIDs: Set<String>? = nil,
+        resolveDuplicateDestinationCalendarIDs: (@MainActor () throws -> Set<String>)? = nil,
         onCommitted: @escaping @MainActor (EventEditorCommit) -> Void = { _ in },
         onReconciliationNeeded: @escaping @MainActor () -> Void = {}
     ) {
         self.mode = mode
         self.service = service
         self.categories = categories
+        self.creationDestinationCalendarIDs = creationDestinationCalendarIDs
+        self.resolveCreationDestinationCalendarIDs = resolveCreationDestinationCalendarIDs
+        self.duplicateDestinationCalendarIDs = duplicateDestinationCalendarIDs
+        self.resolveDuplicateDestinationCalendarIDs = resolveDuplicateDestinationCalendarIDs
         self.requiresExplicitCreationDestination = requiresExplicitCreationDestination
         self.onCommitted = onCommitted
         self.onReconciliationNeeded = onReconciliationNeeded
@@ -185,6 +215,10 @@ final class EventEditorViewModel {
         service: any CalendarServicing,
         savedDefaultCalendarID: String?,
         creationProfile: CreationProfileContext? = nil,
+        initialDraft: EventDraft? = nil,
+        initialCategoryID: UUID? = nil,
+        creationDestinationCalendarIDs: Set<String>? = nil,
+        resolveCreationDestinationCalendarIDs: (@MainActor () throws -> Set<String>)? = nil,
         initialStart: Date = .now,
         initialEnd: Date? = nil,
         isAllDay: Bool = false,
@@ -198,23 +232,234 @@ final class EventEditorViewModel {
             preferredDefaultCalendarID = savedDefaultCalendarID
         }
 
-        return EventEditorViewModel(
+        let allowedCalendarIDs = creationDestinationCalendarIDs
+            ?? creationProfile?.memberCalendarIDs
+        let seededStart = initialDraft?.start ?? initialStart
+        let seededEnd = initialDraft?.end
+            ?? initialEnd
+            ?? seededStart.addingTimeInterval(3_600)
+        let model = EventEditorViewModel(
             mode: .create,
             service: service,
             savedDefaultCalendarID: preferredDefaultCalendarID,
-            requiresExplicitCreationDestination: creationProfile?.requiresExplicitCalendarDestination == true,
-            initialStart: initialStart,
-            initialEnd: initialEnd ?? initialStart.addingTimeInterval(3_600),
-            initialIsAllDay: isAllDay,
+            requiresExplicitCreationDestination: initialDraft != nil
+                || creationProfile?.requiresExplicitCalendarDestination == true,
+            initialStart: seededStart,
+            initialEnd: seededEnd,
+            initialIsAllDay: initialDraft?.isAllDay ?? isAllDay,
             categories: categories,
+            creationDestinationCalendarIDs: allowedCalendarIDs,
+            resolveCreationDestinationCalendarIDs: resolveCreationDestinationCalendarIDs,
             onCommitted: onCommitted
         )
+
+        if let initialDraft {
+            model.title = initialDraft.title
+            model.start = initialDraft.start
+            model.end = initialDraft.end
+            model.isAllDay = initialDraft.isAllDay
+            model.notes = initialDraft.notes
+            model.location = initialDraft.location
+            model.url = initialDraft.url
+            model.alarmIntent = initialDraft.alarms
+            model.recurrenceIntent = initialDraft.recurrence
+            model.destinationCalendarID = Self.validCreationCalendarID(
+                initialDraft.calendarID,
+                service: service,
+                allowedCalendarIDs: allowedCalendarIDs
+            )
+            if let initialCategoryID,
+               model.availableCategories.contains(where: { $0.id == initialCategoryID }) {
+                model.categoryID = initialCategoryID
+            }
+            model.cleanBaseline = model.formState
+        }
+        return model
+    }
+
+    static func duplicateDraft(
+        from snapshot: CalendarEventSnapshot,
+        confirmedStart: Date,
+        destinationCalendarID: String?,
+        calendar: Calendar = .current
+    ) -> EventDraft {
+        precondition(
+            supportsFaithfulDuplicate(snapshot),
+            "Unsupported provider metadata must not be silently discarded."
+        )
+        let copiedStart: Date
+        let copiedEnd: Date
+        if snapshot.isAllDay {
+            let sourceStart = calendar.startOfDay(for: snapshot.start)
+            let sourceEnd = calendar.startOfDay(for: snapshot.end)
+            let dayCount = max(
+                1,
+                calendar.dateComponents(
+                    [.day],
+                    from: sourceStart,
+                    to: sourceEnd
+                ).day ?? 1
+            )
+            copiedStart = calendar.startOfDay(for: confirmedStart)
+            copiedEnd = calendar.date(
+                byAdding: .day,
+                value: dayCount,
+                to: copiedStart
+            ) ?? copiedStart.addingTimeInterval(TimeInterval(dayCount * 86_400))
+        } else {
+            let duration = max(0, snapshot.end.timeIntervalSince(snapshot.start))
+            copiedStart = confirmedStart
+            copiedEnd = confirmedStart.addingTimeInterval(duration)
+        }
+        return EventDraft(
+            title: snapshot.title,
+            start: copiedStart,
+            end: copiedEnd,
+            isAllDay: snapshot.isAllDay,
+            calendarID: destinationCalendarID,
+            notes: snapshot.notes,
+            location: snapshot.location,
+            url: snapshot.url,
+            alarms: duplicateAlarmIntent(snapshot.alarms),
+            recurrence: duplicateRecurrenceIntent(
+                snapshot.recurrence,
+                sourceStart: snapshot.start,
+                confirmedStart: copiedStart,
+                calendar: calendar
+            )
+        )
+    }
+
+    func makeDuplicate(
+        confirmedStart: Date,
+        onCommitted duplicateCommitted: @escaping @MainActor (EventEditorCommit) -> Void
+    ) -> EventEditorViewModel? {
+        guard canDuplicate,
+              service.accessState == .granted,
+              case let .edit(displayID) = mode,
+              let snapshot = service.event(id: displayID),
+              snapshot.allowsModification,
+              snapshot.mutationID != nil,
+              Self.supportsFaithfulDuplicate(snapshot),
+              service.calendars().contains(where: {
+                  $0.id == snapshot.calendarID && $0.allowsContentModifications
+              }) else {
+            return nil
+        }
+        let allowedCalendarIDs: Set<String>?
+        do {
+            allowedCalendarIDs = try liveDuplicateDestinationCalendarIDs()
+        } catch {
+            return nil
+        }
+        guard allowedCalendarIDs?.contains(snapshot.calendarID) ?? true else {
+            return nil
+        }
+
+        let copiedCategoryID: UUID?
+        do {
+            if let categories, let externalID = snapshot.mutationID {
+                _ = try categories.list()
+                copiedCategoryID = try categories.category(
+                    for: .event,
+                    externalID: externalID
+                )?.id
+            } else {
+                copiedCategoryID = nil
+            }
+        } catch {
+            return nil
+        }
+        return Self.create(
+            service: service,
+            savedDefaultCalendarID: nil,
+            initialDraft: Self.duplicateDraft(
+                from: snapshot,
+                confirmedStart: confirmedStart,
+                destinationCalendarID: snapshot.calendarID
+            ),
+            initialCategoryID: copiedCategoryID,
+            creationDestinationCalendarIDs: allowedCalendarIDs,
+            resolveCreationDestinationCalendarIDs:
+                resolveDuplicateDestinationCalendarIDs,
+            categories: categories,
+            onCommitted: duplicateCommitted
+        )
+    }
+
+    func finishDuplicateCommit(_ commit: EventEditorCommit) {
+        onCommitted(commit)
+    }
+
+    private static func validCreationCalendarID(
+        _ id: String?,
+        service: any CalendarServicing,
+        allowedCalendarIDs: Set<String>?
+    ) -> String? {
+        guard let id,
+              service.accessState == .granted,
+              service.calendars().contains(where: {
+                  $0.id == id && $0.allowsContentModifications
+              }),
+              allowedCalendarIDs?.contains(id) ?? true else {
+            return nil
+        }
+        return id
+    }
+
+    private static func duplicateAlarmIntent(
+        _ snapshot: EventAlarmSnapshot
+    ) -> EventAlarmMutationIntent {
+        switch snapshot {
+        case .none, .unsupported:
+            return .clear
+        case let .editable(offsets):
+            return .replace(offsets)
+        }
+    }
+
+    private static func duplicateRecurrenceIntent(
+        _ snapshot: RecurrenceSnapshot,
+        sourceStart: Date,
+        confirmedStart: Date,
+        calendar: Calendar
+    ) -> RecurrenceMutationIntent {
+        switch snapshot {
+        case .none, .unsupported:
+            return .clear
+        case .editable(var rule):
+            if let endDate = rule.endDate {
+                let sourceDay = calendar.startOfDay(for: sourceStart)
+                let confirmedDay = calendar.startOfDay(for: confirmedStart)
+                let dayDelta = calendar.dateComponents(
+                    [.day],
+                    from: sourceDay,
+                    to: confirmedDay
+                ).day ?? 0
+                rule.endDate = calendar.date(
+                    byAdding: .day,
+                    value: dayDelta,
+                    to: endDate
+                )
+            }
+            return .replace(rule)
+        }
+    }
+
+    private static func supportsFaithfulDuplicate(
+        _ snapshot: CalendarEventSnapshot
+    ) -> Bool {
+        if case .unsupported = snapshot.alarms { return false }
+        if case .unsupported = snapshot.recurrence { return false }
+        return true
     }
 
     static func edit(
         displayID: String,
         service: any CalendarServicing,
         categories: (any CategoryRepository)? = nil,
+        duplicateDestinationCalendarIDs: Set<String>? = nil,
+        resolveDuplicateDestinationCalendarIDs: (@MainActor () throws -> Set<String>)? = nil,
         onCommitted: @escaping @MainActor (EventEditorCommit) -> Void = { _ in },
         onReconciliationNeeded: @escaping @MainActor () -> Void = {}
     ) -> EventEditorViewModel {
@@ -226,6 +471,9 @@ final class EventEditorViewModel {
             initialEnd: initialStart.addingTimeInterval(3_600),
             initialIsAllDay: false,
             categories: categories,
+            duplicateDestinationCalendarIDs: duplicateDestinationCalendarIDs,
+            resolveDuplicateDestinationCalendarIDs:
+                resolveDuplicateDestinationCalendarIDs,
             onCommitted: onCommitted,
             onReconciliationNeeded: onReconciliationNeeded
         )
@@ -243,6 +491,7 @@ final class EventEditorViewModel {
             return
         }
 
+        loadedSnapshot = snapshot
         applyReadable(snapshot)
         cleanBaseline = formState
         if snapshot.mutationID == nil {
@@ -366,6 +615,20 @@ final class EventEditorViewModel {
         return destinationCalendarID != nil
     }
 
+    private var hasLocallyAllowedCreationDestination: Bool {
+        guard case .create = mode,
+              let creationDestinationCalendarIDs,
+              let destinationCalendarID else { return true }
+        return creationDestinationCalendarIDs.contains(destinationCalendarID)
+    }
+
+    private func liveDuplicateDestinationCalendarIDs() throws -> Set<String>? {
+        if let resolveDuplicateDestinationCalendarIDs {
+            return try resolveDuplicateDestinationCalendarIDs()
+        }
+        return duplicateDestinationCalendarIDs
+    }
+
     private func resolveCurrentForMutation() -> CalendarEventSnapshot? {
         guard service.accessState == .granted else {
             phase = .unavailable(reason: .accessUnavailable)
@@ -384,6 +647,7 @@ final class EventEditorViewModel {
             phase = .unavailable(reason: .readOnlySource)
             return nil
         }
+        loadedSnapshot = snapshot
         return snapshot
     }
 
@@ -442,6 +706,25 @@ final class EventEditorViewModel {
         guard service.calendars().contains(where: { $0.id == destinationCalendarID && $0.allowsContentModifications }) else {
             phase = .failed(action: .save, error: .invalidDestination)
             return false
+        }
+        if case .create = mode,
+           let creationDestinationCalendarIDs,
+           !creationDestinationCalendarIDs.contains(destinationCalendarID) {
+            phase = .failed(action: .save, error: .invalidDestination)
+            return false
+        }
+        if case .create = mode,
+           let resolveCreationDestinationCalendarIDs {
+            do {
+                guard try resolveCreationDestinationCalendarIDs()
+                    .contains(destinationCalendarID) else {
+                    phase = .failed(action: .save, error: .invalidDestination)
+                    return false
+                }
+            } catch {
+                phase = .failed(action: .save, error: .invalidDestination)
+                return false
+            }
         }
         return true
     }
@@ -580,6 +863,7 @@ final class EventEditorViewModel {
     }
 
     private func becomeItemGone() {
+        loadedSnapshot = nil
         pendingConfirmation = nil
         retryAction = nil
         phase = .unavailable(reason: .itemGone)
