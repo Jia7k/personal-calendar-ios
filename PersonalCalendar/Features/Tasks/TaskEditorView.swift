@@ -45,6 +45,7 @@ struct TaskEditorView: View {
                 mutationSection
                 failureSection
             }
+            .accessibilityIdentifier("task-editor-form")
             .navigationTitle(showsDelete ? "Task" : "New Task")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

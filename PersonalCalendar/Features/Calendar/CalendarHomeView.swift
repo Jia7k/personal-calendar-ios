@@ -131,6 +131,11 @@ struct CalendarHomeView: View {
                 guard dynamicTypeSize.isAccessibilitySize else { return }
                 proxy.scrollTo(selectedDay, anchor: .center)
             }
+            .task {
+                guard dynamicTypeSize.isAccessibilitySize else { return }
+                await Task.yield()
+                proxy.scrollTo(viewModel.selectedDay, anchor: .center)
+            }
         }
     }
 

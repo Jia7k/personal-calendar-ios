@@ -23,12 +23,17 @@ final class FoundationFlowUITests: XCTestCase {
     func testShowOnboardingUsesContinueForTerminalAccess() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-show-onboarding", "-calendar-denied"]
+        app.terminate()
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Calendar"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["Continue"].exists)
-        XCTAssertFalse(app.buttons["Not Now"].exists)
-        app.buttons["Continue"].tap()
+        let heading = app.staticTexts["onboarding-heading"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 3))
+        XCTAssertEqual(heading.label, "Calendar")
+        let primary = app.buttons["onboarding-primary"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 3))
+        XCTAssertEqual(primary.label, "Continue")
+        XCTAssertFalse(app.buttons["onboarding-not-now"].exists)
+        primary.tap()
         XCTAssertTrue(app.staticTexts["Reminders"].waitForExistence(timeout: 2))
     }
 
@@ -736,18 +741,20 @@ final class FoundationFlowUITests: XCTestCase {
         scrollToHittable(recurringTask, in: app)
         recurringTask.tap()
 
+        let form = app.descendants(matching: .any)["task-editor-form"]
+        XCTAssertTrue(form.waitForExistence(timeout: 3))
         let schedule = app.descendants(matching: .any)["task-editor-schedule-intent"]
-        scrollToHittable(schedule, in: app)
+        scrollToHittable(schedule, in: form)
         let recurrence = app.descendants(matching: .any)["task-editor-recurrence-intent"]
-        scrollToHittable(recurrence, in: app)
+        scrollToHittable(recurrence, in: form)
         let recurringDeleteCopy = app.staticTexts["Deleting this task removes the repeating reminder."]
-        scrollToHittable(recurringDeleteCopy, in: app)
+        scrollToHittable(recurringDeleteCopy, in: form)
 
         let save = app.buttons["task-editor-save"]
         XCTAssertTrue(save.waitForExistence(timeout: 3))
         XCTAssertTrue(save.isHittable)
         let delete = app.buttons["task-editor-delete"]
-        scrollToHittable(delete, in: app)
+        scrollToHittable(delete, in: form)
     }
 
     private func openAndParseQuickEntry(
@@ -805,8 +812,8 @@ final class FoundationFlowUITests: XCTestCase {
         wait(for: [expectation], timeout: timeout)
     }
 
-    private func scrollToHittable(_ element: XCUIElement, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
-        for _ in 0..<12 where !element.isHittable { app.swipeUp() }
+    private func scrollToHittable(_ element: XCUIElement, in container: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        for _ in 0..<12 where !element.isHittable { container.swipeUp() }
         XCTAssertTrue(element.isHittable, "Expected \(element) to be reachable and hittable", file: file, line: line)
     }
 
