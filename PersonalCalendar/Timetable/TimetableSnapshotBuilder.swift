@@ -2,6 +2,15 @@ import Foundation
 
 struct TimetableSnapshotBuilder: Sendable {
     let calendar: Calendar
+    let maximumEncodedBytes: Int
+
+    init(
+        calendar: Calendar,
+        maximumEncodedBytes: Int = 256 * 1_024
+    ) {
+        self.calendar = calendar
+        self.maximumEncodedBytes = max(0, maximumEncodedBytes)
+    }
 
     private struct EntryCandidate: Hashable {
         let displayID: String
@@ -46,18 +55,18 @@ struct TimetableSnapshotBuilder: Sendable {
             .map(entryCandidate)
             .sorted(by: candidateOrder)
         var seen = Set<String>()
-        let unique = candidates.filter { seen.insert($0.displayID).inserted }
+        let unique = candidates.filter { candidate in
+            seen.insert(routeID(for: candidate)).inserted
+        }
         let entries = unique.enumerated().map {
             makeEntry(ordinal: $0.offset, identity: $0.element)
         }
 
-        return TimetableSnapshotV1(
-            version: TimetableSnapshotV1.currentVersion,
+        return snapshotWithinBudget(
+            entries: entries,
             availability: entries.isEmpty ? .noClasses : .ready,
-            generatedAt: now,
-            weekStart: interval.start,
-            timeZoneIdentifier: calendar.timeZone.identifier,
-            entries: Array(entries.prefix(12))
+            now: now,
+            interval: interval
         )
     }
 
@@ -81,7 +90,8 @@ struct TimetableSnapshotBuilder: Sendable {
             generatedAt: now,
             weekStart: interval.start,
             timeZoneIdentifier: calendar.timeZone.identifier,
-            entries: []
+            entries: [],
+            omittedEntryCount: 0
         )
     }
 
@@ -104,7 +114,7 @@ struct TimetableSnapshotBuilder: Sendable {
     }
 
     private func makeEntry(ordinal: Int, identity: EntryCandidate) -> TimetableEntry {
-        let milliseconds = Int64((identity.start.timeIntervalSince1970 * 1_000).rounded())
+        let milliseconds = boundedMilliseconds(for: identity.start)
 
         return TimetableEntry(
             id: "occurrence:\(milliseconds):\(ordinal)",
@@ -112,8 +122,58 @@ struct TimetableSnapshotBuilder: Sendable {
             shortTitle: shortTitle(for: identity.title),
             start: identity.start,
             end: identity.end,
-            location: identity.location
+            location: identity.location,
+            routeID: routeID(for: identity)
         )
+    }
+
+    private func snapshotWithinBudget(
+        entries: [TimetableEntry],
+        availability: TimetableAvailability,
+        now: Date,
+        interval: DateInterval
+    ) -> TimetableSnapshotV1 {
+        var retainedEntries = entries
+
+        while true {
+            let snapshot = TimetableSnapshotV1(
+                version: TimetableSnapshotV1.currentVersion,
+                availability: availability,
+                generatedAt: now,
+                weekStart: interval.start,
+                timeZoneIdentifier: calendar.timeZone.identifier,
+                entries: retainedEntries,
+                omittedEntryCount: entries.count - retainedEntries.count
+            )
+            if encodedSize(of: snapshot) <= maximumEncodedBytes {
+                return snapshot
+            }
+            // An empty schema envelope has irreducible overhead. Preserve the truthful
+            // ready/omitted state when a caller supplies a smaller, impossible budget.
+            guard !retainedEntries.isEmpty else { return snapshot }
+            retainedEntries.removeLast()
+        }
+    }
+
+    private func encodedSize(of snapshot: TimetableSnapshotV1) -> Int {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(snapshot).count) ?? .max
+    }
+
+    private func routeID(for candidate: EntryCandidate) -> String {
+        AppRouteEntryIdentity.make(
+            displayID: candidate.displayID,
+            occurrenceStart: candidate.start
+        )
+    }
+
+    private func boundedMilliseconds(for date: Date) -> Int64 {
+        let scaled = date.timeIntervalSince1970 * 1_000
+        if scaled >= Double(Int64.max) { return .max }
+        if scaled <= Double(Int64.min) { return .min }
+        return Int64(scaled.rounded())
     }
 
     private func shortTitle(for title: String) -> String {
@@ -143,8 +203,17 @@ struct TimetableSnapshotBuilder: Sendable {
         if left.start != right.start { return left.start < right.start }
         if left.end != right.end { return left.end < right.end }
         if left.title != right.title { return left.title < right.title }
-        let locationOrder = (left.location ?? "").localizedCaseInsensitiveCompare(right.location ?? "")
-        if locationOrder != .orderedSame { return locationOrder == .orderedAscending }
+        let leftLocation = left.location ?? ""
+        let rightLocation = right.location ?? ""
+        let leftLocationKey = stableTextKey(leftLocation)
+        let rightLocationKey = stableTextKey(rightLocation)
+        if leftLocationKey != rightLocationKey { return leftLocationKey < rightLocationKey }
+        if leftLocation != rightLocation { return leftLocation < rightLocation }
         return left.displayID < right.displayID
+    }
+
+    private func stableTextKey(_ value: String) -> String {
+        value.precomposedStringWithCanonicalMapping
+            .lowercased(with: Locale(identifier: "en_US_POSIX"))
     }
 }

@@ -9,8 +9,6 @@ struct TimeRailsView: View {
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
     private let weekdayLabels = ["M", "T", "W", "T", "F"]
-    private let railStartHour = 9
-    private let railEndHour = 18
 
     init(
         snapshot: TimetableSnapshotV1,
@@ -25,34 +23,55 @@ struct TimeRailsView: View {
     }
 
     var body: some View {
+        let layout = TimeRailsLayout(calendar: localCalendar, snapshot: snapshot)
+        let placements = layout.placements(snapshot: snapshot)
+
         VStack(spacing: 4) {
-            HStack {
+            HStack(spacing: 5) {
                 Text(profileName.uppercased())
                     .font(.caption2.weight(.bold))
                     .lineLimit(1)
-                Spacer()
+                Spacer(minLength: 2)
+                if usesCompressedScale(layout) {
+                    compressedScaleBadge(layout)
+                }
                 Text(snapshot.weekStart, format: .dateTime.month(.abbreviated).day())
                     .font(.caption2)
             }
 
             HStack(spacing: 4) {
-                timeScale
-                    .frame(width: 20)
+                timeScale(layout)
+                    .frame(width: 22)
                 HStack(spacing: 3) {
                     ForEach(0..<5, id: \.self) { index in
-                        dayRail(index: index)
+                        dayRail(
+                            index: index,
+                            layout: layout,
+                            placements: placements.filter { $0.weekdayIndex == index }
+                        )
                     }
                 }
             }
 
-            if showsStatusStrip {
-                statusStrip
+            if showsStatusStrip || snapshot.omittedEntryCount > 0 {
+                HStack(spacing: 6) {
+                    if showsStatusStrip {
+                        statusStrip
+                    }
+                    if snapshot.omittedEntryCount > 0 {
+                        omittedIndicator
+                    }
+                }
             }
         }
         .foregroundStyle(.white)
     }
 
-    private func dayRail(index: Int) -> some View {
+    private func dayRail(
+        index: Int,
+        layout: TimeRailsLayout,
+        placements: [TimeRailPlacement]
+    ) -> some View {
         VStack(spacing: 2) {
             Text(weekdayLabels[index])
                 .font(.caption2.weight(.bold))
@@ -61,13 +80,21 @@ struct TimeRailsView: View {
                 ZStack(alignment: .top) {
                     RoundedRectangle(cornerRadius: 5)
                         .fill(.white.opacity(isLuminanceReduced ? 0.02 : 0.08))
-                    ForEach(placements(for: index), id: \.entry.id) { placement in
-                        let height = max(proxy.size.height * placement.heightFraction, 10)
+                    ForEach(placements, id: \.entry.id) { placement in
+                        let height = min(
+                            max(proxy.size.height * placement.heightFraction, 10),
+                            proxy.size.height
+                        )
+                        let offset = min(
+                            max(proxy.size.height * placement.startFraction, 0),
+                            max(proxy.size.height - height, 0)
+                        )
                         Text(placement.entry.shortTitle)
                             .font(.system(size: 8, weight: .bold, design: .rounded))
                             .minimumScaleFactor(0.7)
-                            .frame(maxWidth: .infinity, minHeight: height, alignment: .top)
                             .padding(.top, 2)
+                            .frame(height: height, alignment: .top)
+                            .frame(maxWidth: .infinity)
                             .background {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(blockFill(for: placement.entry))
@@ -78,10 +105,11 @@ struct TimeRailsView: View {
                                         }
                                     }
                             }
-                            .offset(y: proxy.size.height * placement.startFraction)
+                            .offset(y: offset)
                     }
-                    currentTimeLine(height: proxy.size.height, index: index)
+                    currentTimeLine(height: proxy.size.height, index: index, layout: layout)
                 }
+                .clipped()
             }
         }
     }
@@ -102,26 +130,31 @@ struct TimeRailsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var timeScale: some View {
+    private var omittedIndicator: some View {
+        Text("+\(snapshot.omittedEntryCount) more")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white.opacity(0.78))
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityLabel(omittedAccessibilityLabel)
+    }
+
+    private func timeScale(_ layout: TimeRailsLayout) -> some View {
         VStack(spacing: 0) {
             Color.clear.frame(height: 14)
             GeometryReader { proxy in
                 ZStack(alignment: .topTrailing) {
-                    Text("09").offset(y: -4)
-                    Text("13").offset(y: proxy.size.height * (4.0 / 9.0) - 4)
-                    Text("18").offset(y: proxy.size.height - 8)
+                    Text(hourLabel(layout.startMinute)).offset(y: -4)
+                    Text(hourLabel(middleMinute(layout)))
+                        .offset(y: proxy.size.height * middleFraction(layout) - 4)
+                    Text(hourLabel(layout.endMinute)).offset(y: proxy.size.height - 8)
                 }
                 .font(.system(size: 7, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.56))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
-    }
-
-    private func placements(for index: Int) -> [TimeRailPlacement] {
-        TimeRailsLayout(calendar: localCalendar, startHour: railStartHour, endHour: railEndHour)
-            .placements(snapshot: snapshot)
-            .filter { $0.weekdayIndex == index }
+        .accessibilityHidden(true)
     }
 
     private func isCurrent(_ entry: TimetableEntry) -> Bool {
@@ -129,8 +162,12 @@ struct TimeRailsView: View {
     }
 
     @ViewBuilder
-    private func currentTimeLine(height: CGFloat, index: Int) -> some View {
-        if index == todayIndex, let fraction = currentTimeFraction {
+    private func currentTimeLine(
+        height: CGFloat,
+        index: Int,
+        layout: TimeRailsLayout
+    ) -> some View {
+        if index == todayIndex, let fraction = layout.fraction(for: now) {
             Rectangle()
                 .fill(.white)
                 .frame(height: isLuminanceReduced ? 2 : 1)
@@ -163,26 +200,43 @@ struct TimeRailsView: View {
         return (0..<5).contains(value) ? value : nil
     }
 
-    private var currentTimeFraction: CGFloat? {
-        let dayStart = localCalendar.startOfDay(for: now)
-        guard
-            let railStart = localCalendar.date(
-                bySettingHour: railStartHour,
-                minute: 0,
-                second: 0,
-                of: dayStart
-            ),
-            let railEnd = localCalendar.date(
-                bySettingHour: railEndHour,
-                minute: 0,
-                second: 0,
-                of: dayStart
-            ),
-            railStart <= now,
-            now <= railEnd
-        else { return nil }
+    private func usesCompressedScale(_ layout: TimeRailsLayout) -> Bool {
+        layout.startMinute < 8 * 60 || layout.endMinute > 18 * 60
+    }
 
-        return CGFloat(now.timeIntervalSince(railStart) / railEnd.timeIntervalSince(railStart))
+    private func compressedScaleBadge(_ layout: TimeRailsLayout) -> some View {
+        Text("FIT \(hourLabel(layout.startMinute))–\(hourLabel(layout.endMinute))")
+            .font(.system(size: 7, weight: .bold, design: .rounded))
+            .foregroundStyle(.white.opacity(0.78))
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(.white.opacity(isLuminanceReduced ? 0.04 : 0.1), in: Capsule())
+            .fixedSize()
+            .accessibilityLabel(
+                "Timeline compressed from \(hourLabel(layout.startMinute)):00 "
+                    + "to \(hourLabel(layout.endMinute)):00"
+            )
+    }
+
+    private func middleMinute(_ layout: TimeRailsLayout) -> Int {
+        let midpoint = (layout.startMinute + layout.endMinute) / 2
+        let rounded = ((midpoint + 30) / 60) * 60
+        return min(layout.endMinute - 60, max(layout.startMinute + 60, rounded))
+    }
+
+    private func middleFraction(_ layout: TimeRailsLayout) -> CGFloat {
+        CGFloat(middleMinute(layout) - layout.startMinute)
+            / CGFloat(layout.endMinute - layout.startMinute)
+    }
+
+    private func hourLabel(_ minute: Int) -> String {
+        let hour = minute / 60
+        return hour < 10 ? "0\(hour)" : "\(hour)"
+    }
+
+    private var omittedAccessibilityLabel: String {
+        let noun = snapshot.omittedEntryCount == 1 ? "event" : "events"
+        return "\(snapshot.omittedEntryCount) additional timetable \(noun) omitted"
     }
 
     private var railAccent: Color {

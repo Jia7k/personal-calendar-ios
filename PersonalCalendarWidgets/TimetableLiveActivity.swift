@@ -6,8 +6,8 @@ struct TimetableLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: TimetableActivityAttributes.self) { context in
             TimetableLockScreenView(
-                snapshot: context.state.snapshot,
-                profileName: context.attributes.profileName
+                state: context.state,
+                attributes: context.attributes
             )
                 .privacySensitive()
                 .activityBackgroundTint(.black.opacity(0.82))
@@ -16,23 +16,23 @@ struct TimetableLiveActivity: Widget {
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     CourseStatusCode(
-                        snapshot: context.state.snapshot,
+                        state: context.state,
                         profileName: context.attributes.profileName
                     )
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    CourseBoundaryTimer(snapshot: context.state.snapshot)
+                    CourseBoundaryTimer(state: context.state)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    CourseStatusDetail(snapshot: context.state.snapshot)
+                    CourseStatusDetail(state: context.state)
                 }
             } compactLeading: {
                 CourseStatusCode(
-                    snapshot: context.state.snapshot,
+                    state: context.state,
                     profileName: context.attributes.profileName
                 )
             } compactTrailing: {
-                CourseBoundaryTimer(snapshot: context.state.snapshot)
+                CourseBoundaryTimer(state: context.state)
             } minimal: {
                 Circle()
                     .fill(Color(red: 0.38, green: 0.73, blue: 0.68))
@@ -44,42 +44,50 @@ struct TimetableLiveActivity: Widget {
 }
 
 private struct TimetableLockScreenView: View {
-    let snapshot: TimetableSnapshotV1
-    let profileName: String
+    let state: TimetableActivityAttributes.ContentState
+    let attributes: TimetableActivityAttributes
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            TimeRailsView(
-                snapshot: snapshot,
-                now: context.date,
-                showsStatusStrip: true,
-                profileName: profileName
-            )
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .frame(height: 148)
+            VStack(spacing: 2) {
+                TimeRailsView(
+                    snapshot: compactSnapshot(state: state, attributes: attributes),
+                    now: context.date,
+                    showsStatusStrip: true,
+                    profileName: attributes.profileName
+                )
+                ActivityProjectionStatus(
+                    state: state,
+                    now: context.date,
+                    showsOmissions: false
+                )
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(height: 148)
+            .environment(\.timeZone, activityTimeZone)
         }
+    }
+
+    private var activityTimeZone: TimeZone {
+        TimeZone(identifier: attributes.timeZoneIdentifier) ?? .current
     }
 }
 
 private struct CourseStatusCode: View {
-    let snapshot: TimetableSnapshotV1
+    let state: TimetableActivityAttributes.ContentState
     let profileName: String
 
     var body: some View {
-        Text(moment.entry?.shortTitle ?? profileName.uppercased())
+        Text(state.entry(at: .now)?.shortTitle ?? profileName.uppercased())
             .font(.caption.weight(.heavy))
             .foregroundStyle(.white)
             .privacySensitive()
     }
-
-    private var moment: TimetableMoment {
-        snapshot.moment(at: .now, calendar: calendar(for: snapshot))
-    }
 }
 
 private struct CourseBoundaryTimer: View {
-    let snapshot: TimetableSnapshotV1
+    let state: TimetableActivityAttributes.ContentState
 
     var body: some View {
         if let boundary {
@@ -94,20 +102,18 @@ private struct CourseBoundaryTimer: View {
     }
 
     private var boundary: Date? {
-        switch snapshot.moment(at: .now, calendar: calendar(for: snapshot)) {
-        case let .current(entry): entry.end
-        case let .next(entry), let .gap(entry): entry.start
-        case .none: nil
-        }
+        let now = Date.now
+        guard let entry = state.entry(at: now) else { return nil }
+        return entry.start <= now ? entry.end : entry.start
     }
 }
 
 private struct CourseStatusDetail: View {
-    let snapshot: TimetableSnapshotV1
+    let state: TimetableActivityAttributes.ContentState
 
     var body: some View {
-        if let entry = moment.entry {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 2) {
+            if let entry = state.entry(at: .now) {
                 Text(entry.title)
                     .font(.subheadline.weight(.semibold))
                 HStack(spacing: 5) {
@@ -121,24 +127,73 @@ private struct CourseStatusDetail: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            } else {
+                Text("No more events today")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .privacySensitive()
-        } else {
-            Text("No more events today")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            ActivityProjectionStatus(state: state, now: .now)
         }
-    }
-
-    private var moment: TimetableMoment {
-        snapshot.moment(at: .now, calendar: calendar(for: snapshot))
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .privacySensitive()
     }
 }
 
-private func calendar(for snapshot: TimetableSnapshotV1) -> Calendar {
-    var value = Calendar(identifier: .gregorian)
-    value.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .current
-    return value
+private struct ActivityProjectionStatus: View {
+    let state: TimetableActivityAttributes.ContentState
+    let now: Date
+    var showsOmissions = true
+
+    var body: some View {
+        if (showsOmissions && state.omittedEntryCount > 0)
+            || state.sourceOmittedEntryCount > 0
+            || state.freshness(at: now) == .stale {
+            HStack(spacing: 6) {
+                if showsOmissions && state.omittedEntryCount > 0 {
+                    Text("+\(state.omittedEntryCount) more today")
+                }
+                if state.sourceOmittedEntryCount > 0 {
+                    Text(sourceOmissionText)
+                }
+                if state.freshness(at: now) == .stale {
+                    Text("Open Personal Calendar to refresh")
+                }
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private var sourceOmissionText: String {
+        let noun = state.sourceOmittedEntryCount == 1 ? "event" : "events"
+        return "\(state.sourceOmittedEntryCount) weekly \(noun) not shown"
+    }
+}
+
+private func compactSnapshot(
+    state: TimetableActivityAttributes.ContentState,
+    attributes: TimetableActivityAttributes
+) -> TimetableSnapshotV1 {
+    TimetableSnapshotV1(
+        version: TimetableSnapshotV1.currentVersion,
+        availability: state.entries.isEmpty ? .noClasses : .ready,
+        generatedAt: state.generatedAt,
+        weekStart: attributes.weekStart,
+        timeZoneIdentifier: attributes.timeZoneIdentifier,
+        entries: state.entries.map {
+            TimetableEntry(
+                id: $0.id,
+                title: $0.title,
+                shortTitle: $0.shortTitle,
+                start: $0.start,
+                end: $0.end,
+                location: $0.location
+            )
+        },
+        omittedEntryCount: state.omittedEntryCount
+    )
 }

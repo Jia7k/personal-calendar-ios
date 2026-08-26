@@ -11,6 +11,11 @@ enum TimetableLiveActivityStatus: Equatable {
 @MainActor
 @Observable
 final class TimetableLiveActivityCoordinator {
+    private struct ActivityContentProjection {
+        let state: TimetableActivityAttributes.ContentState
+        let staleDate: Date?
+    }
+
     private struct PendingReconciliation {
         let catalog: TimetableWidgetCatalogV1
         let now: Date
@@ -87,13 +92,18 @@ final class TimetableLiveActivityCoordinator {
             status = .unavailable("Live Activities are disabled.")
             return
         }
+        guard let content = activityContent(for: snapshot, now: now) else {
+            await end(descriptors.map(\.id), immediately: true)
+            status = .failed("The timetable is too large for a Live Activity.")
+            return
+        }
 
         let expected = attributes(for: profile)
         if let matching = descriptors.first(where: { $0.attributes == expected }) {
             await driver.update(
                 id: matching.id,
-                state: .init(snapshot: snapshot),
-                staleDate: nextBoundary(in: snapshot, after: now)
+                state: content.state,
+                staleDate: content.staleDate
             )
             await end(
                 descriptors.lazy.filter { $0.id != matching.id }.map(\.id),
@@ -104,7 +114,7 @@ final class TimetableLiveActivityCoordinator {
         }
 
         await end(descriptors.map(\.id), immediately: true)
-        request(profile: profile, now: now)
+        request(profile: profile, content: content)
     }
 
     private func performReconciliation(
@@ -144,19 +154,27 @@ final class TimetableLiveActivityCoordinator {
                 await driver.end(id: descriptor.id, immediately: true)
                 continue
             }
+            guard let content = activityContent(for: profile.snapshot, now: now) else {
+                await driver.end(id: descriptor.id, immediately: true)
+                replacementFailed = true
+                status = .failed("The timetable is too large for a Live Activity.")
+                continue
+            }
 
-            let state = TimetableActivityAttributes.ContentState(snapshot: profile.snapshot)
-            let staleDate = nextBoundary(in: profile.snapshot, after: now)
             if descriptor.attributes == attributes(for: profile) {
-                await driver.update(id: descriptor.id, state: state, staleDate: staleDate)
+                await driver.update(
+                    id: descriptor.id,
+                    state: content.state,
+                    staleDate: content.staleDate
+                )
                 keptActivity = true
             } else {
                 await driver.end(id: descriptor.id, immediately: true)
                 do {
                     _ = try driver.request(
                         attributes: attributes(for: profile),
-                        state: state,
-                        staleDate: staleDate
+                        state: content.state,
+                        staleDate: content.staleDate
                     )
                     keptActivity = true
                 } catch {
@@ -171,12 +189,15 @@ final class TimetableLiveActivityCoordinator {
         }
     }
 
-    private func request(profile: TimetableWidgetProfile, now: Date) {
+    private func request(
+        profile: TimetableWidgetProfile,
+        content: ActivityContentProjection
+    ) {
         do {
             _ = try driver.request(
                 attributes: attributes(for: profile),
-                state: .init(snapshot: profile.snapshot),
-                staleDate: nextBoundary(in: profile.snapshot, after: now)
+                state: content.state,
+                staleDate: content.staleDate
             )
             status = .running
         } catch {
@@ -190,6 +211,21 @@ final class TimetableLiveActivityCoordinator {
             profileName: profile.name,
             weekStart: profile.snapshot.weekStart,
             timeZoneIdentifier: profile.snapshot.timeZoneIdentifier
+        )
+    }
+
+    private func activityContent(
+        for snapshot: TimetableSnapshotV1,
+        now: Date
+    ) -> ActivityContentProjection? {
+        guard let state = TimetableActivityAttributes.ContentState.projecting(
+            snapshot: snapshot,
+            now: now,
+            calendar: calendar(for: snapshot)
+        ) else { return nil }
+        return ActivityContentProjection(
+            state: state,
+            staleDate: state.nextBoundary(after: now)
         )
     }
 
@@ -209,20 +245,12 @@ final class TimetableLiveActivityCoordinator {
         }
         let snapshotCalendar = calendar(for: snapshot)
         guard snapshot.entries.contains(where: {
-            snapshotCalendar.isDate($0.start, inSameDayAs: now)
+            ($0.start <= now && now < $0.end)
+                || snapshotCalendar.isDate($0.start, inSameDayAs: now)
         }) else {
             return "There are no events today."
         }
         return nil
-    }
-
-    private func nextBoundary(in snapshot: TimetableSnapshotV1, after now: Date) -> Date? {
-        let snapshotCalendar = calendar(for: snapshot)
-        return snapshot.entries
-            .filter { snapshotCalendar.isDate($0.start, inSameDayAs: now) }
-            .flatMap { [$0.start, $0.end] }
-            .filter { $0 > now }
-            .min()
     }
 
     private func calendar(for snapshot: TimetableSnapshotV1) -> Calendar {

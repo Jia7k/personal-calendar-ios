@@ -35,12 +35,12 @@ final class TimetableProfileActivityTests: XCTestCase {
 
         XCTAssertEqual(driver.updates.map(\.id), ["school-live", "personal-live"])
         XCTAssertEqual(
-            driver.updates.first(where: { $0.id == "school-live" })?.state.snapshot.entries,
-            [Self.math]
+            driver.updates.first(where: { $0.id == "school-live" })?.state.entries.map(\.id),
+            [Self.math.id]
         )
         XCTAssertEqual(
-            driver.updates.first(where: { $0.id == "personal-live" })?.state.snapshot.entries,
-            [Self.dentist]
+            driver.updates.first(where: { $0.id == "personal-live" })?.state.entries.map(\.id),
+            [Self.dentist.id]
         )
         XCTAssertEqual(driver.ends.map(\.id), ["deleted-live"])
         XCTAssertTrue(driver.requests.isEmpty)
@@ -62,7 +62,9 @@ final class TimetableProfileActivityTests: XCTestCase {
         XCTAssertEqual(driver.requests.first?.attributes.profileName, "School")
         XCTAssertEqual(driver.requests.first?.attributes.weekStart, Self.weekStart)
         XCTAssertEqual(driver.requests.first?.attributes.timeZoneIdentifier, "Asia/Singapore")
-        XCTAssertEqual(driver.requests.first?.state.snapshot, school.snapshot)
+        XCTAssertEqual(driver.requests.first?.state.entries.map(\.id), [Self.math.id])
+        XCTAssertEqual(driver.requests.first?.state.generatedAt, Self.generatedAt)
+        XCTAssertEqual(driver.requests.first?.state.omittedEntryCount, 0)
         XCTAssertTrue(driver.updates.isEmpty)
         XCTAssertTrue(driver.ends.isEmpty)
     }

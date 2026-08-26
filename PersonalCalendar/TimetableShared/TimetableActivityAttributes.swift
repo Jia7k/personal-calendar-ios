@@ -8,7 +8,110 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
     )!
 
     struct ContentState: Codable, Hashable, Sendable {
-        let snapshot: TimetableSnapshotV1
+        static let maximumEncodedBytes = 3_500
+
+        struct Entry: Codable, Hashable, Identifiable, Sendable {
+            let id: String
+            let title: String
+            let shortTitle: String
+            let start: Date
+            let end: Date
+            let location: String?
+
+            fileprivate init(_ entry: TimetableEntry) {
+                id = entry.id
+                title = String(entry.title.prefix(48))
+                shortTitle = String(entry.shortTitle.prefix(8))
+                start = entry.start
+                end = entry.end
+                location = entry.location.map { String($0.prefix(64)) }
+            }
+
+            private enum CodingKeys: String, CodingKey {
+                case id = "i"
+                case title = "t"
+                case shortTitle = "s"
+                case start = "b"
+                case end = "e"
+                case location = "l"
+            }
+        }
+
+        let generatedAt: Date
+        let entries: [Entry]
+        let omittedEntryCount: Int
+        let sourceOmittedEntryCount: Int
+
+        static func projecting(
+            snapshot: TimetableSnapshotV1,
+            now: Date,
+            calendar: Calendar
+        ) -> Self? {
+            var localCalendar = calendar
+            localCalendar.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier)
+                ?? calendar.timeZone
+            let candidates = snapshot.entries
+                .filter {
+                    ($0.start <= now && now < $0.end)
+                        || (localCalendar.isDate($0.start, inSameDayAs: now) && $0.start > now)
+                }
+                .sorted(by: entryOrder)
+                .map(Entry.init)
+            var retainedEntries = candidates
+
+            while true {
+                let state = Self(
+                    generatedAt: snapshot.generatedAt,
+                    entries: retainedEntries,
+                    omittedEntryCount: candidates.count - retainedEntries.count,
+                    sourceOmittedEntryCount: snapshot.omittedEntryCount
+                )
+                guard let encodedSize = state.encodedSize else { return nil }
+                if encodedSize <= maximumEncodedBytes {
+                    return state
+                }
+                guard !retainedEntries.isEmpty else { return nil }
+                retainedEntries.removeLast()
+            }
+        }
+
+        func freshness(at now: Date) -> TimetableFreshness {
+            TimetableFreshness.generatedAt(generatedAt, now: now)
+        }
+
+        func entry(at now: Date) -> Entry? {
+            entries.first(where: { $0.start <= now && now < $0.end })
+                ?? entries.first(where: { $0.start > now })
+        }
+
+        func nextBoundary(after now: Date) -> Date? {
+            let freshnessBoundary = generatedAt.addingTimeInterval(
+                TimetableFreshness.defaultThreshold
+            )
+            let eventBoundaries = entries
+                .flatMap { [$0.start, $0.end] }
+                .filter { $0 > now }
+            let freshnessBoundaries = freshnessBoundary > now ? [freshnessBoundary] : []
+            return (eventBoundaries + freshnessBoundaries).min()
+        }
+
+        private var encodedSize: Int? {
+            try? JSONEncoder().encode(self).count
+        }
+
+        private static func entryOrder(_ left: TimetableEntry, _ right: TimetableEntry) -> Bool {
+            if left.start != right.start { return left.start < right.start }
+            if left.end != right.end { return left.end < right.end }
+            if left.title != right.title { return left.title < right.title }
+            return left.id < right.id
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case generatedAt = "g"
+            case entries = "e"
+            case omittedEntryCount = "o"
+            case sourceOmittedEntryCount = "u"
+        }
     }
 
     private let schemaVersion: Int

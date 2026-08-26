@@ -3,6 +3,185 @@ import XCTest
 
 @MainActor
 final class TimetableLiveActivityCoordinatorTests: XCTestCase {
+    func testStartProjectsOnlyTodaysCurrentAndUpcomingEntries() async throws {
+        let fixture = TimetableTestFixture()
+        let now = fixture.date(day: 1, hour: 9, minute: 30)
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: now,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: [
+                entry(
+                    id: "past",
+                    title: "Past",
+                    start: fixture.date(day: 1, hour: 7),
+                    end: fixture.date(day: 1, hour: 8)
+                ),
+                entry(
+                    id: "current",
+                    title: "Current",
+                    start: fixture.date(day: 1, hour: 9),
+                    end: fixture.date(day: 1, hour: 11)
+                ),
+                entry(
+                    id: "upcoming",
+                    title: "Upcoming",
+                    start: fixture.date(day: 1, hour: 14),
+                    end: fixture.date(day: 1, hour: 15)
+                ),
+                entry(
+                    id: "tomorrow",
+                    title: "Tomorrow",
+                    start: fixture.date(day: 2, hour: 9),
+                    end: fixture.date(day: 2, hour: 10)
+                )
+            ]
+        )
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(driver: driver, calendar: fixture.calendar)
+
+        await subject.start(profile: makeProfile(snapshot: snapshot), now: now)
+
+        let state = try XCTUnwrap(driver.requestedStates.first)
+        XCTAssertEqual(state.entries.map(\.id), ["current", "upcoming"])
+        XCTAssertEqual(state.generatedAt, now)
+        XCTAssertEqual(state.omittedEntryCount, 0)
+    }
+
+    func testStartPreservesKnownSourceSnapshotOmissionsSeparatelyFromTodayOmissions() async throws {
+        let fixture = TimetableTestFixture()
+        let now = fixture.date(day: 1, hour: 9, minute: 30)
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: now,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: [
+                entry(
+                    id: "current",
+                    title: "Current",
+                    start: fixture.date(day: 1, hour: 9),
+                    end: fixture.date(day: 1, hour: 11)
+                )
+            ],
+            omittedEntryCount: 7
+        )
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(driver: driver, calendar: fixture.calendar)
+
+        await subject.start(profile: makeProfile(snapshot: snapshot), now: now)
+
+        let state = try XCTUnwrap(driver.requestedStates.first)
+        XCTAssertEqual(state.omittedEntryCount, 0)
+        XCTAssertEqual(state.sourceOmittedEntryCount, 7)
+    }
+
+    func testStartIncludesCurrentEntryThatCrossedMidnightIntoToday() async throws {
+        let fixture = TimetableTestFixture()
+        let now = fixture.date(day: 2, hour: 0, minute: 15)
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: now,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: [
+                entry(
+                    id: "overnight",
+                    title: "Overnight Studio",
+                    start: fixture.date(day: 1, hour: 23, minute: 30),
+                    end: fixture.date(day: 2, hour: 0, minute: 30)
+                ),
+                entry(
+                    id: "upcoming",
+                    title: "Morning Studio",
+                    start: fixture.date(day: 2, hour: 8),
+                    end: fixture.date(day: 2, hour: 9)
+                )
+            ]
+        )
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(driver: driver, calendar: fixture.calendar)
+
+        await subject.start(profile: makeProfile(snapshot: snapshot), now: now)
+
+        let state = try XCTUnwrap(driver.requestedStates.first)
+        XCTAssertEqual(state.entries.map(\.id), ["overnight", "upcoming"])
+    }
+
+    func testStartCapsEncodedContentStateAndReportsExactProjectionOmissions() async throws {
+        let fixture = TimetableTestFixture()
+        let now = fixture.date(day: 1, hour: 9)
+        let entries = (0..<80).map { index in
+            entry(
+                id: "entry-\(index)",
+                title: "Course \(index) " + String(repeating: "T", count: 80),
+                start: now.addingTimeInterval(TimeInterval(index * 60)),
+                end: fixture.date(day: 1, hour: 23),
+                location: "Room \(index) " + String(repeating: "L", count: 96)
+            )
+        }
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: now,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: entries
+        )
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(driver: driver, calendar: fixture.calendar)
+
+        await subject.start(profile: makeProfile(snapshot: snapshot), now: now)
+
+        let state = try XCTUnwrap(driver.requestedStates.first)
+        let encoded = try JSONEncoder().encode(state)
+        XCTAssertLessThanOrEqual(
+            encoded.count,
+            TimetableActivityAttributes.ContentState.maximumEncodedBytes
+        )
+        XCTAssertGreaterThan(state.omittedEntryCount, 0)
+        XCTAssertEqual(state.entries.count + state.omittedEntryCount, entries.count)
+        XCTAssertEqual(
+            state.entries.map(\.id),
+            Array(entries.prefix(state.entries.count)).map(\.id)
+        )
+    }
+
+    func testStartCarriesFreshnessAndUsesItsBoundaryBeforeLaterClassBoundary() async throws {
+        let fixture = TimetableTestFixture()
+        let generatedAt = fixture.date(day: 1, hour: 9)
+        let now = fixture.date(day: 1, hour: 9, minute: 30)
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: generatedAt,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: [
+                entry(
+                    id: "all-day-class",
+                    title: "Studio",
+                    start: generatedAt,
+                    end: fixture.date(day: 1, hour: 18)
+                )
+            ]
+        )
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(driver: driver, calendar: fixture.calendar)
+
+        await subject.start(profile: makeProfile(snapshot: snapshot), now: now)
+
+        let state = try XCTUnwrap(driver.requestedStates.first)
+        let staleAt = generatedAt.addingTimeInterval(TimetableFreshness.defaultThreshold)
+        XCTAssertEqual(state.freshness(at: staleAt.addingTimeInterval(-1)), .fresh)
+        XCTAssertEqual(state.freshness(at: staleAt), .stale)
+        XCTAssertEqual(driver.requestedStaleDates, [staleAt])
+    }
+
     func testStartUpdatesRecoveredActivityAndEndsDuplicates() async {
         let fixture = TimetableTestFixture()
         let profile = makeProfile(fixture)
@@ -130,6 +309,23 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
             profiles: [profile]
         )
     }
+
+    private func entry(
+        id: String,
+        title: String,
+        start: Date,
+        end: Date,
+        location: String? = nil
+    ) -> TimetableEntry {
+        TimetableEntry(
+            id: id,
+            title: title,
+            shortTitle: String(title.prefix(4)).uppercased(),
+            start: start,
+            end: end,
+            location: location
+        )
+    }
 }
 
 @MainActor
@@ -141,6 +337,8 @@ private final class RecordingTimetableActivityDriver: TimetableActivityDriving {
     private var updateStarted = false
 
     private(set) var requestCount = 0
+    private(set) var requestedStates: [TimetableActivityAttributes.ContentState] = []
+    private(set) var requestedStaleDates: [Date?] = []
     private(set) var updatedIDs: [String] = []
     private(set) var maximumConcurrentUpdates = 0
     private(set) var endedIDs: [String] = []
@@ -187,6 +385,8 @@ private final class RecordingTimetableActivityDriver: TimetableActivityDriving {
         staleDate: Date?
     ) throws -> String {
         requestCount += 1
+        requestedStates.append(state)
+        requestedStaleDates.append(staleDate)
         IDs.append("new-activity")
         descriptors.append(.init(id: "new-activity", attributes: attributes))
         return "new-activity"

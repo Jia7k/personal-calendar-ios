@@ -10,6 +10,10 @@ struct TimetableTimelineBuilder: Sendable {
         let boundaries = snapshot.entries
             .flatMap { [$0.start, $0.end] }
             .filter { $0 > now }
-        return Array(Set([now, nextMidnight] + boundaries)).sorted()
+        let freshnessBoundary = snapshot.generatedAt.addingTimeInterval(
+            TimetableFreshness.defaultThreshold
+        )
+        let futureFreshnessBoundaries = freshnessBoundary > now ? [freshnessBoundary] : []
+        return Array(Set([now, nextMidnight] + boundaries + futureFreshnessBoundaries)).sorted()
     }
 }
