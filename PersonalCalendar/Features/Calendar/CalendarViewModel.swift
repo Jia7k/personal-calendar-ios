@@ -6,6 +6,11 @@ enum TrayState: Equatable {
     case expanded
 }
 
+enum CalendarDisplayMode: String, CaseIterable, Equatable, Sendable {
+    case month
+    case week
+}
+
 enum CalendarEditorRefreshOperation: Equatable {
     case eventSaved, eventDeleted, taskSaved, taskDeleted
 
@@ -86,8 +91,10 @@ final class CalendarViewModel {
     var displayedMonth: LocalDay
     var selectedDay: LocalDay
     var trayState: TrayState = .resting
+    private(set) var displayMode: CalendarDisplayMode = .month
     private(set) var agenda = DayAgenda(allDay: [], scheduled: [], priority: [])
     private(set) var visibleAgendas: [LocalDay: DayAgenda] = [:]
+    private(set) var weekPlanner: WeekPlannerSnapshot = .empty
     private(set) var errorMessage: String?
     private(set) var isLoading = false
     private(set) var sourceAccessNotices: [SourceAccessNotice] = []
@@ -111,6 +118,19 @@ final class CalendarViewModel {
     private let systemCalendar: Calendar
     private var loadGeneration = 0
     private var latestRefreshFailures: Set<CalendarRefreshFailureSource> = []
+
+    var visibleDays: [LocalDay] {
+        let builder = MonthGridBuilder(calendar: systemCalendar)
+        switch displayMode {
+        case .month:
+            return builder.days(containing: displayedMonth).map(\.day)
+        case .week:
+            return builder.week(
+                containing: selectedDay,
+                displayedMonth: displayedMonth
+            ).map(\.day)
+        }
+    }
 
     init(
         today: LocalDay,
@@ -195,8 +215,15 @@ final class CalendarViewModel {
         var notices: [SourceAccessNotice] = []
         var encounteredFailure = false
         var refreshFailures: Set<CalendarRefreshFailureSource> = []
-        let cells = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth)
-        let interval = DateInterval(start: cells.first!.day.startDate(in: systemCalendar), end: systemCalendar.date(byAdding: .day, value: 1, to: cells.last!.day.startDate(in: systemCalendar))!)
+        let days = visibleDays
+        let interval = DateInterval(
+            start: days.first!.startDate(in: systemCalendar),
+            end: systemCalendar.date(
+                byAdding: .day,
+                value: 1,
+                to: days.last!.startDate(in: systemCalendar)
+            )!
+        )
 
         let calendarAccess = calendarService.accessState
         if calendarAccess == .granted {
@@ -285,7 +312,11 @@ final class CalendarViewModel {
 
     func select(_ day: LocalDay) async {
         selectedDay = day
-        agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
+        if let scope = cachedScope {
+            rebuildVisibleAgendas(scope: scope)
+        } else {
+            agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
+        }
     }
 
     func setTray(_ state: TrayState) { trayState = state }
@@ -294,6 +325,32 @@ final class CalendarViewModel {
         selectedDay = today
         displayedMonth = LocalDay(year: today.year, month: today.month, day: 1)
         await load()
+    }
+
+    func setDisplayMode(_ mode: CalendarDisplayMode) async {
+        guard displayMode != mode else { return }
+        displayMode = mode
+        await load()
+    }
+
+    func movePeriod(by value: Int) async {
+        switch displayMode {
+        case .month:
+            await moveMonth(by: value)
+        case .week:
+            let moved = systemCalendar.date(
+                byAdding: .day,
+                value: value * 7,
+                to: selectedDay.startDate(in: systemCalendar)
+            )!
+            selectedDay = LocalDay(date: moved, calendar: systemCalendar)
+            displayedMonth = LocalDay(
+                year: selectedDay.year,
+                month: selectedDay.month,
+                day: 1
+            )
+            await load()
+        }
     }
 
     func moveMonth(by value: Int) async {
@@ -443,7 +500,7 @@ final class CalendarViewModel {
             visibleRoutines = cachedRoutines.filter { scope.routineIDs.contains($0.id) }
         }
 
-        let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
+        let days = visibleDays
         visibleAgendas = Dictionary(uniqueKeysWithValues: days.map { day in
             let completed = Set(visibleRoutines.filter {
                 cachedRoutineCompletions[$0.id]?.contains(day) == true
@@ -462,12 +519,33 @@ final class CalendarViewModel {
             )
         })
         agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
+        if displayMode == .week {
+            weekPlanner = WeekPlannerBuilder(calendar: systemCalendar).build(
+                days: days,
+                agendas: visibleAgendas,
+                events: visibleEvents,
+                reminders: visibleReminders,
+                selectedDay: selectedDay
+            )
+        } else {
+            weekPlanner = .empty
+        }
     }
 
     private func publishEmptyAgendas() {
         let empty = DayAgenda(allDay: [], scheduled: [], priority: [])
-        let days = MonthGridBuilder(calendar: systemCalendar).days(containing: displayedMonth).map(\.day)
+        let days = visibleDays
         visibleAgendas = Dictionary(uniqueKeysWithValues: days.map { ($0, empty) })
         agenda = empty
+        weekPlanner = displayMode == .week
+            ? WeekPlannerSnapshot(
+                days: days,
+                allDayItems: [],
+                timedItems: [],
+                laterItems: [],
+                startHour: 8,
+                endHour: 18
+            )
+            : .empty
     }
 }

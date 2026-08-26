@@ -105,6 +105,7 @@ final class FakeCalendarService: CalendarServicing {
     private(set) var eventDeleteCalls: [EventDeleteCall] = []
     private(set) var successfulWriteCount = 0
     private(set) var fetchCalendarIDs: [Set<String>] = []
+    private(set) var fetchIntervals: [DateInterval] = []
     var fetchError: Error?
     var createError: Error?
     var updateError: Error?
@@ -149,6 +150,7 @@ final class FakeCalendarService: CalendarServicing {
     func calendars() -> [CalendarDescriptor] { accessState == .granted ? descriptors : [] }
 
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] {
+        fetchIntervals.append(interval)
         fetchCalendarIDs.append(calendarIDs)
         guard accessState == .granted else { return [] }
         if let fetchError { throw fetchError }

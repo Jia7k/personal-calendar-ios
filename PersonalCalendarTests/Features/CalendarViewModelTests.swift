@@ -355,8 +355,210 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertTrue(model.agenda.scheduled.contains { $0.title == "Read" && $0.isCompleted })
     }
 
+    func testWeekModeLoadsExactlySevenProfileScopedDays() async {
+        var localCalendar = calendar
+        localCalendar.firstWeekday = 2
+        let service = FakeCalendarService(access: .granted)
+        let scope = ProfileScope(
+            identity: .saved(UUID()),
+            calendarIDs: ["school"],
+            reminderListIDs: [],
+            routineIDs: [],
+            defaultCalendarID: "school",
+            defaultReminderListID: nil
+        )
+        let model = makeScopedModel(
+            calendarService: service,
+            scope: scope,
+            systemCalendar: localCalendar
+        )
+
+        await model.setDisplayMode(.week)
+
+        let expectedDays = MonthGridBuilder(calendar: localCalendar)
+            .week(containing: today, displayedMonth: model.displayedMonth)
+            .map(\.day)
+        XCTAssertEqual(model.displayMode, .week)
+        XCTAssertEqual(model.visibleDays, expectedDays)
+        XCTAssertEqual(model.visibleDays.count, 7)
+        XCTAssertEqual(service.fetchCalendarIDs, [["school"]])
+        XCTAssertEqual(service.fetchIntervals.last?.start, expectedDays.first?.startDate(in: localCalendar))
+        XCTAssertEqual(
+            service.fetchIntervals.last?.end,
+            localCalendar.date(byAdding: .day, value: 1, to: expectedDays.last!.startDate(in: localCalendar))
+        )
+    }
+
+    func testWeekNavigationAdvancesSevenCalendarDaysAcrossDST() async {
+        var newYork = Calendar(identifier: .gregorian)
+        newYork.timeZone = TimeZone(identifier: "America/New_York")!
+        newYork.firstWeekday = 2
+        let reference = LocalDay(year: 2026, month: 3, day: 2)
+        let service = FakeCalendarService(access: .granted)
+        let model = makeScopedModel(
+            today: reference,
+            calendarService: service,
+            scope: .init(
+                identity: .saved(UUID()),
+                calendarIDs: ["school"],
+                reminderListIDs: [],
+                routineIDs: [],
+                defaultCalendarID: nil,
+                defaultReminderListID: nil
+            ),
+            systemCalendar: newYork
+        )
+
+        await model.setDisplayMode(.week)
+        let firstInterval = try! XCTUnwrap(service.fetchIntervals.last)
+        await model.movePeriod(by: 1)
+        let secondInterval = try! XCTUnwrap(service.fetchIntervals.last)
+
+        XCTAssertEqual(firstInterval.start, LocalDay(year: 2026, month: 3, day: 2).startDate(in: newYork))
+        XCTAssertEqual(firstInterval.end, LocalDay(year: 2026, month: 3, day: 9).startDate(in: newYork))
+        XCTAssertEqual(model.selectedDay, LocalDay(year: 2026, month: 3, day: 9))
+        XCTAssertEqual(secondInterval.start, LocalDay(year: 2026, month: 3, day: 9).startDate(in: newYork))
+        XCTAssertEqual(secondInterval.end, LocalDay(year: 2026, month: 3, day: 16).startDate(in: newYork))
+    }
+
+    func testSwitchingBackToMonthLoadsThePaddedMonthRange() async {
+        let service = FakeCalendarService(access: .granted)
+        let model = makeScopedModel(
+            calendarService: service,
+            scope: .init(
+                identity: .saved(UUID()),
+                calendarIDs: ["school"],
+                reminderListIDs: [],
+                routineIDs: [],
+                defaultCalendarID: nil,
+                defaultReminderListID: nil
+            )
+        )
+
+        await model.setDisplayMode(.week)
+        await model.setDisplayMode(.month)
+
+        let expected = MonthGridBuilder(calendar: calendar).days(containing: model.displayedMonth).map(\.day)
+        XCTAssertEqual(model.displayMode, .month)
+        XCTAssertEqual(model.visibleDays, expected)
+        XCTAssertEqual(service.fetchIntervals.last?.start, expected.first?.startDate(in: calendar))
+        XCTAssertEqual(
+            service.fetchIntervals.last?.end,
+            calendar.date(byAdding: .day, value: 1, to: expected.last!.startDate(in: calendar))
+        )
+    }
+
+    func testWeekProjectionUsesOnlyTheCapturedProfileScope() async {
+        let due = today.startDate(in: calendar).addingTimeInterval(10 * 3_600)
+        let school = CalendarEventSnapshot(
+            id: "school-event",
+            title: "School",
+            start: due,
+            end: due.addingTimeInterval(3_600),
+            isAllDay: false,
+            calendarID: "school",
+            calendarTitle: "School",
+            allowsModification: true,
+            hasRecurrence: false
+        )
+        let birthday = CalendarEventSnapshot(
+            id: "birthday",
+            title: "Birthday",
+            start: due,
+            end: due.addingTimeInterval(3_600),
+            isAllDay: false,
+            calendarID: "birthdays",
+            calendarTitle: "Birthdays",
+            allowsModification: false,
+            hasRecurrence: false
+        )
+        let service = FakeCalendarService(access: .granted, events: [school, birthday])
+        let model = makeScopedModel(
+            calendarService: service,
+            scope: .init(
+                identity: .saved(UUID()),
+                calendarIDs: ["school"],
+                reminderListIDs: [],
+                routineIDs: [],
+                defaultCalendarID: nil,
+                defaultReminderListID: nil
+            )
+        )
+
+        await model.setDisplayMode(.week)
+
+        XCTAssertEqual(model.weekPlanner.timedItems.map(\.item.title), ["School"])
+        XCTAssertEqual(service.fetchCalendarIDs, [["school"]])
+    }
+
+    func testWeekEmptyExternalScopePerformsNoCalendarOrReminderFetch() async {
+        let service = FakeCalendarService(access: .granted)
+        let reminders = FakeRemindersService(access: .granted)
+        let model = makeScopedModel(
+            calendarService: service,
+            reminders: reminders,
+            scope: .init(
+                identity: .saved(UUID()),
+                calendarIDs: [],
+                reminderListIDs: [],
+                routineIDs: [],
+                defaultCalendarID: nil,
+                defaultReminderListID: nil
+            )
+        )
+
+        await model.setDisplayMode(.week)
+
+        XCTAssertTrue(service.fetchCalendarIDs.isEmpty)
+        XCTAssertTrue(reminders.fetchListIDs.isEmpty)
+        XCTAssertTrue(model.weekPlanner.timedItems.isEmpty)
+    }
+
+    func testTodayInWeekModeSelectsAndLoadsTheInjectedCurrentDay() async {
+        let service = FakeCalendarService(access: .granted)
+        let model = makeScopedModel(
+            calendarService: service,
+            scope: .init(
+                identity: .saved(UUID()),
+                calendarIDs: ["school"],
+                reminderListIDs: [],
+                routineIDs: [],
+                defaultCalendarID: nil,
+                defaultReminderListID: nil
+            )
+        )
+        await model.setDisplayMode(.week)
+        await model.movePeriod(by: 2)
+
+        await model.showToday()
+
+        XCTAssertEqual(model.selectedDay, today)
+        XCTAssertTrue(model.visibleDays.contains(today))
+        XCTAssertEqual(service.fetchIntervals.last?.start, model.visibleDays.first?.startDate(in: calendar))
+    }
+
     private func makeModel(calendarService: any CalendarServicing = FakeCalendarService(access: .granted), reminders: any RemindersServicing = FakeRemindersService(access: .granted), routines: any RoutineRepository = FakeRoutineRepository(), settings: AppSettingsStore = AppSettingsStore(defaults: .ephemeral)) -> CalendarViewModel {
         CalendarViewModel(today: today, calendarService: calendarService, remindersService: reminders, routines: routines, composer: AgendaComposer(), settings: settings, systemCalendar: calendar)
+    }
+
+    private func makeScopedModel(
+        today: LocalDay? = nil,
+        calendarService: any CalendarServicing = FakeCalendarService(access: .granted),
+        reminders: any RemindersServicing = FakeRemindersService(access: .granted),
+        routines: any RoutineRepository = FakeRoutineRepository(),
+        scope: ProfileScope,
+        systemCalendar: Calendar? = nil
+    ) -> CalendarViewModel {
+        CalendarViewModel(
+            today: today ?? self.today,
+            calendarService: calendarService,
+            remindersService: reminders,
+            routines: routines,
+            composer: AgendaComposer(),
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { scope },
+            systemCalendar: systemCalendar ?? calendar
+        )
     }
 }
 
