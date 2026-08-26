@@ -51,6 +51,7 @@ final class TaskEditorViewModel {
     var recurringDeleteExplanation: String? {
         currentSnapshot?.hasRecurrence == true ? "Deleting this task removes the repeating reminder." : nil
     }
+    var schedulingSnapshot: ReminderSnapshot? { currentSnapshot }
     var canRetry: Bool {
         if case .failed = phase { return true }
         return false

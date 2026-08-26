@@ -3,6 +3,7 @@ import SwiftUI
 struct TasksView: View {
     @State private var model: TasksViewModel
     @State private var editorPresentation: TasksEditorPresentation?
+    @State private var timeBlockPresentation: TaskTimeBlockSession?
     @State private var pickedTask: ReminderSnapshot?
     @State private var pickedDate = Date()
     @State private var pickedDateHasTime = true
@@ -82,7 +83,24 @@ struct TasksView: View {
                     lists: presentation.lists,
                     nilDestinationLabel: presentation.nilDestinationLabel,
                     showsDelete: presentation.showsDelete,
+                    makeTimeBlockSession: {
+                        guard let task = presentation.model.schedulingSnapshot,
+                              !task.isCompleted else { return nil }
+                        return TaskTimeBlockSession.make(
+                            task: task,
+                            environment: environment
+                        )
+                    },
                     onDismiss: dismissEditor
+                )
+            }
+            .sheet(item: $timeBlockPresentation) { session in
+                TaskTimeBlockView(
+                    model: session.model,
+                    profiles: session.profiles,
+                    resolveProfile: session.resolveProfile,
+                    onSaved: session.onSaved,
+                    onDismiss: dismissTimeBlock
                 )
             }
             .sheet(item: $pickedTask) { task in
@@ -129,12 +147,15 @@ struct TasksView: View {
             .task(id: TaskDeepLinkProcessingKey(
                 signalID: taskDeepLink?.id,
                 editorID: editorPresentation?.id,
-                pickerTaskID: pickedTask?.id
+                pickerTaskID: pickedTask?.id,
+                timeBlockID: timeBlockPresentation?.id
             )) {
                 await handleTaskDeepLink()
             }
             .onChange(
-                of: editorPresentation != nil || pickedTask != nil,
+                of: editorPresentation != nil
+                    || pickedTask != nil
+                    || timeBlockPresentation != nil,
                 initial: true
             ) { _, isPresented in
                 presentationGeneration &+= 1
@@ -192,16 +213,29 @@ struct TasksView: View {
             .accessibilityIdentifier("task-open-\(task.id)")
             .accessibilityLabel("Open task \(task.title)")
 
-            if offersQuickReschedule, canQuickReschedule(task) {
+            if canScheduleTime(task) || (offersQuickReschedule && canQuickReschedule(task)) {
                 Menu {
-                    quickRescheduleMenuActions(task)
+                    if canScheduleTime(task) {
+                        Button("Schedule Time", systemImage: "calendar.badge.clock") {
+                            presentTimeBlock(for: task)
+                        }
+                        .accessibilityIdentifier("task-schedule-time-\(task.id)")
+                    }
+                    if offersQuickReschedule, canQuickReschedule(task) {
+                        Divider()
+                        quickRescheduleMenuActions(task)
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
                 }
                 .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                .accessibilityIdentifier("task-reschedule-more-\(task.id)")
-                .accessibilityLabel("More reschedule options for \(task.title)")
+                .accessibilityIdentifier(
+                    offersQuickReschedule && canQuickReschedule(task)
+                        ? "task-reschedule-more-\(task.id)"
+                        : "task-actions-\(task.id)"
+                )
+                .accessibilityLabel("Actions for \(task.title)")
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -224,6 +258,12 @@ struct TasksView: View {
         .contextMenu {
             Button("Open", systemImage: "square.and.pencil") {
                 openTask(task)
+            }
+            if canScheduleTime(task) {
+                Button("Schedule Time", systemImage: "calendar.badge.clock") {
+                    presentTimeBlock(for: task)
+                }
+                .accessibilityIdentifier("task-schedule-time-\(task.id)")
             }
             if offersQuickReschedule, canQuickReschedule(task) {
                 quickRescheduleMenuActions(task)
@@ -251,6 +291,10 @@ struct TasksView: View {
             && task.allowsModification
             && !task.hasRecurrence
             && !model.mutatingIDs.contains(task.id)
+    }
+
+    private func canScheduleTime(_ task: ReminderSnapshot) -> Bool {
+        !task.isCompleted
     }
 
     private func quickReschedule(_ task: ReminderSnapshot, command: TaskQuickReschedule) {
@@ -300,10 +344,13 @@ struct TasksView: View {
     private func handleTaskDeepLink() async {
         guard editorPresentation == nil,
               pickedTask == nil,
+              timeBlockPresentation == nil,
               let signal = taskDeepLink else { return }
         let capturedPresentationGeneration = presentationGeneration
         await model.load()
-        let localPresentationIsActive = editorPresentation != nil || pickedTask != nil
+        let localPresentationIsActive = editorPresentation != nil
+            || pickedTask != nil
+            || timeBlockPresentation != nil
         if HostRouteCancellationPolicy.shouldFinishAsUnavailable(
             taskIsCancelled: Task.isCancelled,
             signalIsCurrent: taskDeepLink?.id == signal.id,
@@ -317,7 +364,8 @@ struct TasksView: View {
         guard !Task.isCancelled,
               taskDeepLink?.id == signal.id,
               editorPresentation == nil,
-              pickedTask == nil else { return }
+              pickedTask == nil,
+              timeBlockPresentation == nil else { return }
         let liveReminder = environment.reminders.reminder(id: signal.reminderID)
         let scope = try? environment.profileScopes.resolve(
             environment.profileSelection.activeIdentity
@@ -360,6 +408,21 @@ struct TasksView: View {
             await model.refreshAfterEditorCommit(commit)
         }
     }
+
+    private func presentTimeBlock(for task: ReminderSnapshot) {
+        guard timeBlockPresentation == nil else { return }
+        timeBlockPresentation = TaskTimeBlockSession.make(
+            task: task,
+            environment: environment
+        )
+        onPresentationChanged(timeBlockPresentation != nil)
+    }
+
+    private func dismissTimeBlock() {
+        timeBlockPresentation = nil
+        onPresentationChanged(false)
+    }
+
 }
 
 private struct TasksEditorPresentation: Identifiable {
@@ -374,4 +437,5 @@ private struct TaskDeepLinkProcessingKey: Hashable {
     let signalID: UUID?
     let editorID: UUID?
     let pickerTaskID: String?
+    let timeBlockID: UUID?
 }

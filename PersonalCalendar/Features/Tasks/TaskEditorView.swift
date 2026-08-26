@@ -8,22 +8,26 @@ struct TaskEditorView: View {
     /// Pass "System Default" for create and "Preserve Current" for edit.
     let nilDestinationLabel: String
     let showsDelete: Bool
+    let makeTimeBlockSession: (() -> TaskTimeBlockSession?)?
     let onDismiss: () -> Void
 
     @State private var preservedSchedule: ReminderScheduleValue?
     @State private var showsDiscardConfirmation = false
+    @State private var timeBlockSession: TaskTimeBlockSession?
 
     init(
         model: TaskEditorViewModel,
         lists: [ReminderListDescriptor],
         nilDestinationLabel: String,
         showsDelete: Bool,
+        makeTimeBlockSession: (() -> TaskTimeBlockSession?)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.model = model
         self.lists = lists
         self.nilDestinationLabel = nilDestinationLabel
         self.showsDelete = showsDelete
+        self.makeTimeBlockSession = makeTimeBlockSession
         self.onDismiss = onDismiss
         if case let .preserve(current) = model.form.schedule {
             _preservedSchedule = State(initialValue: current)
@@ -36,6 +40,7 @@ struct TaskEditorView: View {
         NavigationStack {
             Form {
                 detailsSection
+                planningSection
                 scheduleSection
                 destinationSection
                 categorySection
@@ -78,6 +83,15 @@ struct TaskEditorView: View {
                 Text(model.recurringDeleteExplanation ?? "Deleting this task cannot be undone.")
             }
             .interactiveDismissDisabled(model.requiresDiscardConfirmation || isWriting)
+            .sheet(item: $timeBlockSession) { session in
+                TaskTimeBlockView(
+                    model: session.model,
+                    profiles: session.profiles,
+                    resolveProfile: session.resolveProfile,
+                    onSaved: session.onSaved,
+                    onDismiss: { timeBlockSession = nil }
+                )
+            }
             .onChange(of: model.phase) { _, phase in
                 if phase.isCommitted { onDismiss() }
             }
@@ -360,6 +374,33 @@ struct TaskEditorView: View {
                     .disabled(!canDelete)
                     .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                     .accessibilityIdentifier("task-editor-delete")
+            }
+        }
+    }
+
+    @ViewBuilder private var planningSection: some View {
+        if showsDelete,
+           model.schedulingSnapshot?.isCompleted == false,
+           let makeTimeBlockSession {
+            Section("Plan") {
+                Button("Schedule Time", systemImage: "calendar.badge.clock") {
+                    timeBlockSession = makeTimeBlockSession()
+                }
+                .disabled(model.requiresDiscardConfirmation || isWriting || isUnavailable)
+                .frame(
+                    minWidth: CalendarTheme.minimumTapSize,
+                    minHeight: CalendarTheme.minimumTapSize
+                )
+                .accessibilityIdentifier("task-editor-schedule-time")
+                if model.requiresDiscardConfirmation {
+                    Text("Save your task edits before creating a calendar block.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Uses the saved task title and due date. The reminder stays unchanged.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }

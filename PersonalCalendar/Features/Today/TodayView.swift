@@ -88,7 +88,21 @@ struct TodayView: View {
                     EventEditorView(model: editorModel, calendars: calendars, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
                         .task { await editorModel.load() }
                 case let .task(editorModel, lists):
-                    TaskEditorView(model: editorModel, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
+                    TaskEditorView(
+                        model: editorModel,
+                        lists: lists,
+                        nilDestinationLabel: "Preserve Current",
+                        showsDelete: true,
+                        makeTimeBlockSession: {
+                            guard let task = editorModel.schedulingSnapshot,
+                                  !task.isCompleted else { return nil }
+                            return TaskTimeBlockSession.make(
+                                task: task,
+                                environment: environment
+                            )
+                        },
+                        onDismiss: dismissEditor
+                    )
                 }
             }
             .onChange(of: editorPresentation != nil, initial: true) { _, isPresented in

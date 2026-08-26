@@ -119,7 +119,21 @@ struct CalendarHomeView: View {
                     EventEditorView(model: model, calendars: calendars, nilDestinationLabel: nilDestinationLabel, showsDelete: showsDelete, onDismiss: dismissEditor)
                         .task { await model.load() }
                 case let .task(model, lists):
-                    TaskEditorView(model: model, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
+                    TaskEditorView(
+                        model: model,
+                        lists: lists,
+                        nilDestinationLabel: "Preserve Current",
+                        showsDelete: true,
+                        makeTimeBlockSession: {
+                            guard let task = model.schedulingSnapshot,
+                                  !task.isCompleted else { return nil }
+                            return TaskTimeBlockSession.make(
+                                task: task,
+                                environment: environment
+                            )
+                        },
+                        onDismiss: dismissEditor
+                    )
                 }
             }
         }
