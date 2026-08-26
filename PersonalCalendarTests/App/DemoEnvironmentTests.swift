@@ -26,11 +26,24 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertTrue(environment.settings.didSeedCategories)
     }
 
-    func testFixedQuickEntryContextUsesStableSingaporeDateAndTimeZone() {
+    func testNormalDemoMigratesWritableDefaultsIntoActivePersonalProfile() throws {
+        let container = makeContainer()
+        let environment = AppEnvironment.demo(container: container, arguments: [])
+
+        XCTAssertEqual(environment.profileSelection.activeIdentity, .saved(SeedProfile.personalID))
+        let personal = try environment.profileScopes.resolve(.saved(SeedProfile.personalID))
+        XCTAssertEqual(personal.defaultCalendarID, "demo-calendar")
+        XCTAssertEqual(personal.defaultReminderListID, "demo-list")
+    }
+
+    func testFixedQuickEntryContextUsesStableSingaporeCurrentDayAndTimeZone() {
+        let beforeConstruction = Date()
+        let container = makeContainer()
         let environment = AppEnvironment.demo(
-            container: makeContainer(),
+            container: container,
             arguments: ["-quick-entry-fixed-context"]
         )
+        let afterConstruction = Date()
 
         let first = environment.quickEntryContext()
         let second = environment.quickEntryContext()
@@ -42,9 +55,14 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertEqual(first.now, second.now)
         XCTAssertEqual(first.timeZone.identifier, "Asia/Singapore")
         XCTAssertEqual(first.locale.identifier, "en_SG")
-        XCTAssertEqual(components.year, 2026)
-        XCTAssertEqual(components.month, 8)
-        XCTAssertEqual(components.day, 25)
+        let expectedDays = [beforeConstruction, afterConstruction].map {
+            first.calendar.dateComponents([.year, .month, .day], from: $0)
+        }
+        XCTAssertTrue(expectedDays.contains {
+            $0.year == components.year
+                && $0.month == components.month
+                && $0.day == components.day
+        })
         XCTAssertEqual(components.hour, 12)
         XCTAssertEqual(components.minute, 0)
     }

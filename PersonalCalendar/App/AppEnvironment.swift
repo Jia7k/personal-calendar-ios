@@ -181,6 +181,16 @@ struct AppEnvironment {
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let settings = AppSettingsStore(defaults: .ephemeral)
+        if !usesProfileFixtures {
+            settings.resetProfileMigration(legacy: LegacyProfileSelectionSnapshot(
+                calendarIDs: [],
+                reminderListIDs: [],
+                defaultCalendarID: "demo-calendar",
+                defaultReminderListID: "demo-list",
+                calendarSelectionWasExplicit: false,
+                reminderSelectionWasExplicit: false
+            ))
+        }
         let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"), profileFixtures: usesProfileFixtures)
         let profiles = SwiftDataProfileRepository(context: container.mainContext)
         let routineProfileMutations = DemoRoutineProfileMutationAdapter(
@@ -211,7 +221,8 @@ struct AppEnvironment {
         try! categories.seedDefaultsIfNeeded(settings: settings)
         let quickEntryContext: @MainActor @Sendable () -> QuickEntryParseContext
         if arguments.contains("-quick-entry-fixed-context") {
-            quickEntryContext = { fixedQuickEntryContext() }
+            let context = fixedQuickEntryContext(referenceDate: Date())
+            quickEntryContext = { context }
         } else {
             quickEntryContext = { currentQuickEntryContext() }
         }
@@ -396,21 +407,17 @@ struct AppEnvironment {
         }
     }
 
-    private static func fixedQuickEntryContext() -> QuickEntryParseContext {
+    private static func fixedQuickEntryContext(referenceDate: Date) -> QuickEntryParseContext {
         let timeZone = TimeZone(identifier: "Asia/Singapore")!
         let locale = Locale(identifier: "en_SG")
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = locale
         calendar.timeZone = timeZone
         let now = calendar.date(
-            from: DateComponents(
-                timeZone: timeZone,
-                year: 2026,
-                month: 8,
-                day: 25,
-                hour: 12,
-                minute: 0
-            )
+            bySettingHour: 12,
+            minute: 0,
+            second: 0,
+            of: referenceDate
         )!
         return .init(now: now, calendar: calendar, locale: locale, timeZone: timeZone)
     }

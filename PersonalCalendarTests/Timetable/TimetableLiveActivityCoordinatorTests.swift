@@ -83,7 +83,7 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(subject.status, .idle)
     }
 
-    func testOverlappingStartsDoNotWriteTwice() async {
+    func testOverlappingStartsQueueLatestStartWithoutConcurrentWrites() async {
         let fixture = TimetableTestFixture()
         let profile = makeProfile(fixture)
         let driver = RecordingTimetableActivityDriver(
@@ -100,6 +100,7 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
         await first.value
 
         XCTAssertEqual(driver.updatedIDs, ["old-a", "old-a"])
+        XCTAssertEqual(driver.maximumConcurrentUpdates, 1)
         XCTAssertEqual(driver.requestCount, 0)
     }
 
@@ -135,14 +136,16 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
 private final class RecordingTimetableActivityDriver: TimetableActivityDriving {
     var activitiesEnabled = true
     private var IDs: [String]
-    private let suspendsUpdates: Bool
+    private var suspendsNextUpdate: Bool
     private var updateContinuation: CheckedContinuation<Void, Never>?
     private var updateStarted = false
 
     private(set) var requestCount = 0
     private(set) var updatedIDs: [String] = []
+    private(set) var maximumConcurrentUpdates = 0
     private(set) var endedIDs: [String] = []
     private(set) var immediateEndFlags: [Bool] = []
+    private var activeUpdates = 0
 
     init(
         existingIDs: [String] = [],
@@ -169,7 +172,7 @@ private final class RecordingTimetableActivityDriver: TimetableActivityDriving {
                 )
             )
         }
-        self.suspendsUpdates = suspendsUpdates
+        suspendsNextUpdate = suspendsUpdates
     }
 
     private var descriptors: [TimetableActivityDescriptor]
@@ -194,9 +197,13 @@ private final class RecordingTimetableActivityDriver: TimetableActivityDriving {
         state: TimetableActivityAttributes.ContentState,
         staleDate: Date?
     ) async {
+        activeUpdates += 1
+        maximumConcurrentUpdates = max(maximumConcurrentUpdates, activeUpdates)
+        defer { activeUpdates -= 1 }
         updatedIDs.append(id)
         updateStarted = true
-        if suspendsUpdates {
+        if suspendsNextUpdate {
+            suspendsNextUpdate = false
             await withCheckedContinuation { updateContinuation = $0 }
         }
     }
