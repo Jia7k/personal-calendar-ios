@@ -15,6 +15,7 @@ struct ProfilesSettingsView: View {
         let selection = environment.profileSelection
         let timetable = environment.timetableSnapshotCoordinator
         let liveActivity = environment.timetableLiveActivityCoordinator
+        let notificationCoordinator = environment.notificationCoordinator
         let rescheduleNotifications = environment.rescheduleNotifications
         let rebuildTimetable: @MainActor (Bool) -> Void = { failClosed in
             guard (try? timetable.refresh(failClosed: failClosed)) != nil,
@@ -30,7 +31,10 @@ struct ProfilesSettingsView: View {
                 defer {
                     rebuildTimetable(removedCalendarMembership)
                     if visibilityChanged {
-                        Task { await rescheduleNotifications() }
+                        Task {
+                            await notificationCoordinator.clear()
+                            await rescheduleNotifications()
+                        }
                     }
                 }
                 try selection.profileDidChange(id: id, visibilityChanged: visibilityChanged)
@@ -38,7 +42,10 @@ struct ProfilesSettingsView: View {
             profileWasDeleted: { id in
                 defer {
                     rebuildTimetable(true)
-                    Task { await rescheduleNotifications() }
+                    Task {
+                        await notificationCoordinator.clear()
+                        await rescheduleNotifications()
+                    }
                 }
                 try selection.profileWasDeleted(id: id)
             }

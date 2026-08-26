@@ -16,6 +16,21 @@ targets:
     platform: iOS
     sources:
       - path: PersonalCalendar
+    info:
+      path: PersonalCalendar/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: "My Calendar"
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: local.personalcalendar.routes
+            CFBundleURLSchemes:
+              - personalcalendar
+        NSCalendarsFullAccessUsageDescription: "Show and manage your calendar events in one personal schedule."
+        NSRemindersFullAccessUsageDescription: "Show and manage your reminders alongside your schedule."
+        NSSupportsLiveActivities: true
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Light
     dependencies:
       - target: PersonalCalendarWidgets
         embed: true
@@ -25,14 +40,6 @@ targets:
         PRODUCT_NAME: "My Calendar"
         PRODUCT_MODULE_NAME: PersonalCalendar
         CODE_SIGN_ENTITLEMENTS: PersonalCalendar/Resources/PersonalCalendar.entitlements
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: "My Calendar"
-        INFOPLIST_KEY_NSSupportsLiveActivities: YES
-        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Show and manage your calendar events in one personal schedule."
-        INFOPLIST_KEY_NSRemindersFullAccessUsageDescription: "Show and manage your reminders alongside your schedule."
-        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_UIUserInterfaceStyle: Light
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

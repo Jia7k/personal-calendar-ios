@@ -191,6 +191,51 @@ final class AppSettingsStoreTests: XCTestCase {
         XCTAssertEqual(SettingsDefaultPickerValue.reminderList(selectedID: nil, writableLists: []), "No writable reminder list available")
     }
 
+    func testClassAlertPreferencesDefaultOffAndPersistOnlyAllowedLeadTimes() {
+        let defaults = makeDefaults()
+        let profileID = UUID()
+        let subject = AppSettingsStore(defaults: defaults)
+
+        XCTAssertEqual(
+            subject.classAlertPreference(for: profileID),
+            .init(enabled: false, leadMinutes: 10)
+        )
+
+        subject.setClassAlertPreference(
+            .init(enabled: true, leadMinutes: 20),
+            for: profileID
+        )
+        subject.setClassAlertPreference(
+            .init(enabled: true, leadMinutes: 17),
+            for: UUID()
+        )
+
+        let reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertEqual(
+            reloaded.classAlertPreference(for: profileID),
+            .init(enabled: true, leadMinutes: 20)
+        )
+        XCTAssertEqual(reloaded.classAlertPreferences.count, 1)
+    }
+
+    func testClassAlertPreferencesRemoveDeletedProfiles() {
+        let subject = AppSettingsStore(defaults: makeDefaults())
+        let keptID = UUID()
+        let deletedID = UUID()
+        subject.setClassAlertPreference(
+            .init(enabled: true, leadMinutes: 10),
+            for: keptID
+        )
+        subject.setClassAlertPreference(
+            .init(enabled: true, leadMinutes: 30),
+            for: deletedID
+        )
+
+        subject.reconcileClassAlertPreferences(validProfileIDs: [keptID])
+
+        XCTAssertEqual(Set(subject.classAlertPreferences.keys), [keptID])
+    }
+
     private func makeDefaults() -> UserDefaults {
         let suite = "AppSettingsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

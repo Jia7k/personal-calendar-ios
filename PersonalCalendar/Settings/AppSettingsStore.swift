@@ -45,6 +45,7 @@ final class AppSettingsStore {
         static let morningSummaryHour = "morningSummaryHour"
         static let morningSummaryMinute = "morningSummaryMinute"
         static let showNextItemOnLockScreen = "showNextItemOnLockScreen"
+        static let classAlertPreferences = "classAlertPreferences"
         static let activeProfile = "activeProfileIdentity"
         static let lastActiveSavedProfile = "lastActiveSavedProfileID"
 
@@ -64,6 +65,7 @@ final class AppSettingsStore {
     var morningSummaryHour: Int { didSet { defaults.set(morningSummaryHour, forKey: Key.morningSummaryHour) } }
     var morningSummaryMinute: Int { didSet { defaults.set(morningSummaryMinute, forKey: Key.morningSummaryMinute) } }
     var showNextItemOnLockScreen: Bool { didSet { defaults.set(showNextItemOnLockScreen, forKey: Key.showNextItemOnLockScreen) } }
+    private(set) var classAlertPreferences: [UUID: ClassAlertPreference]
     private(set) var calendarSelectionIsExplicit: Bool
     private(set) var reminderSelectionIsExplicit: Bool
     private(set) var legacyProfileSelection: LegacyProfileSelectionSnapshot
@@ -89,6 +91,9 @@ final class AppSettingsStore {
         morningSummaryHour = (defaults.object(forKey: Key.morningSummaryHour) as? Int).flatMap { (0...23).contains($0) ? $0 : nil } ?? 8
         morningSummaryMinute = (defaults.object(forKey: Key.morningSummaryMinute) as? Int).flatMap { (0...59).contains($0) ? $0 : nil } ?? 0
         showNextItemOnLockScreen = defaults.bool(forKey: Key.showNextItemOnLockScreen)
+        classAlertPreferences = Self.decodeClassAlertPreferences(
+            defaults.data(forKey: Key.classAlertPreferences)
+        )
         calendarSelectionIsExplicit = storedCalendarSelectionIsExplicit
         reminderSelectionIsExplicit = storedReminderSelectionIsExplicit
         legacyProfileSelection = LegacyProfileSelectionSnapshot(
@@ -108,6 +113,31 @@ final class AppSettingsStore {
         })
         persistSelectionMarkers()
         persistProfileSelection()
+    }
+
+    func classAlertPreference(for profileID: UUID) -> ClassAlertPreference {
+        classAlertPreferences[profileID]
+            ?? .init(enabled: false, leadMinutes: 10)
+    }
+
+    func setClassAlertPreference(
+        _ preference: ClassAlertPreference,
+        for profileID: UUID
+    ) {
+        guard ClassAlertPreference.allowedLeadMinutes.contains(
+            preference.leadMinutes
+        ) else { return }
+        classAlertPreferences[profileID] = preference
+        persistClassAlertPreferences()
+    }
+
+    func reconcileClassAlertPreferences(validProfileIDs: Set<UUID>) {
+        let reconciled = classAlertPreferences.filter {
+            validProfileIDs.contains($0.key)
+        }
+        guard reconciled != classAlertPreferences else { return }
+        classAlertPreferences = reconciled
+        persistClassAlertPreferences()
     }
 
     func setActiveProfile(_ identity: ProfileIdentity) {
@@ -325,6 +355,32 @@ final class AppSettingsStore {
     private func persistProfileSelection() {
         defaults.set(activeProfileIdentity.storageKey, forKey: Key.activeProfile)
         defaults.set(lastActiveSavedProfileID?.uuidString, forKey: Key.lastActiveSavedProfile)
+    }
+
+    private func persistClassAlertPreferences() {
+        let serialized = Dictionary(uniqueKeysWithValues: classAlertPreferences.map {
+            ($0.key.uuidString, $0.value)
+        })
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        defaults.set(try? encoder.encode(serialized), forKey: Key.classAlertPreferences)
+    }
+
+    private static func decodeClassAlertPreferences(
+        _ data: Data?
+    ) -> [UUID: ClassAlertPreference] {
+        guard let data,
+              let stored = try? JSONDecoder().decode(
+                  [String: ClassAlertPreference].self,
+                  from: data
+              ) else { return [:] }
+        return stored.reduce(into: [:]) { result, pair in
+            guard let id = UUID(uuidString: pair.key),
+                  ClassAlertPreference.allowedLeadMinutes.contains(
+                      pair.value.leadMinutes
+                  ) else { return }
+            result[id] = pair.value
+        }
     }
 }
 

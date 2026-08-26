@@ -107,6 +107,8 @@ final class CalendarViewModel {
     private var cachedRoutineCompletions: [UUID: Set<LocalDay>] = [:]
     private var cachedScopeIdentity: ProfileIdentity?
     private var cachedScope: ProfileScope?
+
+    var routeEvents: [CalendarEventSnapshot] { cachedEvents }
     private let today: LocalDay
     private let calendarService: any CalendarServicing
     private let remindersService: any RemindersServicing
@@ -316,6 +318,78 @@ final class CalendarViewModel {
             rebuildVisibleAgendas(scope: scope)
         } else {
             agenda = visibleAgendas[selectedDay] ?? DayAgenda(allDay: [], scheduled: [], priority: [])
+        }
+    }
+
+    func jump(to routeDay: AppRouteDay) async {
+        let day = LocalDay(
+            year: routeDay.year,
+            month: routeDay.month,
+            day: routeDay.day
+        )
+        selectedDay = day
+        displayedMonth = LocalDay(year: day.year, month: day.month, day: 1)
+        await load()
+    }
+
+    /// Fetches a fresh, profile-scoped event set for an exact deep-link lookup.
+    /// Normal calendar refreshes may retain confirmed cache on provider failure;
+    /// a route must fail closed instead of opening an event from that stale cache.
+    func authoritativeRouteEvents(
+        for routeDay: AppRouteDay?
+    ) -> [CalendarEventSnapshot]? {
+        guard calendarService.accessState == .granted else { return nil }
+
+        let scope: ProfileScope
+        do {
+            scope = try currentScope()
+        } catch {
+            return nil
+        }
+
+        let skipsFetch = scope.calendarIDs.isEmpty
+            && (!usesLegacyScope || settings.calendarSelectionIsExplicit)
+        if skipsFetch { return [] }
+
+        let interval: DateInterval
+        if let routeDay {
+            let day = LocalDay(
+                year: routeDay.year,
+                month: routeDay.month,
+                day: routeDay.day
+            )
+            let start = day.startDate(in: systemCalendar)
+            guard let end = systemCalendar.date(
+                byAdding: .day,
+                value: 1,
+                to: start
+            ) else { return nil }
+            interval = DateInterval(start: start, end: end)
+        } else {
+            let days = visibleDays
+            guard let first = days.first,
+                  let last = days.last,
+                  let end = systemCalendar.date(
+                      byAdding: .day,
+                      value: 1,
+                      to: last.startDate(in: systemCalendar)
+                  ) else { return nil }
+            interval = DateInterval(
+                start: first.startDate(in: systemCalendar),
+                end: end
+            )
+        }
+
+        do {
+            let fetched = try calendarService.fetchEvents(
+                in: interval,
+                calendarIDs: scope.calendarIDs
+            )
+            return shouldFilterLegacyCalendarResults
+                ? fetched.filter { scope.calendarIDs.contains($0.calendarID) }
+                : fetched
+        } catch {
+            return nil
         }
     }
 

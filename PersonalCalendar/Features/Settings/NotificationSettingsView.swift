@@ -3,7 +3,20 @@ import SwiftUI
 struct NotificationSettingsView: View {
     let settings: AppSettingsStore
     let coordinator: NotificationCoordinator
+    let profiles: [ProfileSnapshot]
     let reschedule: @MainActor @Sendable () async -> Void
+
+    init(
+        settings: AppSettingsStore,
+        coordinator: NotificationCoordinator,
+        profiles: [ProfileSnapshot] = [],
+        reschedule: @escaping @MainActor @Sendable () async -> Void
+    ) {
+        self.settings = settings
+        self.coordinator = coordinator
+        self.profiles = profiles
+        self.reschedule = reschedule
+    }
 
     var body: some View {
         Section("Notifications") {
@@ -54,9 +67,56 @@ struct NotificationSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+
+        if !profiles.isEmpty {
+            Section("Class alerts") {
+                ForEach(profiles) { profile in
+                    Toggle(profile.name, isOn: enabledBinding(for: profile))
+                        .accessibilityIdentifier("class-alert-\(profile.id.uuidString)")
+
+                    if settings.classAlertPreference(for: profile.id).enabled {
+                        Picker("\(profile.name) lead time", selection: leadTimeBinding(for: profile)) {
+                            ForEach(ClassAlertPreference.allowedLeadMinutes.sorted(), id: \.self) { minutes in
+                                Text("\(minutes) minutes before").tag(minutes)
+                            }
+                        }
+                        .accessibilityIdentifier("class-alert-lead-\(profile.id.uuidString)")
+                    }
+                }
+            }
+        }
     }
 
-    private func refreshNotifications() {
-        Task { await reschedule() }
+    private func enabledBinding(for profile: ProfileSnapshot) -> Binding<Bool> {
+        Binding(
+            get: { settings.classAlertPreference(for: profile.id).enabled },
+            set: { enabled in
+                var preference = settings.classAlertPreference(for: profile.id)
+                preference.enabled = enabled
+                settings.setClassAlertPreference(preference, for: profile.id)
+                refreshNotifications(failClosed: true)
+            }
+        )
+    }
+
+    private func leadTimeBinding(for profile: ProfileSnapshot) -> Binding<Int> {
+        Binding(
+            get: { settings.classAlertPreference(for: profile.id).leadMinutes },
+            set: { leadMinutes in
+                var preference = settings.classAlertPreference(for: profile.id)
+                preference.leadMinutes = leadMinutes
+                settings.setClassAlertPreference(preference, for: profile.id)
+                refreshNotifications(failClosed: true)
+            }
+        )
+    }
+
+    private func refreshNotifications(failClosed: Bool = true) {
+        Task {
+            if failClosed {
+                await coordinator.clear()
+            }
+            await reschedule()
+        }
     }
 }

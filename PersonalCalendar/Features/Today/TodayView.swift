@@ -8,12 +8,14 @@ struct TodayView: View {
     private let openSettings: @MainActor () -> Void
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
+    private let onPresentationChanged: @MainActor (Bool) -> Void
 
     init(
         environment: AppEnvironment,
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil,
-        openSettings: @escaping @MainActor () -> Void = {}
+        openSettings: @escaping @MainActor () -> Void = {},
+        onPresentationChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.environment = environment
         let profileScopes = environment.profileScopes
@@ -27,11 +29,15 @@ struct TodayView: View {
             currentScope: {
                 try profileScopes.resolve(profileSelection.activeIdentity)
             },
-            rescheduleNotifications: environment.rescheduleNotifications
+            rescheduleNotifications: {
+                await environment.notificationCoordinator.clear()
+                await environment.rescheduleNotifications()
+            }
         ))
         self.openSettings = openSettings
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
+        self.onPresentationChanged = onPresentationChanged
     }
 
     var body: some View {
@@ -85,6 +91,9 @@ struct TodayView: View {
                     TaskEditorView(model: editorModel, lists: lists, nilDestinationLabel: "Preserve Current", showsDelete: true, onDismiss: dismissEditor)
                 }
             }
+            .onChange(of: editorPresentation != nil, initial: true) { _, isPresented in
+                onPresentationChanged(isPresented)
+            }
         }
         .onAppear {
             environment.agendaRefreshRegistry.register(id: refreshRegistrationID) { [weak model] in
@@ -134,6 +143,7 @@ struct TodayView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .event(model: editorModel, calendars: environment.calendar.calendars()))
+            onPresentationChanged(true)
         case let .reminder(reminderID):
             let editorModel = TaskEditorViewModel.editing(
                 reminderID: reminderID,
@@ -143,6 +153,7 @@ struct TodayView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .task(model: editorModel, lists: environment.reminders.lists()))
+            onPresentationChanged(true)
         case .routine, .synthetic:
             break
         }
@@ -150,6 +161,7 @@ struct TodayView: View {
 
     private func dismissEditor() {
         editorPresentation = nil
+        onPresentationChanged(false)
     }
 
     private func reconcileEditorWithoutDismissing() {
@@ -159,6 +171,7 @@ struct TodayView: View {
     private func finishEventEditorAndReload(_ commit: EventEditorCommit) {
         Task { @MainActor in
             editorPresentation = nil
+            onPresentationChanged(false)
             await model.refreshAfterEventEditorCommit(commit)
         }
     }
@@ -166,6 +179,7 @@ struct TodayView: View {
     private func finishTaskEditorAndReload(_ commit: TaskEditorCommit) {
         Task { @MainActor in
             editorPresentation = nil
+            onPresentationChanged(false)
             await model.refreshAfterTaskEditorCommit(commit)
         }
     }

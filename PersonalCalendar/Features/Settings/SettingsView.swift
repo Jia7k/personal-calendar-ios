@@ -35,7 +35,12 @@ struct SettingsView: View {
                 Section("Visible reminder lists") { ForEach(environment.reminders.lists()) { value in Toggle(value.title, isOn: Binding(get: { environment.settings.visibleReminderListIDs(availableIDs: Set(environment.reminders.lists().map(\.id))).contains(value.id) }, set: { _ in environment.settings.toggleReminderList(id: value.id, availableIDs: Set(environment.reminders.lists().map(\.id))); sourceSelectionChanged = true; onContentChanged() })) } }
                 defaults
             }
-            NotificationSettingsView(settings: environment.settings, coordinator: environment.notificationCoordinator, reschedule: environment.rescheduleNotifications)
+            NotificationSettingsView(
+                settings: environment.settings,
+                coordinator: environment.notificationCoordinator,
+                profiles: environment.profileSelection.profiles,
+                reschedule: environment.rescheduleNotifications
+            )
             Section("Lock Screen") {
                 NavigationLink("Timetable") {
                     TimetableSettingsView(
@@ -68,7 +73,10 @@ struct SettingsView: View {
                 NavigationLink("Backup & Restore") {
                     BackupSettingsView(backup: environment.backup, onRestored: {
                         onContentChanged()
-                        Task { await environment.rescheduleNotifications() }
+                        Task {
+                            await environment.notificationCoordinator.clear()
+                            await environment.rescheduleNotifications()
+                        }
                     })
                 }
             }

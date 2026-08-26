@@ -7,14 +7,22 @@ struct TasksView: View {
     @State private var pickedDate = Date()
     @State private var pickedDateHasTime = true
     @State private var refreshRegistrationID = UUID()
+    @State private var deepLinkResolver = TaskDeepLinkResolver()
+    @State private var presentationGeneration = 0
     private let environment: AppEnvironment
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
+    private let taskDeepLink: TaskDeepLinkSignal?
+    private let onDeepLinkHandled: @MainActor (UUID, Bool) -> Void
+    private let onPresentationChanged: @MainActor (Bool) -> Void
 
     init(
         environment: AppEnvironment,
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
-        quickEntryRefresh: QuickEntryRefreshSignal? = nil
+        quickEntryRefresh: QuickEntryRefreshSignal? = nil,
+        taskDeepLink: TaskDeepLinkSignal? = nil,
+        onDeepLinkHandled: @escaping @MainActor (UUID, Bool) -> Void = { _, _ in },
+        onPresentationChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.environment = environment
         let selection = environment.profileSelection
@@ -26,6 +34,9 @@ struct TasksView: View {
         ))
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
+        self.taskDeepLink = taskDeepLink
+        self.onDeepLinkHandled = onDeepLinkHandled
+        self.onPresentationChanged = onPresentationChanged
     }
 
     var body: some View {
@@ -106,11 +117,28 @@ struct TasksView: View {
                     }
                 }
             }
-            .task(id: revision) { await model.load() }
+            .task(id: revision) {
+                guard taskDeepLink == nil else { return }
+                await model.load()
+            }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh,
                       case .task = quickEntryRefresh.outcome else { return }
                 await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)
+            }
+            .task(id: TaskDeepLinkProcessingKey(
+                signalID: taskDeepLink?.id,
+                editorID: editorPresentation?.id,
+                pickerTaskID: pickedTask?.id
+            )) {
+                await handleTaskDeepLink()
+            }
+            .onChange(
+                of: editorPresentation != nil || pickedTask != nil,
+                initial: true
+            ) { _, isPresented in
+                presentationGeneration &+= 1
+                onPresentationChanged(isPresented)
             }
             .refreshable { await model.load() }
         }
@@ -233,6 +261,7 @@ struct TasksView: View {
         pickedDate = task.dueDate ?? .now
         pickedDateHasTime = task.dueHasTime
         pickedTask = task
+        onPresentationChanged(true)
     }
 
     private func taskDetails(_ task: ReminderSnapshot) -> some View {
@@ -265,10 +294,59 @@ struct TasksView: View {
             nilDestinationLabel: "Preserve Current",
             showsDelete: true
         )
+        onPresentationChanged(true)
+    }
+
+    private func handleTaskDeepLink() async {
+        guard editorPresentation == nil,
+              pickedTask == nil,
+              let signal = taskDeepLink else { return }
+        let capturedPresentationGeneration = presentationGeneration
+        await model.load()
+        let localPresentationIsActive = editorPresentation != nil || pickedTask != nil
+        if HostRouteCancellationPolicy.shouldFinishAsUnavailable(
+            taskIsCancelled: Task.isCancelled,
+            signalIsCurrent: taskDeepLink?.id == signal.id,
+            localPresentationIsActive: localPresentationIsActive,
+            presentationGenerationIsUnchanged:
+                capturedPresentationGeneration == presentationGeneration
+        ) {
+            onDeepLinkHandled(signal.id, false)
+            return
+        }
+        guard !Task.isCancelled,
+              taskDeepLink?.id == signal.id,
+              editorPresentation == nil,
+              pickedTask == nil else { return }
+        let liveReminder = environment.reminders.reminder(id: signal.reminderID)
+        let scope = try? environment.profileScopes.resolve(
+            environment.profileSelection.activeIdentity
+        )
+        let reminders: [ReminderSnapshot]
+        if environment.reminders.accessState == .granted,
+           let liveReminder,
+           let scope,
+           scope.reminderListIDs.contains(liveReminder.listID) {
+            reminders = [liveReminder]
+        } else {
+            reminders = []
+        }
+        guard let resolution = deepLinkResolver.resolve(
+            signal,
+            reminders: reminders
+        ) else { return }
+        switch resolution {
+        case let .open(task):
+            openTask(task)
+            onDeepLinkHandled(signal.id, true)
+        case .unavailable:
+            onDeepLinkHandled(signal.id, false)
+        }
     }
 
     private func dismissEditor() {
         editorPresentation = nil
+        onPresentationChanged(false)
     }
 
     private func reconcileEditorWithoutDismissing() {
@@ -278,6 +356,7 @@ struct TasksView: View {
     private func finishEditorAndReload(_ commit: TaskEditorCommit) {
         Task { @MainActor in
             editorPresentation = nil
+            onPresentationChanged(false)
             await model.refreshAfterEditorCommit(commit)
         }
     }
@@ -289,4 +368,10 @@ private struct TasksEditorPresentation: Identifiable {
     let lists: [ReminderListDescriptor]
     let nilDestinationLabel: String
     let showsDelete: Bool
+}
+
+private struct TaskDeepLinkProcessingKey: Hashable {
+    let signalID: UUID?
+    let editorID: UUID?
+    let pickerTaskID: String?
 }

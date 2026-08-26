@@ -6,26 +6,38 @@ struct CalendarHomeView: View {
     @State private var viewModel: CalendarViewModel
     @State private var editorPresentation: CalendarEditorPresentation?
     @State private var showingSearch = false
+    @State private var isTransitioningPresentation = false
+    @State private var presentationGeneration = 0
     @State private var refreshRegistrationID = UUID()
+    @State private var deepLinkResolver = CalendarDeepLinkResolver()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
     private let onOpenRoutine: @MainActor (UUID) -> Void
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
+    private let calendarDeepLink: CalendarDeepLinkSignal?
+    private let onDeepLinkHandled: @MainActor (UUID, Bool) -> Void
+    private let onPresentationChanged: @MainActor (Bool) -> Void
     private var calendar: Calendar { .current }
 
     init(
         environment: AppEnvironment,
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil,
+        calendarDeepLink: CalendarDeepLinkSignal? = nil,
         openSettings: @escaping @MainActor () -> Void = {},
-        onOpenRoutine: @escaping @MainActor (UUID) -> Void = { _ in }
+        onOpenRoutine: @escaping @MainActor (UUID) -> Void = { _ in },
+        onDeepLinkHandled: @escaping @MainActor (UUID, Bool) -> Void = { _, _ in },
+        onPresentationChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.environment = environment
         self.openSettings = openSettings
         self.onOpenRoutine = onOpenRoutine
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
+        self.calendarDeepLink = calendarDeepLink
+        self.onDeepLinkHandled = onDeepLinkHandled
+        self.onPresentationChanged = onPresentationChanged
         let systemCalendar = Calendar.current
         let profileScopes = environment.profileScopes
         let profileSelection = environment.profileSelection
@@ -63,6 +75,7 @@ struct CalendarHomeView: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("Search", systemImage: "magnifyingglass") {
                         showingSearch = true
+                        onPresentationChanged(true)
                     }
                     .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                     .accessibilityIdentifier("calendar-search-open")
@@ -76,10 +89,29 @@ struct CalendarHomeView: View {
                     onOpenSettings: openSettings
                 )
             }
-            .task(id: revision) { await viewModel.load() }
+            .task(id: revision) {
+                guard calendarDeepLink == nil else { return }
+                await viewModel.load()
+            }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
                 await viewModel.refreshAfterQuickEntry(quickEntryRefresh.outcome)
+            }
+            .task(id: CalendarDeepLinkProcessingKey(
+                signalID: calendarDeepLink?.id,
+                editorID: editorPresentation?.id,
+                showsSearch: showingSearch
+            )) {
+                await handleCalendarDeepLink()
+            }
+            .onChange(
+                of: editorPresentation != nil
+                    || showingSearch
+                    || isTransitioningPresentation,
+                initial: true
+            ) { _, isPresented in
+                presentationGeneration &+= 1
+                onPresentationChanged(isPresented)
             }
             .sheet(item: $editorPresentation) { presentation in
                 switch presentation.content {
@@ -257,6 +289,7 @@ struct CalendarHomeView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .event(model: model, calendars: environment.calendar.calendars(), nilDestinationLabel: "Preserve Current", showsDelete: true))
+            onPresentationChanged(true)
         case let .reminder(reminderID):
             let model = TaskEditorViewModel.editing(
                 reminderID: reminderID,
@@ -266,6 +299,7 @@ struct CalendarHomeView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .task(model: model, lists: environment.reminders.lists()))
+            onPresentationChanged(true)
         case let .routine(id, _):
             onOpenRoutine(id)
         case .synthetic:
@@ -274,15 +308,75 @@ struct CalendarHomeView: View {
     }
 
     private func selectSearchResult(_ origin: AgendaItemOrigin) {
+        isTransitioningPresentation = true
         showingSearch = false
         Task { @MainActor in
             await Task.yield()
             openAgendaItem(origin)
+            isTransitioningPresentation = false
+        }
+    }
+
+    private func handleCalendarDeepLink() async {
+        guard editorPresentation == nil,
+              !showingSearch,
+              let signal = calendarDeepLink else { return }
+        let capturedPresentationGeneration = presentationGeneration
+        if let day = signal.day {
+            await viewModel.jump(to: day)
+        } else {
+            await viewModel.load()
+        }
+        let localPresentationIsActive = editorPresentation != nil
+            || showingSearch
+            || isTransitioningPresentation
+        if HostRouteCancellationPolicy.shouldFinishAsUnavailable(
+            taskIsCancelled: Task.isCancelled,
+            signalIsCurrent: calendarDeepLink?.id == signal.id,
+            localPresentationIsActive: localPresentationIsActive,
+            presentationGenerationIsUnchanged:
+                capturedPresentationGeneration == presentationGeneration
+        ) {
+            onDeepLinkHandled(signal.id, false)
+            return
+        }
+        guard !Task.isCancelled,
+              calendarDeepLink?.id == signal.id,
+              editorPresentation == nil,
+              !showingSearch else { return }
+
+        let routeEvents: [CalendarEventSnapshot]
+        if signal.entryID != nil {
+            guard let authoritative = viewModel.authoritativeRouteEvents(
+                for: signal.day
+            ) else {
+                _ = deepLinkResolver.resolve(signal, events: [])
+                onDeepLinkHandled(signal.id, false)
+                return
+            }
+            routeEvents = authoritative
+        } else {
+            routeEvents = []
+        }
+
+        guard let resolution = deepLinkResolver.resolve(
+            signal,
+            events: routeEvents
+        ) else { return }
+        switch resolution {
+        case .navigate:
+            onDeepLinkHandled(signal.id, true)
+        case let .open(_, event):
+            openAgendaItem(.event(id: event.id))
+            onDeepLinkHandled(signal.id, true)
+        case .unavailable:
+            onDeepLinkHandled(signal.id, false)
         }
     }
 
     private func dismissEditor() {
         editorPresentation = nil
+        onPresentationChanged(false)
     }
 
     private func reconcileEditorWithoutDismissing() {
@@ -292,6 +386,7 @@ struct CalendarHomeView: View {
     private func finishEditorAndReload(operation: CalendarEditorRefreshOperation) {
         Task { @MainActor in
             editorPresentation = nil
+            onPresentationChanged(false)
             await viewModel.refreshAfterEditorCommit(operation)
         }
     }
@@ -313,4 +408,10 @@ private struct CalendarEditorPresentation: Identifiable {
 
     let id = UUID()
     let content: Content
+}
+
+private struct CalendarDeepLinkProcessingKey: Hashable {
+    let signalID: UUID?
+    let editorID: UUID?
+    let showsSearch: Bool
 }
