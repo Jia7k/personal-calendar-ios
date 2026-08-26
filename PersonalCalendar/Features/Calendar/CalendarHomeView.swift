@@ -5,6 +5,7 @@ struct CalendarHomeView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var viewModel: CalendarViewModel
     @State private var editorPresentation: CalendarEditorPresentation?
+    @State private var showingSearch = false
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
@@ -59,9 +60,17 @@ struct CalendarHomeView: View {
             .navigationTitle("Calendar")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Search", systemImage: "magnifyingglass") {
+                        showingSearch = true
+                    }
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("calendar-search-open")
                     ProfileSelectorToolbar(selection: environment.profileSelection)
                 }
+            }
+            .navigationDestination(isPresented: $showingSearch) {
+                CalendarSearchView(environment: environment, onSelect: selectSearchResult)
             }
             .task(id: revision) { await viewModel.load() }
             .task(id: quickEntryRefresh?.id) {
@@ -244,6 +253,14 @@ struct CalendarHomeView: View {
             onOpenRoutine(id)
         case .synthetic:
             break
+        }
+    }
+
+    private func selectSearchResult(_ origin: AgendaItemOrigin) {
+        showingSearch = false
+        Task { @MainActor in
+            await Task.yield()
+            openAgendaItem(origin)
         }
     }
 
