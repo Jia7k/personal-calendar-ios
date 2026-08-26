@@ -63,12 +63,18 @@ These features reuse the existing profile scope, EventKit services, routine repo
 
 ### App route
 
-Create one typed `AppRoute` as the only destination language used by notification responses, widgets, URLs, App Intents, and internal cross-tab navigation:
+Create one typed `AppRoute` as the only destination language used by notification responses, widgets, URLs, App Intents, and internal cross-tab navigation. The route value and codec live in the existing target-shared `ProfileShared` source folder so both the app and widget extension compile the same contract:
 
 ```swift
+struct AppRouteDay: Codable, Equatable, Sendable {
+    let year: Int
+    let month: Int
+    let day: Int
+}
+
 enum AppRoute: Equatable, Sendable {
     case today
-    case calendar(day: LocalDay?, profile: ProfileIdentity?, item: AgendaItemOrigin?)
+    case calendar(day: AppRouteDay?, profile: ProfileIdentity?, entryID: String?)
     case task(id: String, profile: ProfileIdentity?)
     case routine(id: UUID, profile: ProfileIdentity?)
     case quickEntry(text: String, profile: ProfileIdentity?)
@@ -160,7 +166,7 @@ Permission loss or profile deletion immediately removes affected pending request
 
 ### Links and Maps
 
-Widget and notification routes contain only profile identity plus privacy-safe app display identity. The app resolves the current provider snapshot after opening. It never serializes EventKit mutation IDs into shared files or URLs.
+Widget and notification routes contain only profile identity plus a deterministic, privacy-safe timetable entry identity. The timetable builder derives that opaque identity from the provider display identity and occurrence start without serializing the provider identifier itself. The app resolves the current provider snapshot after opening. It never serializes EventKit mutation IDs into shared files or URLs.
 
 Event rows and Next Up expose a Maps action when location is nonblank. The URL uses `MKMapItem`/MapKit search terms rather than hand-built map query escaping.
 
@@ -170,7 +176,7 @@ Event rows and Next Up expose a Maps action when location is nonblank. The URL u
 
 Remove the fixed `prefix(12)` behavior. The weekly catalog builder sorts the complete filtered week deterministically, then enforces an encoded-size budget rather than an item-count budget. It shortens already-bounded display strings before omitting an entry. If entries still exceed the budget, it keeps the nearest chronological entries and records an explicit omitted count; no surface may imply the visible list is complete when it is not.
 
-The widget catalog may use a larger file budget because it is app-group JSON. The Live Activity content projects only today's current/upcoming entries and stays below ActivityKit's content-state size limit.
+The widget catalog may use a larger file budget because it is app-group JSON. The Live Activity content uses a separate compact state containing only today's current/upcoming entries and stays below ActivityKit's content-state size limit; it never embeds the newly expanded weekly snapshot directly.
 
 ### Adaptive rails and freshness
 
@@ -218,7 +224,7 @@ Add an app-target `QuickEntryIntent` with:
 - optional saved-profile entity;
 - `openAppWhenRun == true`.
 
-The intent validates only that text is nonblank and returns/opens a versioned Quick Entry `AppRoute`. It never invokes `SaveRouter` or EventKit from the intent process. `RootTabView` consumes the route, resolves the exact profile, constructs the existing `QuickEntryViewModel`, parses the text, and presents confirmation.
+The intent validates only that text is nonblank and writes a versioned Quick Entry `AppRoute` envelope to a tiny app-group handoff store. `openAppWhenRun` opens the app, which consumes that envelope once. This avoids placing private capture text in a URL while retaining the same route contract. It never invokes `SaveRouter` or EventKit from the intent process. `RootTabView` resolves the exact profile, constructs the existing `QuickEntryViewModel`, parses the text, and presents confirmation.
 
 `AppShortcutsProvider` publishes concise phrases for Add to Personal Calendar and Plan with Personal Calendar. The same intent becomes available to Siri, Shortcuts, Spotlight, and the Action Button on supported devices.
 
