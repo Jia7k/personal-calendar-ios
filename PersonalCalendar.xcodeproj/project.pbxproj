@@ -65,6 +65,7 @@
 		47B170E351047751A2E2E7F8 /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A8F1D75CF739246732E16F1 /* TodayView.swift */; };
 		497F43F01C7CE841B2BA4161 /* TimetableWidgetSelectionResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 558F7D13F00F3F1EBA38D49F /* TimetableWidgetSelectionResolver.swift */; };
 		4C4875701620A6BBD29869D2 /* TasksViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46669A23593638D5CF76617F /* TasksViewModel.swift */; };
+		4CC87422962FC8CD53E706FF /* TaskQuickReschedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09F68C0F6FBAF21EDD1505D /* TaskQuickReschedule.swift */; };
 		4E4B858AA6FEA43F2D9F234B /* TimetableSnapshotCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E71C223A2E9BE6D9406931E /* TimetableSnapshotCoordinatorTests.swift */; };
 		4F1149F1F2188D66A18A8B6A /* CalendarSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1EC6AF1E044888D16745F4 /* CalendarSearchView.swift */; };
 		50FCA94C311F02070EC967E8 /* SystemNotificationAuthorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C0A429518067EBE23578BC /* SystemNotificationAuthorizer.swift */; };
@@ -116,6 +117,7 @@
 		874CDA59654B6732B0A22CA8 /* RootLifecycleControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0AD119EADEB4886F8A223D8 /* RootLifecycleControllerTests.swift */; };
 		8A5DF308EE185223FA1FF14B /* EditorReviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FCBF7F7DC1AF2645B93CCA8 /* EditorReviewUITests.swift */; };
 		8CC407129F0774658C4E9307 /* TimetableLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D5250050E916C0EFD1CDF39 /* TimetableLiveActivityCoordinator.swift */; };
+		8DDB96FFAABC6B2CD6AC8866 /* TaskQuickRescheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFC315742C2C49DAABD3351 /* TaskQuickRescheduleTests.swift */; };
 		8F42F4C7CF2A1A887774E504 /* CalendarSearchFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A66A88AD55E31E80C8D3907 /* CalendarSearchFlowUITests.swift */; };
 		91304125657CFA0AD48974B9 /* ProfileRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC4216599AFDC4F9B31CA748 /* ProfileRepositoryTests.swift */; };
 		924CA9594E04B816274E90E7 /* CategorySettingsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01CC220EB378608FB0F557D8 /* CategorySettingsModelTests.swift */; };
@@ -171,6 +173,7 @@
 		DE6499CAB15E7D8E13625667 /* QuickEntryParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF568880E1F8DB12CB2AE99 /* QuickEntryParsing.swift */; };
 		DFAE4445D8FF598A8E2508E8 /* WeekPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07DBE486124BAB25813956C3 /* WeekPlannerView.swift */; };
 		E3F00C8B2BE2A11B793C24CB /* CalendarServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */; };
+		E8C93BD23CB0D14E07ACB9D3 /* TaskQuickRescheduleViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C9DCEDFBAADAF218EA8B6 /* TaskQuickRescheduleViewModelTests.swift */; };
 		E9AF60A9B0B2B3224BC25DB5 /* EventKitMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C30CD53CF9716208915AEEB /* EventKitMutationTests.swift */; };
 		EA109F1C24B3F290A8494F8F /* Recurrence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0301807D2E3D787BF7934E52 /* Recurrence.swift */; };
 		EA2311E5C3E2AED91933670F /* RoutineProfileMutationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE194D5D8177DBC3B3BBB94E /* RoutineProfileMutationCoordinatorTests.swift */; };
@@ -276,6 +279,7 @@
 		3EE38FEAF59CAA69AD0C57DA /* EventEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditorView.swift; sourceTree = "<group>"; };
 		3EFF62CD4BD8493FC9E8FDF5 /* ProfileSelectorToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSelectorToolbar.swift; sourceTree = "<group>"; };
 		3FF6331F0270F9D76E2D81E2 /* DemoEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoEnvironmentTests.swift; sourceTree = "<group>"; };
+		404C9DCEDFBAADAF218EA8B6 /* TaskQuickRescheduleViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskQuickRescheduleViewModelTests.swift; sourceTree = "<group>"; };
 		40D04AEA8887078006C35E50 /* TaskRecurrenceEndDateSeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRecurrenceEndDateSeedTests.swift; sourceTree = "<group>"; };
 		42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepositoryTests.swift; sourceTree = "<group>"; };
 		430D7E4FEBDE8C4F07DB1B32 /* RuleBasedQuickEntryParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuleBasedQuickEntryParserTests.swift; sourceTree = "<group>"; };
@@ -386,7 +390,9 @@
 		DB5198B0025A74BC69D26436 /* TaskEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditorView.swift; sourceTree = "<group>"; };
 		DB9A9562279429E312F626F7 /* CalendarViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarViewModelTests.swift; sourceTree = "<group>"; };
 		DCCF232EDA85C58289389836 /* WeekPlannerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekPlannerModels.swift; sourceTree = "<group>"; };
+		DCFC315742C2C49DAABD3351 /* TaskQuickRescheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskQuickRescheduleTests.swift; sourceTree = "<group>"; };
 		E02776B6366CB5D539044404 /* RoutineRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineRepository.swift; sourceTree = "<group>"; };
+		E09F68C0F6FBAF21EDD1505D /* TaskQuickReschedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskQuickReschedule.swift; sourceTree = "<group>"; };
 		E2CDC00CC8E0B0C1093DC330 /* TimetableLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableLiveActivity.swift; sourceTree = "<group>"; };
 		E2DCFA26D39CACE838168DFD /* ExternalCategoryLinkRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalCategoryLinkRecord.swift; sourceTree = "<group>"; };
 		E56828D8D54A59925D685F03 /* NextClassWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextClassWidget.swift; sourceTree = "<group>"; };
@@ -598,6 +604,8 @@
 				58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */,
 				B8CCCCF7F766C24F5223CD98 /* RoutineDeepLinkTests.swift */,
 				F647A85B6C60046288ECF3B7 /* TaskEditorViewModelTests.swift */,
+				DCFC315742C2C49DAABD3351 /* TaskQuickRescheduleTests.swift */,
+				404C9DCEDFBAADAF218EA8B6 /* TaskQuickRescheduleViewModelTests.swift */,
 				40D04AEA8887078006C35E50 /* TaskRecurrenceEndDateSeedTests.swift */,
 				0A6FBFD8323EE15EF1F4D82A /* WeekPlannerBuilderTests.swift */,
 			);
@@ -928,6 +936,7 @@
 			children = (
 				DB5198B0025A74BC69D26436 /* TaskEditorView.swift */,
 				1AD2801ACBEB6344A2849275 /* TaskEditorViewModel.swift */,
+				E09F68C0F6FBAF21EDD1505D /* TaskQuickReschedule.swift */,
 				478412E6AABD19C77569FEAB /* TaskRecurrenceEndDateSeed.swift */,
 				A93EF05B1DCB2CB75F40436F /* TasksView.swift */,
 				46669A23593638D5CF76617F /* TasksViewModel.swift */,
@@ -1253,6 +1262,7 @@
 				69F05BE1B5CEA26C62919E12 /* SystemNotificationScheduler.swift in Sources */,
 				700C19B52F5FAE04E330F889 /* TaskEditorView.swift in Sources */,
 				6964B7E13E54791A448328AC /* TaskEditorViewModel.swift in Sources */,
+				4CC87422962FC8CD53E706FF /* TaskQuickReschedule.swift in Sources */,
 				5A08DDB71E8B5D3EF64F80D9 /* TaskRecurrenceEndDateSeed.swift in Sources */,
 				0FFDD637EA1D1F64D2A2514C /* TasksView.swift in Sources */,
 				4C4875701620A6BBD29869D2 /* TasksViewModel.swift in Sources */,
@@ -1324,6 +1334,8 @@
 				BB782DCDAC7E289308C76830 /* SaveRouterTests.swift in Sources */,
 				0D4BD0EC64C9BC33C0608878 /* SystemEventKitMutationBackingTests.swift in Sources */,
 				15EF16E7B765D36522FC34DF /* TaskEditorViewModelTests.swift in Sources */,
+				8DDB96FFAABC6B2CD6AC8866 /* TaskQuickRescheduleTests.swift in Sources */,
+				E8C93BD23CB0D14E07ACB9D3 /* TaskQuickRescheduleViewModelTests.swift in Sources */,
 				5E7A91F1A66E2D9CE3C86560 /* TaskRecurrenceEndDateSeedTests.swift in Sources */,
 				9EC8F95DC06A23C1F8B6D6A3 /* TimeRailsLayoutTests.swift in Sources */,
 				B0A493DA47E0A15A4F194AD2 /* TimetableLiveActivityCoordinatorTests.swift in Sources */,

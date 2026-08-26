@@ -5,13 +5,16 @@ import Observation
 @Observable
 final class TasksViewModel {
     struct TaskMutationOperation: Equatable { let id: String; let completed: Bool }
+    private(set) var overdue: [ReminderSnapshot] = []
     private(set) var today: [ReminderSnapshot] = []
     private(set) var upcoming: [ReminderSnapshot] = []
     private(set) var completed: [ReminderSnapshot] = []
     private(set) var refreshErrorMessage: String?
     private(set) var mutationErrorMessage: String?
     private(set) var failedMutationOperation: TaskMutationOperation?
-    var errorMessage: String? { mutationErrorMessage ?? refreshErrorMessage }
+    private(set) var rescheduleUndo: TaskRescheduleUndo?
+    private(set) var rescheduleErrorMessage: String?
+    var errorMessage: String? { rescheduleErrorMessage ?? mutationErrorMessage ?? refreshErrorMessage }
     private(set) var isLoading = false
     private(set) var isProfileEmpty = false
     private(set) var mutatingIDs: Set<String> = []
@@ -177,6 +180,103 @@ final class TasksViewModel {
         await setCompleted(id: operation.id, completed: operation.completed)
     }
 
+    func quickReschedule(id: String, command: TaskQuickReschedule) async {
+        guard let scope = scopeForMutation() else { return }
+        guard service.accessState == .granted,
+              let item = confirmed.first(where: { $0.id == id }),
+              !item.isCompleted,
+              item.allowsModification,
+              scopeAllows(item, scope: scope),
+              !mutatingIDs.contains(id)
+        else { return }
+
+        let projected: ReminderScheduleValue
+        do {
+            projected = try TaskQuickReschedulePlanner(calendar: calendar).schedule(
+                for: item,
+                command: command,
+                now: now()
+            )
+        } catch {
+            return
+        }
+
+        let previous = item.dueDate.map {
+            ReminderScheduleValue(date: $0, hasTime: item.dueHasTime)
+        }
+        var draft = ReminderDraft(
+            title: item.title,
+            notes: item.notes,
+            dueDate: item.dueDate,
+            dueHasTime: item.dueHasTime,
+            priority: item.priority,
+            listID: nil,
+            alarm: .preserve,
+            recurrence: .preserve
+        )
+        draft.schedule = .replace(projected)
+
+        mutatingIDs.insert(id)
+        defer { mutatingIDs.remove(id) }
+        do {
+            try service.updateReminder(id: id, draft: draft)
+            replaceConfirmedSchedule(id: id, with: projected)
+            publish(scope: scope)
+            rescheduleUndo = .init(reminderID: id, previousSchedule: previous)
+            rescheduleErrorMessage = nil
+            await load()
+            if refreshErrorMessage != nil {
+                refreshErrorMessage = "Your task was rescheduled, but tasks could not be refreshed. Pull to try again."
+            }
+        } catch {
+            rescheduleErrorMessage = "Your task was not rescheduled. Try again."
+        }
+    }
+
+    func undoQuickReschedule() async {
+        guard let undo = rescheduleUndo,
+              let scope = scopeForMutation(),
+              service.accessState == .granted,
+              let item = confirmed.first(where: { $0.id == undo.reminderID }),
+              !item.hasRecurrence,
+              item.allowsModification,
+              scopeAllows(item, scope: scope),
+              !mutatingIDs.contains(item.id)
+        else { return }
+
+        var draft = ReminderDraft(
+            title: item.title,
+            notes: item.notes,
+            dueDate: item.dueDate,
+            dueHasTime: item.dueHasTime,
+            priority: item.priority,
+            listID: nil,
+            alarm: .preserve,
+            recurrence: .preserve
+        )
+        if let previous = undo.previousSchedule {
+            draft.schedule = .replace(previous)
+        } else {
+            draft.schedule = .clear
+        }
+
+        mutatingIDs.insert(item.id)
+        defer { mutatingIDs.remove(item.id) }
+        do {
+            try service.updateReminder(id: item.id, draft: draft)
+            replaceConfirmedSchedule(id: item.id, with: undo.previousSchedule)
+            publish(scope: scope)
+            if rescheduleUndo == undo { rescheduleUndo = nil }
+            rescheduleErrorMessage = nil
+            await load()
+            if refreshErrorMessage != nil {
+                refreshErrorMessage = "Your task schedule was restored, but tasks could not be refreshed. Pull to try again."
+            }
+        } catch {
+            rescheduleErrorMessage = "Your task schedule was not restored. Try again."
+        }
+    }
+
     private func captureScope() throws -> CapturedScope {
         if let currentScope {
             let scope = try currentScope()
@@ -207,6 +307,7 @@ final class TasksViewModel {
         isProfileEmpty = scope.reminderListIDs.isEmpty
         if cachedScopeIdentity != scope.identity {
             confirmed = []
+            overdue = []
             today = []
             upcoming = []
             completed = []
@@ -239,6 +340,7 @@ final class TasksViewModel {
 
     private func failClosedForUnknownScope() {
         confirmed = []
+        overdue = []
         today = []
         upcoming = []
         completed = []
@@ -252,7 +354,8 @@ final class TasksViewModel {
         let selected = visibleListIDs(for: scope)
         let visible = confirmed.filter { selected.contains($0.listID) }
         let incomplete = visible.filter { !$0.isCompleted }
-        today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) <= todayDay } ?? false }.sorted(by: sort)
+        overdue = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) < todayDay } ?? false }.sorted(by: sort)
+        today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) == todayDay } ?? false }.sorted(by: sort)
         upcoming = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? true }.sorted(by: sort)
         completed = visible.filter(\.isCompleted).sorted(by: sort)
     }
@@ -274,7 +377,33 @@ final class TasksViewModel {
         return descriptorIDs.isEmpty ? Set(confirmed.map(\.listID)) : descriptorIDs
     }
     private func clearMutationRecovery(id: String) { guard failedMutationOperation?.id == id else { return }; failedMutationOperation = nil; mutationErrorMessage = nil }
-    private func clearAllMutationRecovery() { failedMutationOperation = nil; mutationErrorMessage = nil }
+    private func clearAllMutationRecovery() {
+        failedMutationOperation = nil
+        mutationErrorMessage = nil
+        rescheduleUndo = nil
+        rescheduleErrorMessage = nil
+    }
+
+    private func replaceConfirmedSchedule(id: String, with schedule: ReminderScheduleValue?) {
+        confirmed = confirmed.map { item in
+            guard item.id == id else { return item }
+            return ReminderSnapshot(
+                id: item.id,
+                title: item.title,
+                notes: item.notes,
+                dueDate: schedule?.date,
+                dueHasTime: schedule?.hasTime ?? false,
+                priority: item.priority,
+                listID: item.listID,
+                listTitle: item.listTitle,
+                isCompleted: item.isCompleted,
+                allowsModification: item.allowsModification,
+                hasRecurrence: item.hasRecurrence,
+                alarm: item.alarm,
+                recurrence: item.recurrence
+            )
+        }
+    }
 
     private func sort(_ lhs: ReminderSnapshot, _ rhs: ReminderSnapshot) -> Bool {
         switch (lhs.dueDate, rhs.dueDate) { case let (a?, b?): if a != b { return a < b }; case (_?, nil): return true; case (nil, _?): return false; case (nil, nil): break }
