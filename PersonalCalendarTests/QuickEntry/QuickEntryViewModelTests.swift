@@ -79,6 +79,28 @@ final class QuickEntryViewModelTests: XCTestCase {
         XCTAssertTrue(saver.received.isEmpty)
     }
 
+    func testShortcutCaptureRemainsMarkedThroughReviewWithoutSaving() {
+        let saver = RecordingQuickEntrySaver()
+        let subject = QuickEntryViewModel(
+            parser: StubQuickEntryParser(result: .success(eventPreview())),
+            saver: saver,
+            context: context(),
+            destinations: options(defaultCalendarID: "work"),
+            captureSource: .shortcut
+        )
+        subject.text = "Dentist Friday at 3pm"
+
+        subject.parse()
+
+        XCTAssertEqual(subject.captureSource, .shortcut)
+        XCTAssertEqual(subject.phase, .confirmation(.ready))
+        XCTAssertTrue(saver.received.isEmpty)
+        XCTAssertEqual(
+            makeSubject(result: .success(eventPreview())).captureSource,
+            .inApp
+        )
+    }
+
     func testParseSeedsTaskDefaultButNeverAssignsDestinationToRoutine() {
         let task = makeSubject(result: .success(taskPreview()), options: options(defaultListID: "tasks"))
         task.text = "Submit report tomorrow"

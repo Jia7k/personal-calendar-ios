@@ -123,6 +123,11 @@ enum QuickEntrySourceAction: Equatable, Sendable {
     case none
 }
 
+enum QuickEntryCaptureSource: Equatable, Sendable {
+    case inApp
+    case shortcut
+}
+
 @MainActor
 @Observable
 final class QuickEntryViewModel {
@@ -132,6 +137,7 @@ final class QuickEntryViewModel {
     private(set) var destinations: QuickEntryDestinationOptions
     private(set) var categories: [CategorySnapshot]
     private(set) var transformationNotice: String?
+    let captureSource: QuickEntryCaptureSource
 
     @ObservationIgnored private let parser: any QuickEntryParsing
     @ObservationIgnored private let saver: any QuickEntrySaving
@@ -152,6 +158,7 @@ final class QuickEntryViewModel {
         destinations: QuickEntryDestinationOptions = .empty,
         categories: [CategorySnapshot] = [],
         creationProfile: CreationProfileContext? = nil,
+        captureSource: QuickEntryCaptureSource = .inApp,
         onCommitted: @escaping @MainActor (QuickEntrySaveOutcome) -> Void = { _ in }
     ) {
         self.parser = parser
@@ -160,6 +167,7 @@ final class QuickEntryViewModel {
         self.destinations = destinations
         self.categories = categories.sorted { $0.sortOrder < $1.sortOrder }
         self.creationProfile = creationProfile
+        self.captureSource = captureSource
         self.onCommitted = onCommitted
         eventDestinationID = destinations.defaultCalendarID
         taskDestinationID = destinations.defaultReminderListID

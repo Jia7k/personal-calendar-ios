@@ -48,6 +48,51 @@ final class ProfileCreationTests: XCTestCase {
         XCTAssertFalse(context.requiresExplicitReminderDestination)
     }
 
+    func testCapturedProfileResolutionNeverFallsBackToEverythingOrAnotherProfile() throws {
+        let profiles = [
+            profile(id: Self.personalID, name: "Personal", defaultCalendarID: "home"),
+            profile(id: Self.schoolID, name: "School", defaultCalendarID: "school")
+        ]
+        let resolver = CreationProfileResolver(
+            profiles: profiles,
+            resolveScope: { identity in
+                switch identity {
+                case .saved(Self.schoolID):
+                    return self.scope(
+                        identity: identity,
+                        calendarIDs: ["school"],
+                        defaultCalendarID: "school"
+                    )
+                case .saved:
+                    return self.scope(
+                        identity: identity,
+                        calendarIDs: ["home"],
+                        defaultCalendarID: "home"
+                    )
+                case .everything:
+                    XCTFail("Everything must not become a creation destination")
+                    return self.scope(identity: .everything)
+                }
+            }
+        )
+
+        XCTAssertEqual(
+            try resolver.resolve(captured: .saved(Self.schoolID), active: .everything),
+            .ready(try resolver.resolve(chosen: Self.schoolID))
+        )
+        XCTAssertEqual(
+            try resolver.resolve(
+                captured: .saved(UUID(uuidString: "99999999-9999-4999-8999-999999999999")!),
+                active: .saved(Self.personalID)
+            ),
+            .chooseSavedProfile([Self.personalID, Self.schoolID])
+        )
+        XCTAssertEqual(
+            try resolver.resolve(captured: nil, active: .everything),
+            .chooseSavedProfile([Self.personalID, Self.schoolID])
+        )
+    }
+
     func testMissingProfileDefaultsRequireExplicitDestinationBeforeQuickEntrySaves() {
         let calendar = FakeCalendarService(
             access: .granted,

@@ -6,6 +6,8 @@ enum RootTab: Hashable { case calendar, today, tasks, routines }
 struct RootTabView: View {
     let environment: AppEnvironment
     let routeController: AppRouteController
+    let quickEntryHandoffStore: AppRouteHandoffStore?
+    let quickEntryHandoffMonitor: AppRouteHandoffMonitor
     @State private var selection: RootTab = .calendar
     @State private var presentation: RootPresentation?
     @State private var creationProfileChoice: CreationProfileChoice?
@@ -20,9 +22,16 @@ struct RootTabView: View {
     @State private var routinesHostBusy = false
     @State private var lifecycle: RootLifecycleController
     @Environment(\.scenePhase) private var scenePhase
-    init(environment: AppEnvironment, routeController: AppRouteController = AppRouteController()) {
+    init(
+        environment: AppEnvironment,
+        routeController: AppRouteController = AppRouteController(),
+        quickEntryHandoffStore: AppRouteHandoffStore? = try? AppRouteHandoffStore.appGroup(),
+        quickEntryHandoffMonitor: AppRouteHandoffMonitor = AppRouteHandoffMonitor()
+    ) {
         self.environment = environment
         self.routeController = routeController
+        self.quickEntryHandoffStore = quickEntryHandoffStore
+        self.quickEntryHandoffMonitor = quickEntryHandoffMonitor
         _lifecycle = State(initialValue: RootLifecycleController(permissions: environment.permissions, validateDefaults: {
             environment.settings.validateDefaults(
                 calendarAccess: environment.calendar.accessState,
@@ -46,7 +55,8 @@ struct RootTabView: View {
             calendarSignalID: calendarDeepLink?.id,
             taskSignalID: taskDeepLink?.id,
             routineSignalID: routineDeepLink?.id,
-            presentationState: routePresentationState
+            presentationState: routePresentationState,
+            handoffRevision: quickEntryHandoffMonitor.revision
         )
         Group {
             if environment.settings.didCompleteOnboarding {
@@ -144,6 +154,7 @@ struct RootTabView: View {
         .onOpenURL(perform: receiveRouteURL)
         .task(id: routeProcessingKey) {
             processPendingRouteIfPossible()
+            processPendingHandoffIfPossible()
         }
         .alert(item: $routeAlert) { alert in
             Alert(
@@ -161,6 +172,8 @@ struct RootTabView: View {
             Task {
                 await lifecycle.sceneBecameActive()
                 refreshPresentedQuickEntryDestinations()
+                processPendingRouteIfPossible()
+                processPendingHandoffIfPossible()
             }
         }
     }
@@ -176,39 +189,76 @@ struct RootTabView: View {
     }
 
     private func presentQuickEntry() {
-        presentQuickEntry(initialText: nil)
+        presentQuickEntry(initialText: nil, captureSource: .inApp)
     }
 
-    private func presentQuickEntry(initialText: String?) {
+    private func presentQuickEntry(
+        initialText: String?,
+        captureSource: QuickEntryCaptureSource = .inApp
+    ) {
         guard presentation == nil, creationProfileChoice == nil else { return }
         let resolver = creationProfileResolver()
-        guard let resolution = try? resolver.resolve(
-            active: environment.profileSelection.activeIdentity
-        ) else { return }
+        guard let resolution = try? resolver.resolve(active: environment.profileSelection.activeIdentity) else {
+            if captureSource == .shortcut {
+                presentCreationProfileChoice(
+                    profiles: environment.profileSelection.profiles,
+                    initialText: initialText,
+                    captureSource: captureSource
+                )
+            }
+            return
+        }
         switch resolution {
         case let .ready(context):
-            presentQuickEntry(context: context, initialText: initialText)
+            presentQuickEntry(
+                context: context,
+                initialText: initialText,
+                captureSource: captureSource
+            )
         case let .chooseSavedProfile(ids):
             let profilesByID = Dictionary(
                 uniqueKeysWithValues: environment.profileSelection.profiles.map { ($0.id, $0) }
             )
-            creationProfileChoice = CreationProfileChoice(
+            presentCreationProfileChoice(
                 profiles: ids.compactMap { profilesByID[$0] },
-                initialText: initialText
+                initialText: initialText,
+                captureSource: captureSource
             )
         }
     }
 
     private func chooseCreationProfile(_ id: UUID) {
         let initialText = creationProfileChoice?.initialText
+        let captureSource = creationProfileChoice?.captureSource ?? .inApp
         creationProfileChoice = nil
         guard let context = try? creationProfileResolver().resolve(chosen: id) else { return }
-        presentQuickEntry(context: context, initialText: initialText)
+        presentQuickEntry(
+            context: context,
+            initialText: initialText,
+            captureSource: captureSource
+        )
+    }
+
+    private func presentCreationProfileChoice(
+        profiles: [ProfileSnapshot],
+        initialText: String?,
+        captureSource: QuickEntryCaptureSource
+    ) {
+        guard !profiles.isEmpty else {
+            if captureSource == .shortcut { showRouteUnavailable() }
+            return
+        }
+        creationProfileChoice = CreationProfileChoice(
+            profiles: profiles,
+            initialText: initialText,
+            captureSource: captureSource
+        )
     }
 
     private func presentQuickEntry(
         context creationProfile: CreationProfileContext,
-        initialText: String? = nil
+        initialText: String? = nil,
+        captureSource: QuickEntryCaptureSource = .inApp
     ) {
         guard presentation == nil else { return }
         let context = environment.quickEntryContext()
@@ -233,6 +283,7 @@ struct RootTabView: View {
             destinations: options,
             categories: (try? environment.categories.list()) ?? [],
             creationProfile: creationProfile,
+            captureSource: captureSource,
             onCommitted: { outcome in
                 if case .routine = outcome {
                     try? environment.profileSelection.refreshScope()
@@ -266,6 +317,62 @@ struct RootTabView: View {
 
         routeController.consume(id: envelope.id)
         dispatch(envelope)
+    }
+
+    private func processPendingHandoffIfPossible() {
+        guard environment.settings.didCompleteOnboarding,
+              routePresentationState.isIdle,
+              calendarDeepLink == nil,
+              taskDeepLink == nil,
+              routineDeepLink == nil,
+              routeController.pending == nil,
+              let quickEntryHandoffStore else { return }
+
+        let route: AppRoute
+        do {
+            guard let consumed = try quickEntryHandoffStore.consume() else { return }
+            route = consumed
+        } catch {
+            return
+        }
+
+        guard case let .quickEntry(text, profile) = route else { return }
+        presentCapturedQuickEntry(text: text, profile: profile)
+    }
+
+    private func presentCapturedQuickEntry(
+        text: String,
+        profile: ProfileIdentity?
+    ) {
+        let resolution: CreationProfileResolution
+        do {
+            resolution = try creationProfileResolver().resolve(
+                captured: profile,
+                active: environment.profileSelection.activeIdentity
+            )
+        } catch {
+            presentCreationProfileChoice(
+                profiles: environment.profileSelection.profiles,
+                initialText: text,
+                captureSource: .shortcut
+            )
+            return
+        }
+
+        switch resolution {
+        case let .ready(context):
+            presentQuickEntry(
+                context: context,
+                initialText: text,
+                captureSource: .shortcut
+            )
+        case .chooseSavedProfile:
+            presentCreationProfileChoice(
+                profiles: environment.profileSelection.profiles,
+                initialText: text,
+                captureSource: .shortcut
+            )
+        }
     }
 
     private var routePresentationState: AppRoutePresentationState {
@@ -434,6 +541,7 @@ private struct CreationProfileChoice: Identifiable {
     let id = UUID()
     let profiles: [ProfileSnapshot]
     let initialText: String?
+    let captureSource: QuickEntryCaptureSource
 }
 
 private struct RootRouteProcessingKey: Hashable {
@@ -446,6 +554,7 @@ private struct RootRouteProcessingKey: Hashable {
     let taskSignalID: UUID?
     let routineSignalID: UUID?
     let presentationState: AppRoutePresentationState
+    let handoffRevision: Int
 }
 
 private struct RootRouteAlert: Identifiable {

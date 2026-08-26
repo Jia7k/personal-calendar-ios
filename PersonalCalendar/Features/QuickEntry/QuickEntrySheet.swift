@@ -104,6 +104,8 @@ struct QuickEntrySheet: View {
 
     private func entryForm(parseError: QuickEntryParseError?) -> some View {
         Form {
+            captureSourceSection
+
             Section {
                 TextField("Describe what you want to add", text: textBinding)
                     .textInputAutocapitalization(.sentences)
@@ -141,6 +143,7 @@ struct QuickEntrySheet: View {
 
     private func confirmationForm(state: QuickEntryConfirmationState) -> some View {
         Form {
+            captureSourceSection
             kindSection
             sourceAccessSection
 
@@ -156,6 +159,23 @@ struct QuickEntrySheet: View {
             reminderSection
             categorySection
             informationSections
+        }
+    }
+
+    @ViewBuilder
+    private var captureSourceSection: some View {
+        if model.captureSource == .shortcut {
+            Section {
+                Label(
+                    "Captured from Siri or Shortcuts — review before saving.",
+                    systemImage: "waveform.badge.mic"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("quick-entry-capture-source")
+            }
         }
     }
 

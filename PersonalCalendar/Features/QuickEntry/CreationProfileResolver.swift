@@ -41,6 +41,22 @@ struct CreationProfileResolver {
         }
     }
 
+    func resolve(
+        captured identity: ProfileIdentity?,
+        active activeIdentity: ProfileIdentity
+    ) throws -> CreationProfileResolution {
+        guard let identity else { return try resolve(active: activeIdentity) }
+        switch identity {
+        case .everything:
+            return .chooseSavedProfile(profiles.map(\.id))
+        case let .saved(id):
+            guard profiles.contains(where: { $0.id == id }) else {
+                return .chooseSavedProfile(profiles.map(\.id))
+            }
+            return .ready(try resolve(chosen: id))
+        }
+    }
+
     func resolve(chosen id: UUID) throws -> CreationProfileContext {
         guard let profile = profiles.first(where: { $0.id == id }) else {
             throw ProfileRepositoryError.profileNotFound

@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftData
 import SwiftUI
 
@@ -8,11 +9,25 @@ struct PersonalCalendarApp: App {
     private let container: ModelContainer
     private let environment: AppEnvironment
     private let routeController: AppRouteController
+    private let quickEntryHandoffStore: AppRouteHandoffStore?
+    private let quickEntryHandoffMonitor: AppRouteHandoffMonitor
 
     init() {
+        quickEntryHandoffMonitor = AppRouteHandoffMonitor()
         routeController = AppRouteController()
         let arguments = ProcessInfo.processInfo.arguments
         let isUITesting = arguments.contains("-ui-testing")
+        let handoffStore = try? AppRouteHandoffStore.appGroup()
+        quickEntryHandoffStore = handoffStore
+        if isUITesting {
+            _ = try? handoffStore?.consume()
+            if arguments.contains("-demo-shortcut-quick-entry") {
+                try? handoffStore?.write(.quickEntry(
+                    text: "Shortcut study session today at 3pm",
+                    profile: .saved(SeedProfile.schoolID)
+                ))
+            }
+        }
         container = Self.makeModelContainer(isStoredInMemoryOnly: isUITesting)
         environment = isUITesting
             ? .demo(container: container, arguments: arguments)
@@ -21,12 +36,18 @@ struct PersonalCalendarApp: App {
             routeController: routeController,
             actionHandler: environment.notificationActionHandler
         )
+        PersonalCalendarShortcuts.updateAppShortcutParameters()
         environment.startRefreshMonitoring()
     }
 
     var body: some Scene {
         WindowGroup {
-            RootTabView(environment: environment, routeController: routeController)
+            RootTabView(
+                environment: environment,
+                routeController: routeController,
+                quickEntryHandoffStore: quickEntryHandoffStore,
+                quickEntryHandoffMonitor: quickEntryHandoffMonitor
+            )
                 .modelContainer(container)
         }
     }
