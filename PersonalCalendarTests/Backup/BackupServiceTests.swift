@@ -30,7 +30,7 @@ final class BackupServiceTests: XCTestCase {
         ))
         let completedDay = LocalDay(year: 2026, month: 8, day: 25)
         try routines.setCompleted(routineID: routineID, day: completedDay, completed: true)
-        _ = try profiles.create(.init(
+        let profileID = try profiles.create(.init(
             name: "Personal",
             colorHex: "#3A8D7C",
             symbolName: "person.fill",
@@ -48,6 +48,26 @@ final class BackupServiceTests: XCTestCase {
         settings.morningSummaryHour = 7
         settings.morningSummaryMinute = 45
         settings.showNextItemOnLockScreen = true
+        settings.setClassAlertPreference(
+            .init(enabled: true, leadMinutes: 20),
+            for: profileID
+        )
+        let quickEntryHistory = settings.quickEntryHistory
+        let quickEntryUsedAt = Date(timeIntervalSinceReferenceDate: 123_456)
+        quickEntryHistory.record(
+            text: "Plan a study session",
+            profileIdentity: .saved(profileID),
+            at: quickEntryUsedAt
+        )
+        quickEntryHistory.setPreference(
+            .init(
+                durationMinutes: 90,
+                categoryID: categoryID,
+                destinationID: "calendar-1"
+            ),
+            profileID: profileID,
+            kind: .event
+        )
 
         let service = BackupService(context: context, settings: settings)
         let data = try service.exportData()
@@ -59,6 +79,24 @@ final class BackupServiceTests: XCTestCase {
         settings.morningSummaryHour = 8
         settings.morningSummaryMinute = 0
         settings.showNextItemOnLockScreen = false
+        settings.setClassAlertPreference(
+            .init(enabled: false, leadMinutes: 10),
+            for: profileID
+        )
+        quickEntryHistory.record(
+            text: "This was added after export",
+            profileIdentity: .saved(profileID),
+            at: Date(timeIntervalSinceReferenceDate: 999_999)
+        )
+        quickEntryHistory.setPreference(
+            .init(
+                durationMinutes: 30,
+                categoryID: nil,
+                destinationID: "calendar-added-later"
+            ),
+            profileID: profileID,
+            kind: .event
+        )
 
         try service.restore(data: data)
 
@@ -77,5 +115,24 @@ final class BackupServiceTests: XCTestCase {
         XCTAssertEqual(settings.morningSummaryHour, 7)
         XCTAssertEqual(settings.morningSummaryMinute, 45)
         XCTAssertTrue(settings.showNextItemOnLockScreen)
+        XCTAssertEqual(
+            settings.classAlertPreference(for: profileID),
+            .init(enabled: true, leadMinutes: 20)
+        )
+        let restoredQuickEntry = settings.quickEntryHistory
+        let restoredItems = restoredQuickEntry.items(for: .saved(profileID))
+        XCTAssertEqual(restoredItems.count, 1)
+        guard let restoredItem = restoredItems.first else { return }
+        XCTAssertEqual(restoredItem.text, "Plan a study session")
+        XCTAssertEqual(restoredItem.profileIdentity, .saved(profileID))
+        XCTAssertEqual(restoredItem.lastUsedAt, quickEntryUsedAt)
+        XCTAssertEqual(
+            restoredQuickEntry.preference(profileID: profileID, kind: .event),
+            QuickEntryRememberedChoices(
+                durationMinutes: 90,
+                categoryID: categoryID,
+                destinationID: "calendar-1"
+            )
+        )
     }
 }

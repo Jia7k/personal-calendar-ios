@@ -12,6 +12,7 @@ final class BackupService: BackupServicing {
     private enum DecodedBackup {
         case v1(BackupEnvelopeV1)
         case v2(BackupEnvelopeV2)
+        case v3(BackupEnvelopeV3)
     }
 
     private let context: ModelContext
@@ -58,8 +59,8 @@ final class BackupService: BackupServicing {
                     : $0.sortOrder < $1.sortOrder
             }
 
-        let envelope = BackupEnvelopeV2(
-            version: 2,
+        let envelope = BackupEnvelopeV3(
+            version: 3,
             exportedAt: .now,
             routines: try routines.map(routineBackup),
             completions: completions.map {
@@ -74,7 +75,7 @@ final class BackupService: BackupServicing {
             },
             categoryLinks: try links.map(categoryLinkBackup),
             profiles: profiles.map(profileBackup),
-            settings: settings.backupValueV2
+            settings: settings.backupValueV3
         )
         try BackupValidator.validate(envelope)
         return try encoder.encode(envelope)
@@ -98,6 +99,14 @@ final class BackupService: BackupServicing {
                 categoryLinks: envelope.categoryLinks.count,
                 profiles: envelope.profiles.count
             )
+        case let .v3(envelope):
+            return .init(
+                routines: envelope.routines.count,
+                completions: envelope.completions.count,
+                categories: envelope.categories.count,
+                categoryLinks: envelope.categoryLinks.count,
+                profiles: envelope.profiles.count
+            )
         }
     }
 
@@ -107,6 +116,8 @@ final class BackupService: BackupServicing {
             try restoreV1(envelope)
         case let .v2(envelope):
             try restoreV2(envelope)
+        case let .v3(envelope):
+            try restoreV3(envelope)
         }
         onRestored()
     }
@@ -122,6 +133,7 @@ final class BackupService: BackupServicing {
         )
 
         settings.applyBackupValue(envelope.settings)
+        resetSettingsAddedAfterV1()
         let legacy = LegacyProfileSelectionSnapshot(
             calendarIDs: Set(envelope.settings.selectedCalendarIDs),
             reminderListIDs: Set(envelope.settings.selectedReminderListIDs),
@@ -150,6 +162,40 @@ final class BackupService: BackupServicing {
             envelope.settings,
             validProfileIDs: Set(envelope.profiles.map(\.id))
         )
+        resetSettingsAddedAfterV1()
+    }
+
+    private func restoreV3(_ envelope: BackupEnvelopeV3) throws {
+        try replaceAppOwnedData(
+            routines: envelope.routines,
+            completions: envelope.completions,
+            categories: envelope.categories,
+            categoryLinks: envelope.categoryLinks,
+            profiles: envelope.profiles
+        )
+
+        let validProfileIDs = Set(envelope.profiles.map(\.id))
+        settings.applyBackupValue(
+            envelope.settings.legacy,
+            validProfileIDs: validProfileIDs
+        )
+        settings.reconcileClassAlertPreferences(validProfileIDs: [])
+        for record in envelope.settings.classAlertPreferences
+            where validProfileIDs.contains(record.profileID) {
+            settings.setClassAlertPreference(
+                record.preference,
+                for: record.profileID
+            )
+        }
+        settings.quickEntryHistory.replace(
+            with: envelope.settings.quickEntryMemory,
+            validProfileIDs: validProfileIDs
+        )
+    }
+
+    private func resetSettingsAddedAfterV1() {
+        settings.reconcileClassAlertPreferences(validProfileIDs: [])
+        settings.quickEntryHistory.reset()
     }
 
     private func replaceAppOwnedData(
@@ -245,6 +291,10 @@ final class BackupService: BackupServicing {
             let envelope: BackupEnvelopeV2 = try decode(data)
             try BackupValidator.validate(envelope)
             return .v2(envelope)
+        case 3:
+            let envelope: BackupEnvelopeV3 = try decode(data)
+            try BackupValidator.validate(envelope)
+            return .v3(envelope)
         default:
             throw BackupError.unsupportedVersion(header.version)
         }

@@ -92,7 +92,9 @@ struct AgendaRow: View {
             ("agenda-open-event-\(id)")
         case let .reminder(id):
             ("agenda-open-task-\(id)")
-        case .routine, .synthetic:
+        case let .routine(id, _):
+            ("agenda-open-routine-\(id.uuidString)")
+        case .synthetic:
             nil
         }
     }

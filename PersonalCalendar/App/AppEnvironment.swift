@@ -16,6 +16,7 @@ struct AppEnvironment {
     let notificationAuthorization: any NotificationAuthorizing
     let permissions: PermissionCoordinator
     let agendaComposer: AgendaComposer
+    let eventLocationMapsOpener: any EventLocationMapsOpening
     let settings: AppSettingsStore
     let backup: BackupService
     let notificationCoordinator: NotificationCoordinator
@@ -147,6 +148,7 @@ struct AppEnvironment {
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
+            eventLocationMapsOpener: SystemEventLocationMapsOpener(),
             settings: settings,
             backup: backup,
             notificationCoordinator: notificationCoordinator,
@@ -175,7 +177,8 @@ struct AppEnvironment {
             replacePrimaryEventWithReadOnly: arguments.contains("-read-only-event"),
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
-            profileFixtures: usesProfileFixtures
+            profileFixtures: usesProfileFixtures,
+            dailyQOLFixtures: arguments.contains("-demo-daily-qol")
         )
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
         let reminders = DemoRemindersService(
@@ -188,7 +191,8 @@ struct AppEnvironment {
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
             includeOverdueTask: arguments.contains("-demo-overdue-task"),
-            profileFixtures: usesProfileFixtures
+            profileFixtures: usesProfileFixtures,
+            dailyQOLFixtures: arguments.contains("-demo-daily-qol")
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
@@ -321,6 +325,7 @@ struct AppEnvironment {
             notificationAuthorization: notifications,
             permissions: permissions,
             agendaComposer: AgendaComposer(categories: categories),
+            eventLocationMapsOpener: NoopEventLocationMapsOpener(),
             settings: settings,
             backup: backup,
             notificationCoordinator: notificationCoordinator,

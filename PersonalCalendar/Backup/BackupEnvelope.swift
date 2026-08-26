@@ -25,6 +25,17 @@ struct BackupEnvelopeV2: Codable, Equatable, Sendable {
     let settings: SettingsBackupV2
 }
 
+struct BackupEnvelopeV3: Codable, Equatable, Sendable {
+    let version: Int
+    let exportedAt: Date
+    let routines: [RoutineBackup]
+    let completions: [CompletionBackup]
+    let categories: [CategorySnapshot]
+    let categoryLinks: [CategoryLinkBackup]
+    let profiles: [ProfileSnapshot]
+    let settings: SettingsBackupV3
+}
+
 struct RoutineBackup: Codable, Equatable, Sendable {
     let id: UUID
     let title: String
@@ -72,6 +83,17 @@ struct SettingsBackupV2: Codable, Equatable, Sendable {
     let completedProfileMigrationParts: [ProfileMigrationPart]
 }
 
+struct ClassAlertPreferenceBackup: Codable, Equatable, Sendable {
+    let profileID: UUID
+    let preference: ClassAlertPreference
+}
+
+struct SettingsBackupV3: Codable, Equatable, Sendable {
+    let legacy: SettingsBackupV2
+    let classAlertPreferences: [ClassAlertPreferenceBackup]
+    let quickEntryMemory: QuickEntryMemoryV1
+}
+
 enum BackupError: Error, Equatable {
     case unsupportedVersion(Int)
     case invalidData(String)
@@ -112,6 +134,31 @@ enum BackupValidator {
                 == envelope.settings.completedProfileMigrationParts.count else {
             throw BackupError.invalidData("Profile migration markers must be unique.")
         }
+    }
+
+    static func validate(_ envelope: BackupEnvelopeV3) throws {
+        guard envelope.version == 3 else {
+            throw BackupError.unsupportedVersion(envelope.version)
+        }
+        try validateAppOwnedData(
+            routines: envelope.routines,
+            completions: envelope.completions,
+            categories: envelope.categories,
+            categoryLinks: envelope.categoryLinks,
+            settings: envelope.settings.legacy.legacy
+        )
+        try validateProfiles(
+            envelope.profiles,
+            routineIDs: Set(envelope.routines.map(\.id))
+        )
+        guard Set(envelope.settings.legacy.completedProfileMigrationParts).count
+                == envelope.settings.legacy.completedProfileMigrationParts.count else {
+            throw BackupError.invalidData("Profile migration markers must be unique.")
+        }
+        try validateClassAlertPreferences(
+            envelope.settings.classAlertPreferences
+        )
+        try validateQuickEntryMemory(envelope.settings.quickEntryMemory)
     }
 
     private static func validateAppOwnedData(
@@ -225,6 +272,98 @@ enum BackupValidator {
         }
     }
 
+    private static func validateClassAlertPreferences(
+        _ records: [ClassAlertPreferenceBackup]
+    ) throws {
+        guard Set(records.map(\.profileID)).count == records.count else {
+            throw BackupError.invalidData(
+                "Class alert preferences must be unique per profile."
+            )
+        }
+        guard records.allSatisfy({
+            ClassAlertPreference.allowedLeadMinutes.contains(
+                $0.preference.leadMinutes
+            )
+        }) else {
+            throw BackupError.invalidData(
+                "A class alert preference is invalid."
+            )
+        }
+    }
+
+    private static func validateQuickEntryMemory(
+        _ memory: QuickEntryMemoryV1
+    ) throws {
+        guard memory.version == QuickEntryMemoryV1.currentVersion else {
+            throw BackupError.invalidData(
+                "The Quick Entry memory version is unsupported."
+            )
+        }
+        guard memory.history.count <= 10 else {
+            throw BackupError.invalidData(
+                "Quick Entry history contains too many items."
+            )
+        }
+        guard Set(memory.history.map(\.id)).count == memory.history.count else {
+            throw BackupError.invalidData(
+                "Quick Entry history identifiers must be unique."
+            )
+        }
+
+        var historyKeys = Set<String>()
+        for item in memory.history {
+            guard case let .saved(profileID) = item.profileIdentity,
+                  item.text == item.text.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                  ),
+                  !item.text.isEmpty,
+                  item.lastUsedAt.timeIntervalSinceReferenceDate.isFinite else {
+                throw BackupError.invalidData(
+                    "A Quick Entry history item is invalid."
+                )
+            }
+            let key = profileID.uuidString.lowercased()
+                + "|" + normalizedQuickEntryText(item.text)
+            guard historyKeys.insert(key).inserted else {
+                throw BackupError.invalidData(
+                    "Quick Entry history must be unique per profile."
+                )
+            }
+        }
+
+        var preferenceKeys = Set<String>()
+        for record in memory.preferences {
+            if let duration = record.choices.durationMinutes,
+               !(1...1_440).contains(duration) {
+                throw BackupError.invalidData(
+                    "A Quick Entry duration is invalid."
+                )
+            }
+            let key = record.profileID.uuidString.lowercased()
+                + "|" + record.kind.rawValue
+            guard preferenceKeys.insert(key).inserted else {
+                throw BackupError.invalidData(
+                    "Quick Entry preferences must be unique per profile and kind."
+                )
+            }
+        }
+    }
+
+    private static func normalizedQuickEntryText(_ value: String) -> String {
+        let locale = Locale(identifier: "en_US_POSIX")
+        return value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(
+                options: [
+                    .caseInsensitive,
+                    .diacriticInsensitive,
+                    .widthInsensitive
+                ],
+                locale: locale
+            )
+            .lowercased(with: locale)
+    }
+
     private static func isValid(_ day: LocalDay) -> Bool {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -279,6 +418,21 @@ extension AppSettingsStore {
             completedProfileMigrationParts: completedProfileMigrationParts.sorted {
                 $0.rawValue < $1.rawValue
             }
+        )
+    }
+
+    var backupValueV3: SettingsBackupV3 {
+        .init(
+            legacy: backupValueV2,
+            classAlertPreferences: classAlertPreferences
+                .map { profileID, preference in
+                    .init(profileID: profileID, preference: preference)
+                }
+                .sorted {
+                    $0.profileID.uuidString.lowercased()
+                        < $1.profileID.uuidString.lowercased()
+                },
+            quickEntryMemory: quickEntryHistory.backupValue
         )
     }
 }

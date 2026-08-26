@@ -322,11 +322,14 @@ final class CalendarViewModel {
     }
 
     func jump(to routeDay: AppRouteDay) async {
-        let day = LocalDay(
+        await jump(to: LocalDay(
             year: routeDay.year,
             month: routeDay.month,
             day: routeDay.day
-        )
+        ))
+    }
+
+    func jump(to day: LocalDay) async {
         selectedDay = day
         displayedMonth = LocalDay(year: day.year, month: day.month, day: 1)
         await load()

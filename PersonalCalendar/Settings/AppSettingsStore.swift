@@ -46,6 +46,7 @@ final class AppSettingsStore {
         static let morningSummaryMinute = "morningSummaryMinute"
         static let showNextItemOnLockScreen = "showNextItemOnLockScreen"
         static let classAlertPreferences = "classAlertPreferences"
+        static let quickEntryMemory = "quickEntryMemory"
         static let activeProfile = "activeProfileIdentity"
         static let lastActiveSavedProfile = "lastActiveSavedProfileID"
 
@@ -55,6 +56,7 @@ final class AppSettingsStore {
     }
 
     private let defaults: UserDefaults
+    @ObservationIgnored let quickEntryHistory: QuickEntryHistoryStore
     private(set) var selectedCalendarIDs: Set<String>
     private(set) var selectedReminderListIDs: Set<String>
     private(set) var defaultCalendarID: String?
@@ -75,6 +77,10 @@ final class AppSettingsStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        quickEntryHistory = QuickEntryHistoryStore(
+            defaults: defaults,
+            key: Key.quickEntryMemory
+        )
         let storedCalendarIDs = Set(defaults.stringArray(forKey: Key.selectedCalendars) ?? [])
         let storedReminderListIDs = Set(defaults.stringArray(forKey: Key.selectedLists) ?? [])
         let storedDefaultCalendarID = defaults.string(forKey: Key.defaultCalendar)
@@ -138,6 +144,10 @@ final class AppSettingsStore {
         guard reconciled != classAlertPreferences else { return }
         classAlertPreferences = reconciled
         persistClassAlertPreferences()
+    }
+
+    func reconcileQuickEntryHistory(validProfileIDs: Set<UUID>) {
+        quickEntryHistory.reconcile(validProfileIDs: validProfileIDs)
     }
 
     func setActiveProfile(_ identity: ProfileIdentity) {

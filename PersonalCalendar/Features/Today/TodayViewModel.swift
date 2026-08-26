@@ -36,11 +36,15 @@ final class TodayViewModel {
     private(set) var showsRemindersPermissionCard = false
     private(set) var latestTaskUndo: TaskUndoState?
     private(set) var isProfileEmpty = false
+    private(set) var nextUp: NextUpSnapshot?
+    private(set) var nextUpReferenceDate = Date.distantPast
 
     private var cachedEvents: [CalendarEventSnapshot] = []
     private var cachedReminders: [ReminderSnapshot] = []
     private var cachedRoutines: [RoutineSnapshot] = []
     private var cachedRoutineDays: [UUID: Set<LocalDay>] = [:]
+    private var nextUpEvents: [CalendarEventSnapshot] = []
+    private var nextUpReminders: [ReminderSnapshot] = []
     private var cachedScopeIdentity: ProfileIdentity?
     private var cachedScope: ProfileScope?
     private let calendar: any CalendarServicing
@@ -55,6 +59,18 @@ final class TodayViewModel {
     private let rescheduleNotifications: @MainActor @Sendable () async -> Void
     private var loadGeneration = 0
     private var reminderRefreshGeneration = 0
+
+    func refreshNextUp() {
+        let referenceDate = now()
+        nextUpReferenceDate = referenceDate
+        nextUp = NextUpBuilder().build(
+            agenda: agenda,
+            events: nextUpEvents,
+            reminders: nextUpReminders,
+            now: referenceDate,
+            calendar: calendarProvider()
+        )
+    }
 
     init(
         calendar: any CalendarServicing,
@@ -416,6 +432,9 @@ final class TodayViewModel {
             includeOverdueTasks: true,
             calendar: calendar
         )
+        nextUpEvents = events
+        nextUpReminders = reminderSnapshots
+        refreshNextUp()
     }
 
     private func refreshReminders(
@@ -613,6 +632,9 @@ final class TodayViewModel {
         showsCalendarPermissionCard = calendar.accessState != .granted
         showsRemindersPermissionCard = reminders.accessState != .granted
         agenda = DayAgenda(allDay: [], scheduled: [], priority: [])
+        nextUp = nil
+        nextUpEvents = []
+        nextUpReminders = []
         calendarError = "The selected profile could not be loaded. Try again."
         remindersError = nil
         routinesError = nil

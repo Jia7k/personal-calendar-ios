@@ -137,12 +137,15 @@ final class QuickEntryViewModel {
     private(set) var destinations: QuickEntryDestinationOptions
     private(set) var categories: [CategorySnapshot]
     private(set) var transformationNotice: String?
+    private(set) var recentEntries: [QuickEntryHistoryItem]
     let captureSource: QuickEntryCaptureSource
 
     @ObservationIgnored private let parser: any QuickEntryParsing
     @ObservationIgnored private let saver: any QuickEntrySaving
     @ObservationIgnored private let context: QuickEntryParseContext
     @ObservationIgnored private let creationProfile: CreationProfileContext?
+    @ObservationIgnored private let historyStore: QuickEntryHistoryStore?
+    @ObservationIgnored private let historyNow: @MainActor () -> Date
     @ObservationIgnored private let onCommitted: @MainActor (QuickEntrySaveOutcome) -> Void
     @ObservationIgnored private var didCommit = false
     @ObservationIgnored private var discardWasConfirmed = false
@@ -158,6 +161,8 @@ final class QuickEntryViewModel {
         destinations: QuickEntryDestinationOptions = .empty,
         categories: [CategorySnapshot] = [],
         creationProfile: CreationProfileContext? = nil,
+        historyStore: QuickEntryHistoryStore? = nil,
+        historyNow: @escaping @MainActor () -> Date = Date.init,
         captureSource: QuickEntryCaptureSource = .inApp,
         onCommitted: @escaping @MainActor (QuickEntrySaveOutcome) -> Void = { _ in }
     ) {
@@ -167,6 +172,13 @@ final class QuickEntryViewModel {
         self.destinations = destinations
         self.categories = categories.sorted { $0.sortOrder < $1.sortOrder }
         self.creationProfile = creationProfile
+        self.historyStore = historyStore
+        self.historyNow = historyNow
+        if let creationProfile, let historyStore {
+            recentEntries = historyStore.items(for: .saved(creationProfile.profileID))
+        } else {
+            recentEntries = []
+        }
         self.captureSource = captureSource
         self.onCommitted = onCommitted
         eventDestinationID = destinations.defaultCalendarID
@@ -275,17 +287,29 @@ final class QuickEntryViewModel {
         guard case .entry = phase else { return }
         do {
             var parsed = try parser.parse(text, context: context)
+            let parserSuppliedDestination = parsed.destinationID != nil
             eventDestinationID = destinations.defaultCalendarID
             taskDestinationID = destinations.defaultReminderListID
             eventDestinationWasExplicitlySelected = false
             taskDestinationWasExplicitlySelected = false
+            let rememberedDestinationApplied = applyRememberedChoices(to: &parsed)
             switch parsed.kind {
             case .event:
-                if parsed.destinationID == nil { parsed.destinationID = eventDestinationID }
+                if !parserSuppliedDestination,
+                   !rememberedDestinationApplied,
+                   parsed.destinationID == nil {
+                    parsed.destinationID = eventDestinationID
+                }
                 eventDestinationID = parsed.destinationID
+                eventDestinationWasExplicitlySelected = rememberedDestinationApplied
             case .task:
-                if parsed.destinationID == nil { parsed.destinationID = taskDestinationID }
+                if !parserSuppliedDestination,
+                   !rememberedDestinationApplied,
+                   parsed.destinationID == nil {
+                    parsed.destinationID = taskDestinationID
+                }
                 taskDestinationID = parsed.destinationID
+                taskDestinationWasExplicitlySelected = rememberedDestinationApplied
             case .routine:
                 parsed.destinationID = nil
             }
@@ -307,6 +331,22 @@ final class QuickEntryViewModel {
     func returnToEntry() {
         guard case .confirmation = phase else { return }
         phase = .entry(parseError: nil)
+    }
+
+    func selectRecent(id: UUID) {
+        guard case .entry = phase,
+              let item = recentEntries.first(where: { $0.id == id }) else { return }
+        text = item.text
+        preview = nil
+        transformationNotice = nil
+        discardWasConfirmed = false
+        phase = .entry(parseError: nil)
+    }
+
+    func clearRecent() {
+        guard let creationProfile, let historyStore else { return }
+        historyStore.clearHistory(for: .saved(creationProfile.profileID))
+        recentEntries = historyStore.items(for: .saved(creationProfile.profileID))
     }
 
     func updateDestinationOptions(_ options: QuickEntryDestinationOptions) {
@@ -442,6 +482,7 @@ final class QuickEntryViewModel {
             phase = .committed(outcome)
             guard !didCommit else { return }
             didCommit = true
+            rememberSuccessfulCommit(preview)
             onCommitted(outcome)
         } catch {
             phase = .confirmation(.failed(mappedFailure(error)))
@@ -462,6 +503,7 @@ final class QuickEntryViewModel {
         case (.event, .event), (.task, .task), (.routine, .routine): break
         }
         next.kind = kind
+        applyRememberedChoices(to: &next, destinationMayOverride: true)
         preview = next
         phase = .confirmation(.ready)
     }
@@ -479,6 +521,141 @@ final class QuickEntryViewModel {
     func confirmDiscard() { discardWasConfirmed = true }
 
     private var isTerminal: Bool { if case .committed = phase { return true }; return false }
+
+    @discardableResult
+    private func applyRememberedChoices(
+        to preview: inout QuickEntryPreview,
+        destinationMayOverride: Bool = false
+    ) -> Bool {
+        guard let creationProfile,
+              let choices = historyStore?.preference(
+                  profileID: creationProfile.profileID,
+                  kind: preview.kind
+              ) else { return false }
+
+        if let categoryID = choices.categoryID,
+           categories.contains(where: { $0.id == categoryID }) {
+            preview.categoryID = categoryID
+        }
+
+        if preview.kind == .event,
+           !preview.isAllDay,
+           let duration = choices.durationMinutes,
+           (1...1_440).contains(duration),
+           let start = preview.startDate,
+           let end = context.calendar.date(byAdding: .minute, value: duration, to: start) {
+            preview.endDate = end
+        }
+
+        guard (preview.destinationID == nil || destinationMayOverride),
+              preview.kind != .routine else {
+            return false
+        }
+        switch preview.kind {
+        case .event:
+            guard let destinationID = choices.destinationID else {
+                guard !requiresExplicitDestination(for: .event) else {
+                    return false
+                }
+                preview.destinationID = nil
+                eventDestinationWasExplicitlySelected = true
+                return true
+            }
+            guard creationProfile.memberCalendarIDs.contains(destinationID),
+                  destinations.calendars.contains(where: {
+                      $0.id == destinationID && $0.allowsContentModifications
+                  }) else { return false }
+            preview.destinationID = destinationID
+            eventDestinationWasExplicitlySelected = true
+            return true
+        case .task:
+            guard let destinationID = choices.destinationID else {
+                guard !requiresExplicitDestination(for: .task) else {
+                    return false
+                }
+                preview.destinationID = nil
+                taskDestinationWasExplicitlySelected = true
+                return true
+            }
+            guard creationProfile.memberReminderListIDs.contains(destinationID),
+                  destinations.reminderLists.contains(where: {
+                      $0.id == destinationID && $0.allowsContentModifications
+                  }) else { return false }
+            preview.destinationID = destinationID
+            taskDestinationWasExplicitlySelected = true
+            return true
+        case .routine:
+            return false
+        }
+    }
+
+    private func rememberSuccessfulCommit(_ preview: QuickEntryPreview) {
+        guard let creationProfile, let historyStore else { return }
+        let profileIdentity = ProfileIdentity.saved(creationProfile.profileID)
+        historyStore.record(
+            text: text,
+            profileIdentity: profileIdentity,
+            at: historyNow()
+        )
+
+        let existingChoices = historyStore.preference(
+            profileID: creationProfile.profileID,
+            kind: preview.kind
+        )
+        let measuredDuration: Int? = if preview.kind == .event,
+                                       !preview.isAllDay,
+                                       let start = preview.startDate,
+                                       let end = preview.endDate {
+            validDurationMinutes(start: start, end: end)
+        } else {
+            nil
+        }
+        let durationMinutes = measuredDuration
+            ?? (preview.kind == .event ? existingChoices?.durationMinutes : nil)
+        historyStore.setPreference(
+            QuickEntryRememberedChoices(
+                durationMinutes: durationMinutes,
+                categoryID: preview.categoryID,
+                destinationID: rememberedDestination(
+                    preview.destinationID,
+                    kind: preview.kind,
+                    profile: creationProfile
+                )
+            ),
+            profileID: creationProfile.profileID,
+            kind: preview.kind
+        )
+        recentEntries = historyStore.items(for: profileIdentity)
+    }
+
+    private func validDurationMinutes(start: Date, end: Date) -> Int? {
+        let seconds = end.timeIntervalSince(start)
+        guard seconds.isFinite, seconds > 0 else { return nil }
+        let minutes = Int((seconds / 60).rounded())
+        return (1...1_440).contains(minutes) ? minutes : nil
+    }
+
+    private func rememberedDestination(
+        _ destinationID: String?,
+        kind: QuickEntryKind,
+        profile: CreationProfileContext
+    ) -> String? {
+        guard let destinationID else { return nil }
+        switch kind {
+        case .event:
+            return profile.memberCalendarIDs.contains(destinationID)
+                && destinations.calendars.contains(where: {
+                    $0.id == destinationID && $0.allowsContentModifications
+                }) ? destinationID : nil
+        case .task:
+            return profile.memberReminderListIDs.contains(destinationID)
+                && destinations.reminderLists.contains(where: {
+                    $0.id == destinationID && $0.allowsContentModifications
+                }) ? destinationID : nil
+        case .routine:
+            return nil
+        }
+    }
 
     private func mutatePreview(_ mutation: (inout QuickEntryPreview) -> Void) {
         guard case .confirmation = phase, var updated = preview else { return }

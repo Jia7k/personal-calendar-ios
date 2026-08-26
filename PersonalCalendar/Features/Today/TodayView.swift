@@ -6,6 +6,7 @@ struct TodayView: View {
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
+    private let onOpenRoutine: @MainActor (UUID) -> Void
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
     private let onPresentationChanged: @MainActor (Bool) -> Void
@@ -15,6 +16,7 @@ struct TodayView: View {
         revision: AppContentRevision = .init(lifecycle: 0, profileScope: 0),
         quickEntryRefresh: QuickEntryRefreshSignal? = nil,
         openSettings: @escaping @MainActor () -> Void = {},
+        onOpenRoutine: @escaping @MainActor (UUID) -> Void = { _ in },
         onPresentationChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
         self.environment = environment
@@ -35,6 +37,7 @@ struct TodayView: View {
             }
         ))
         self.openSettings = openSettings
+        self.onOpenRoutine = onOpenRoutine
         self.revision = revision
         self.quickEntryRefresh = quickEntryRefresh
         self.onPresentationChanged = onPresentationChanged
@@ -48,6 +51,9 @@ struct TodayView: View {
                 errorRow(model.calendarError, source: "Calendar")
                 errorRow(model.remindersError, source: "Reminders")
                 errorRow(model.routinesError, source: "Routines")
+                if let nextUp = model.nextUp {
+                    nextUpSection(nextUp)
+                }
                 if let undo = model.latestTaskUndo {
                     Section {
                         HStack {
@@ -77,6 +83,16 @@ struct TodayView: View {
                 }
             }
             .task(id: revision) { await model.load() }
+            .task {
+                while !Task.isCancelled {
+                    do {
+                        try await Task.sleep(for: .seconds(60))
+                    } catch {
+                        return
+                    }
+                    model.refreshNextUp()
+                }
+            }
             .task(id: quickEntryRefresh?.id) {
                 guard let quickEntryRefresh else { return }
                 await model.refreshAfterQuickEntry(quickEntryRefresh.outcome)
@@ -139,9 +155,9 @@ struct TodayView: View {
 
     private func openAction(for item: AgendaItem) -> (() -> Void)? {
         switch item.origin {
-        case .event, .reminder:
+        case .event, .reminder, .routine:
             { openAgendaItem(item.origin) }
-        case .routine, .synthetic:
+        case .synthetic:
             nil
         }
     }
@@ -168,9 +184,110 @@ struct TodayView: View {
             )
             editorPresentation = .init(content: .task(model: editorModel, lists: environment.reminders.lists()))
             onPresentationChanged(true)
-        case .routine, .synthetic:
+        case let .routine(id, _):
+            onOpenRoutine(id)
+        case .synthetic:
             break
         }
+    }
+
+    private func nextUpSection(_ snapshot: NextUpSnapshot) -> some View {
+        Section("Next Up") {
+            VStack(alignment: .leading, spacing: 12) {
+                if let event = snapshot.event {
+                    nextUpEvent(event)
+                }
+                if snapshot.event != nil, snapshot.deadline != nil {
+                    Divider()
+                }
+                if let deadline = snapshot.deadline {
+                    nextUpDeadline(deadline)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func nextUpEvent(_ event: NextUpEventSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(event.phase == .current ? "Happening now" : "Next event", systemImage: "calendar")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(event.title)
+                .font(.headline)
+            Text(eventTimeDescription(event))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            if let location = event.location {
+                Label(location, systemImage: "mappin.and.ellipse")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 12) {
+                Button("Open") { openAgendaItem(event.origin) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityLabel("Open event \(event.title)")
+                    .accessibilityIdentifier("today-next-up-open-event")
+                if let location = event.location {
+                    Button {
+                        Task {
+                            await environment.eventLocationMapsOpener.open(location: location)
+                        }
+                    } label: {
+                        Label("Maps", systemImage: "map")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityLabel("Open \(location) in Maps")
+                    .accessibilityIdentifier("today-next-up-maps")
+                }
+            }
+        }
+    }
+
+    private func nextUpDeadline(_ deadline: NextUpDeadlineSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Nearest deadline", systemImage: "checkmark.circle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(deadline.title)
+                .font(.headline)
+            Text(deadlineDescription(deadline))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Open") { openAgendaItem(deadline.origin) }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityLabel("Open task \(deadline.title)")
+                .accessibilityIdentifier("today-next-up-open-task")
+        }
+    }
+
+    private func eventTimeDescription(_ event: NextUpEventSnapshot) -> String {
+        let end = event.end.formatted(date: .omitted, time: .shortened)
+        if event.phase == .current {
+            return "Now · until \(end)"
+        }
+        let start = event.start.formatted(date: .omitted, time: .shortened)
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        let countdown = formatter.localizedString(
+            for: event.start,
+            relativeTo: model.nextUpReferenceDate
+        )
+        return "\(start)–\(end) · Starts \(countdown)"
+    }
+
+    private func deadlineDescription(_ deadline: NextUpDeadlineSnapshot) -> String {
+        if deadline.dueHasTime {
+            return "Due \(deadline.dueDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute()))"
+        }
+        return "Due \(deadline.dueDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()))"
     }
 
     private func dismissEditor() {

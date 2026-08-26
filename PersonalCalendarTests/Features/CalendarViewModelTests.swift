@@ -480,6 +480,64 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(secondInterval.end, LocalDay(year: 2026, month: 3, day: 16).startDate(in: newYork))
     }
 
+    func testJumpToLocalDayAcrossMonthAndDSTLoadsExactWeekAndKeepsSelection() async {
+        var newYork = Calendar(identifier: .gregorian)
+        newYork.timeZone = TimeZone(identifier: "America/New_York")!
+        newYork.firstWeekday = 1
+        let target = LocalDay(year: 2026, month: 3, day: 8)
+        let eventStart = newYork.date(
+            bySettingHour: 9,
+            minute: 0,
+            second: 0,
+            of: target.startDate(in: newYork)
+        )!
+        let service = FakeCalendarService(
+            access: .granted,
+            events: [
+                .init(
+                    id: "target-event",
+                    title: "DST day class",
+                    start: eventStart,
+                    end: newYork.date(byAdding: .hour, value: 1, to: eventStart)!,
+                    isAllDay: false,
+                    calendarID: "school",
+                    calendarTitle: "School",
+                    allowsModification: true,
+                    hasRecurrence: false
+                )
+            ]
+        )
+        let model = makeScopedModel(
+            today: LocalDay(year: 2026, month: 2, day: 23),
+            calendarService: service,
+            scope: .init(
+                identity: .saved(UUID()),
+                calendarIDs: ["school"],
+                reminderListIDs: [],
+                routineIDs: [],
+                defaultCalendarID: "school",
+                defaultReminderListID: nil
+            ),
+            systemCalendar: newYork
+        )
+        await model.setDisplayMode(.week)
+
+        await model.jump(to: target)
+
+        let interval = try! XCTUnwrap(service.fetchIntervals.last)
+        XCTAssertEqual(model.selectedDay, target)
+        XCTAssertEqual(model.displayedMonth, LocalDay(year: 2026, month: 3, day: 1))
+        XCTAssertEqual(model.visibleDays.first, target)
+        XCTAssertEqual(model.visibleDays.last, LocalDay(year: 2026, month: 3, day: 14))
+        XCTAssertEqual(interval.start, target.startDate(in: newYork))
+        XCTAssertEqual(
+            interval.end,
+            LocalDay(year: 2026, month: 3, day: 15).startDate(in: newYork)
+        )
+        XCTAssertEqual(interval.duration, 167 * 3_600)
+        XCTAssertEqual(model.agenda.scheduled.map(\.title), ["DST day class"])
+    }
+
     func testSwitchingBackToMonthLoadsThePaddedMonthRange() async {
         let service = FakeCalendarService(access: .granted)
         let model = makeScopedModel(

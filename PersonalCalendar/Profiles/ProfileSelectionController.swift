@@ -26,6 +26,9 @@ final class ProfileSelectionController {
     func reloadProfiles() throws {
         let refreshedProfiles = try repository.list()
         profiles = refreshedProfiles
+        settings.reconcileQuickEntryHistory(
+            validProfileIDs: Set(refreshedProfiles.map(\.id))
+        )
         fallBackIfActiveProfileIsMissing()
     }
 

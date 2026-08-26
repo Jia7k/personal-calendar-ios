@@ -79,6 +79,7 @@ struct RootTabView: View {
                         revision: contentRevision,
                         quickEntryRefresh: refreshSignal,
                         openSettings: presentSettings,
+                        onOpenRoutine: openRoutine,
                         onPresentationChanged: { todayHostBusy = $0 }
                     )
                         .universalQuickEntry(onAdd: presentQuickEntry)
@@ -283,6 +284,7 @@ struct RootTabView: View {
             destinations: options,
             categories: (try? environment.categories.list()) ?? [],
             creationProfile: creationProfile,
+            historyStore: environment.settings.quickEntryHistory,
             captureSource: captureSource,
             onCommitted: { outcome in
                 if case .routine = outcome {

@@ -6,6 +6,9 @@ struct CalendarHomeView: View {
     @State private var viewModel: CalendarViewModel
     @State private var editorPresentation: CalendarEditorPresentation?
     @State private var showingSearch = false
+    @State private var showingJumpToDate = false
+    @State private var jumpDate = Date()
+    @State private var jumpScrollDay: LocalDay?
     @State private var isTransitioningPresentation = false
     @State private var presentationGeneration = 0
     @State private var refreshRegistrationID = UUID()
@@ -18,7 +21,7 @@ struct CalendarHomeView: View {
     private let calendarDeepLink: CalendarDeepLinkSignal?
     private let onDeepLinkHandled: @MainActor (UUID, Bool) -> Void
     private let onPresentationChanged: @MainActor (Bool) -> Void
-    private var calendar: Calendar { .current }
+    private let calendar: Calendar
 
     init(
         environment: AppEnvironment,
@@ -30,7 +33,9 @@ struct CalendarHomeView: View {
         onDeepLinkHandled: @escaping @MainActor (UUID, Bool) -> Void = { _, _ in },
         onPresentationChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
+        let systemCalendar = Calendar.current
         self.environment = environment
+        self.calendar = systemCalendar
         self.openSettings = openSettings
         self.onOpenRoutine = onOpenRoutine
         self.revision = revision
@@ -38,7 +43,6 @@ struct CalendarHomeView: View {
         self.calendarDeepLink = calendarDeepLink
         self.onDeepLinkHandled = onDeepLinkHandled
         self.onPresentationChanged = onPresentationChanged
-        let systemCalendar = Calendar.current
         let profileScopes = environment.profileScopes
         let profileSelection = environment.profileSelection
         _viewModel = State(initialValue: CalendarViewModel(
@@ -79,6 +83,17 @@ struct CalendarHomeView: View {
                     }
                     .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                     .accessibilityIdentifier("calendar-search-open")
+                    Button("Jump to Date", systemImage: "calendar.badge.clock") {
+                        guard editorPresentation == nil,
+                              !showingSearch,
+                              calendarDeepLink == nil,
+                              !isTransitioningPresentation else { return }
+                        jumpDate = viewModel.selectedDay.startDate(in: calendar)
+                        showingJumpToDate = true
+                        onPresentationChanged(true)
+                    }
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("calendar-jump-open")
                     ProfileSelectorToolbar(selection: environment.profileSelection)
                 }
             }
@@ -100,13 +115,15 @@ struct CalendarHomeView: View {
             .task(id: CalendarDeepLinkProcessingKey(
                 signalID: calendarDeepLink?.id,
                 editorID: editorPresentation?.id,
-                showsSearch: showingSearch
+                showsSearch: showingSearch,
+                showsJumpToDate: showingJumpToDate
             )) {
                 await handleCalendarDeepLink()
             }
             .onChange(
                 of: editorPresentation != nil
                     || showingSearch
+                    || showingJumpToDate
                     || isTransitioningPresentation,
                 initial: true
             ) { _, isPresented in
@@ -135,6 +152,9 @@ struct CalendarHomeView: View {
                         onDismiss: dismissEditor
                     )
                 }
+            }
+            .sheet(isPresented: $showingJumpToDate) {
+                jumpToDateSheet
             }
         }
         .onAppear {
@@ -181,6 +201,40 @@ struct CalendarHomeView: View {
                 guard dynamicTypeSize.isAccessibilitySize else { return }
                 await Task.yield()
                 proxy.scrollTo(viewModel.selectedDay, anchor: .center)
+            }
+            .task(id: jumpScrollDay) {
+                guard let jumpScrollDay else { return }
+                await Task.yield()
+                proxy.scrollTo(jumpScrollDay, anchor: .center)
+                self.jumpScrollDay = nil
+            }
+        }
+    }
+
+    private var jumpToDateSheet: some View {
+        NavigationStack {
+            Form {
+                DatePicker(
+                    "Date",
+                    selection: $jumpDate,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.graphical)
+                .accessibilityIdentifier("calendar-jump-date-picker")
+            }
+            .navigationTitle("Jump to Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingJumpToDate = false }
+                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier("calendar-jump-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Jump", action: jumpToChosenDate)
+                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier("calendar-jump-confirm")
+                }
             }
         }
     }
@@ -331,9 +385,24 @@ struct CalendarHomeView: View {
         }
     }
 
+    private func jumpToChosenDate() {
+        let day = LocalDay(date: jumpDate, calendar: calendar)
+        isTransitioningPresentation = true
+        showingJumpToDate = false
+        Task { @MainActor in
+            await Task.yield()
+            await viewModel.jump(to: day)
+            await Task.yield()
+            jumpScrollDay = day
+            isTransitioningPresentation = false
+        }
+    }
+
     private func handleCalendarDeepLink() async {
         guard editorPresentation == nil,
               !showingSearch,
+              !showingJumpToDate,
+              !isTransitioningPresentation,
               let signal = calendarDeepLink else { return }
         let capturedPresentationGeneration = presentationGeneration
         if let day = signal.day {
@@ -343,6 +412,7 @@ struct CalendarHomeView: View {
         }
         let localPresentationIsActive = editorPresentation != nil
             || showingSearch
+            || showingJumpToDate
             || isTransitioningPresentation
         if HostRouteCancellationPolicy.shouldFinishAsUnavailable(
             taskIsCancelled: Task.isCancelled,
@@ -357,7 +427,9 @@ struct CalendarHomeView: View {
         guard !Task.isCancelled,
               calendarDeepLink?.id == signal.id,
               editorPresentation == nil,
-              !showingSearch else { return }
+              !showingSearch,
+              !showingJumpToDate,
+              !isTransitioningPresentation else { return }
 
         let routeEvents: [CalendarEventSnapshot]
         if signal.entryID != nil {
@@ -428,4 +500,5 @@ private struct CalendarDeepLinkProcessingKey: Hashable {
     let signalID: UUID?
     let editorID: UUID?
     let showsSearch: Bool
+    let showsJumpToDate: Bool
 }

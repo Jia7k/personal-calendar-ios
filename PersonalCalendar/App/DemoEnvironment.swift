@@ -73,7 +73,7 @@ final class DemoCalendarService: CalendarServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -84,7 +84,9 @@ final class DemoCalendarService: CalendarServicing {
         self.includeRecurringItems = includeRecurringItems
         self.includeUnsupportedItems = includeUnsupportedItems
         self.profileFixtures = profileFixtures
-        let start = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
+        let start = dailyQOLFixtures
+            ? Date().addingTimeInterval(-300)
+            : Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: .now)!
         if profileFixtures {
             let startOfDay = Calendar.current.startOfDay(for: start)
             events = [
@@ -295,7 +297,7 @@ final class DemoRemindersService: RemindersServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -307,7 +309,9 @@ final class DemoRemindersService: RemindersServicing {
         self.profileFixtures = profileFixtures
         let calendar = Calendar.current
         let capturedToday = calendar.startOfDay(for: Date())
-        let due = calendar.date(bySettingHour: 14, minute: 0, second: 0, of: capturedToday)!
+        let due = dailyQOLFixtures
+            ? Date().addingTimeInterval(7_200)
+            : calendar.date(bySettingHour: 14, minute: 0, second: 0, of: capturedToday)!
         if profileFixtures {
             values = [
                 .init(id: "demo-personal-task", title: "Buy milk", notes: nil, dueDate: due, dueHasTime: true, priority: 5, listID: DemoProfileFixture.personalListID, listTitle: "Personal", isCompleted: false, allowsModification: true, hasRecurrence: false),

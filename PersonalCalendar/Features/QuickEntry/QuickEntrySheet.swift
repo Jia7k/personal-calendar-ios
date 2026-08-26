@@ -123,6 +123,38 @@ struct QuickEntrySheet: View {
                 Text("Quick entry")
             }
 
+            if !model.recentEntries.isEmpty {
+                Section {
+                    ForEach(model.recentEntries) { item in
+                        Button {
+                            model.selectRecent(id: item.id)
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                                Text(item.text)
+                                    .foregroundStyle(.primary)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Text(item.lastUsedAt, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(minHeight: CalendarTheme.minimumTapSize)
+                        }
+                        .accessibilityIdentifier("quick-entry-recent-\(item.id.uuidString)")
+                    }
+
+                    Button("Clear Recent", role: .destructive) {
+                        model.clearRecent()
+                    }
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("quick-entry-recent-clear")
+                } header: {
+                    Text("Recent")
+                }
+                .accessibilityIdentifier("quick-entry-recent")
+            }
+
             if let parseError {
                 Section {
                     errorText(parseErrorMessage(parseError))

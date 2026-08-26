@@ -745,6 +745,352 @@ final class QuickEntryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.weekdayOrder.count, 7)
         XCTAssertFalse(subject.weekdayName(subject.weekdayOrder[0]).isEmpty)
     }
+
+    func testSelectingRecentItemReturnsExactTextToEntryWithoutSaving() {
+        let profileID = UUID()
+        let profileIdentity: ProfileIdentity = .saved(profileID)
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.record(
+            text: "Study session tomorrow at 3pm",
+            profileIdentity: profileIdentity,
+            at: date(2026, 8, 23, 12)
+        )
+        let saver = RecordingQuickEntrySaver()
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            saver: saver,
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+
+        XCTAssertEqual(subject.recentEntries.count, 1)
+        guard let recentID = subject.recentEntries.first?.id else { return }
+        subject.selectRecent(id: recentID)
+
+        XCTAssertEqual(subject.text, "Study session tomorrow at 3pm")
+        XCTAssertEqual(subject.phase, .entry(parseError: nil))
+        XCTAssertNil(subject.preview)
+        XCTAssertTrue(saver.received.isEmpty)
+    }
+
+    func testSuccessfulCommitRecordsHistoryAndEditedPreferenceExactlyOnce() {
+        let profileID = UUID()
+        let profileIdentity: ProfileIdentity = .saved(profileID)
+        let categoryID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        let saver = RecordingQuickEntrySaver(steps: [.success(.event(id: "saved-event"))])
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            saver: saver,
+            options: options(
+                calendars: [calendarDescriptor("school", "School")],
+                defaultCalendarID: "school"
+            ),
+            categories: [category(id: categoryID)],
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+        subject.text = "  Study session tomorrow at 3pm  "
+        subject.parse()
+        subject.preview?.endDate = date(2026, 8, 24, 10, 30)
+        subject.preview?.categoryID = categoryID
+        subject.selectDestination("school")
+
+        subject.confirmSave()
+        subject.confirmSave()
+
+        let items = history.items(for: profileIdentity)
+        XCTAssertEqual(items.count, 1)
+        guard let item = items.first else { return }
+        XCTAssertEqual(item.text, "Study session tomorrow at 3pm")
+        XCTAssertEqual(item.profileIdentity, profileIdentity)
+        XCTAssertEqual(item.lastUsedAt, context().now)
+        XCTAssertEqual(
+            history.preference(profileID: profileID, kind: .event),
+            QuickEntryRememberedChoices(
+                durationMinutes: 90,
+                categoryID: categoryID,
+                destinationID: "school"
+            )
+        )
+    }
+
+    func testFailedSaveRecordsNoHistoryOrPreference() {
+        let profileID = UUID()
+        let profileIdentity: ProfileIdentity = .saved(profileID)
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            saver: RecordingQuickEntrySaver(steps: [.failure]),
+            options: options(
+                calendars: [calendarDescriptor("school", "School")],
+                defaultCalendarID: "school"
+            ),
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+        subject.text = "Study session tomorrow at 3pm"
+        subject.parse()
+
+        subject.confirmSave()
+
+        XCTAssertTrue(history.items(for: profileIdentity).isEmpty)
+        XCTAssertNil(history.preference(profileID: profileID, kind: .event))
+    }
+
+    func testParseReappliesSafeDurationCategoryAndProfileDestination() {
+        let profileID = UUID()
+        let categoryID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            QuickEntryRememberedChoices(
+                durationMinutes: 90,
+                categoryID: categoryID,
+                destinationID: "school-projects"
+            ),
+            profileID: profileID,
+            kind: .event
+        )
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            options: options(
+                calendars: [
+                    calendarDescriptor("school", "School"),
+                    calendarDescriptor("school-projects", "School Projects")
+                ],
+                defaultCalendarID: "school"
+            ),
+            categories: [category(id: categoryID)],
+            creationProfile: creationProfile(
+                id: profileID,
+                calendarIDs: ["school", "school-projects"]
+            ),
+            historyStore: history
+        )
+        subject.text = "Study session tomorrow at 3pm"
+
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.startDate, date(2026, 8, 24, 9))
+        XCTAssertEqual(subject.preview?.endDate, date(2026, 8, 24, 10, 30))
+        XCTAssertEqual(subject.preview?.categoryID, categoryID)
+        XCTAssertEqual(subject.preview?.destinationID, "school-projects")
+    }
+
+    func testParseIgnoresStaleCategoryAndWritableDestinationOutsideCapturedProfile() {
+        let profileID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            QuickEntryRememberedChoices(
+                durationMinutes: 45,
+                categoryID: UUID(),
+                destinationID: "outside-work"
+            ),
+            profileID: profileID,
+            kind: .event
+        )
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            options: options(
+                calendars: [
+                    calendarDescriptor("school", "School"),
+                    calendarDescriptor("outside-work", "Outside Work")
+                ],
+                defaultCalendarID: "school"
+            ),
+            categories: [],
+            creationProfile: creationProfile(
+                id: profileID,
+                calendarIDs: ["school"]
+            ),
+            historyStore: history
+        )
+        subject.text = "Study session tomorrow at 3pm"
+
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.endDate, date(2026, 8, 24, 9, 45))
+        XCTAssertNil(subject.preview?.categoryID)
+        XCTAssertEqual(subject.preview?.destinationID, "school")
+    }
+
+    func testParseRestoresRememberedSystemDefaultInsteadOfProfileDefault() {
+        let profileID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            QuickEntryRememberedChoices(
+                durationMinutes: nil,
+                categoryID: nil,
+                destinationID: nil
+            ),
+            profileID: profileID,
+            kind: .event
+        )
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            options: options(
+                calendars: [calendarDescriptor("school", "School")],
+                defaultCalendarID: "school"
+            ),
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+        subject.text = "Study session tomorrow at 3pm"
+
+        subject.parse()
+
+        XCTAssertNil(subject.preview?.destinationID)
+        XCTAssertTrue(subject.systemDefaultIsAvailable(for: .event))
+    }
+
+    func testAllDayEventDoesNotInheritRememberedTimedDuration() {
+        let profileID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            QuickEntryRememberedChoices(
+                durationMinutes: 90,
+                categoryID: nil,
+                destinationID: nil
+            ),
+            profileID: profileID,
+            kind: .event
+        )
+        let allDay = QuickEntryPreview(
+            kind: .event,
+            title: "School holiday",
+            startDate: date(2026, 8, 25),
+            endDate: date(2026, 8, 26),
+            isAllDay: true
+        )
+        let subject = makeSubject(
+            result: .success(allDay),
+            options: options(
+                calendars: [calendarDescriptor("school", "School")],
+                defaultCalendarID: "school"
+            ),
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+        subject.text = "School holiday tomorrow"
+
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.startDate, date(2026, 8, 25))
+        XCTAssertEqual(subject.preview?.endDate, date(2026, 8, 26))
+        XCTAssertEqual(subject.preview?.isAllDay, true)
+    }
+
+    func testParserSuppliedDestinationWinsOverRememberedPreference() {
+        let profileID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            QuickEntryRememberedChoices(
+                durationMinutes: nil,
+                categoryID: nil,
+                destinationID: "school-remembered"
+            ),
+            profileID: profileID,
+            kind: .event
+        )
+        var parsed = eventPreview()
+        parsed.destinationID = "school-parser"
+        let subject = makeSubject(
+            result: .success(parsed),
+            options: options(
+                calendars: [
+                    calendarDescriptor("school-parser", "Parser"),
+                    calendarDescriptor("school-remembered", "Remembered")
+                ],
+                defaultCalendarID: "school-remembered"
+            ),
+            creationProfile: creationProfile(
+                id: profileID,
+                calendarIDs: ["school-parser", "school-remembered"]
+            ),
+            historyStore: history
+        )
+        subject.text = "Study session tomorrow at 3pm"
+
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.destinationID, "school-parser")
+    }
+
+    func testSwitchingKindAppliesThatKindsSafeRememberedChoices() {
+        let profileID = UUID()
+        let categoryID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            .init(
+                durationMinutes: 90,
+                categoryID: categoryID,
+                destinationID: "school-projects"
+            ),
+            profileID: profileID,
+            kind: .event
+        )
+        let subject = makeSubject(
+            result: .success(taskPreview(due: date(2026, 8, 25, 9), dueHasTime: true)),
+            options: options(
+                calendars: [
+                    calendarDescriptor("school", "School"),
+                    calendarDescriptor("school-projects", "School Projects")
+                ],
+                defaultCalendarID: "school"
+            ),
+            categories: [category(id: categoryID)],
+            creationProfile: creationProfile(
+                id: profileID,
+                calendarIDs: ["school", "school-projects"]
+            ),
+            historyStore: history
+        )
+        subject.text = "Submit report tomorrow at 9am"
+        subject.parse()
+
+        subject.selectKind(.event)
+
+        XCTAssertEqual(subject.preview?.startDate, date(2026, 8, 25, 9))
+        XCTAssertEqual(subject.preview?.endDate, date(2026, 8, 25, 10, 30))
+        XCTAssertEqual(subject.preview?.categoryID, categoryID)
+        XCTAssertEqual(subject.preview?.destinationID, "school-projects")
+    }
+
+    func testSavingAllDayEventPreservesRememberedTimedDuration() {
+        let profileID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.setPreference(
+            .init(durationMinutes: 90, categoryID: nil, destinationID: "school"),
+            profileID: profileID,
+            kind: .event
+        )
+        let allDay = QuickEntryPreview(
+            kind: .event,
+            title: "School holiday",
+            startDate: date(2026, 8, 25),
+            endDate: date(2026, 8, 26),
+            isAllDay: true
+        )
+        let subject = makeSubject(
+            result: .success(allDay),
+            saver: RecordingQuickEntrySaver(steps: [.success(.event(id: "holiday"))]),
+            options: options(
+                calendars: [calendarDescriptor("school", "School")],
+                defaultCalendarID: "school"
+            ),
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+        subject.text = "School holiday tomorrow"
+        subject.parse()
+
+        subject.confirmSave()
+
+        XCTAssertEqual(
+            history.preference(profileID: profileID, kind: .event)?.durationMinutes,
+            90
+        )
+    }
 }
 
 private enum QuickEntrySaverStep {
@@ -798,6 +1144,9 @@ private func makeSubject(
     saver: RecordingQuickEntrySaver = RecordingQuickEntrySaver(),
     options: QuickEntryDestinationOptions = options(),
     parseContext: QuickEntryParseContext = context(),
+    categories: [CategorySnapshot] = [],
+    creationProfile: CreationProfileContext? = nil,
+    historyStore: QuickEntryHistoryStore? = nil,
     onCommitted: @escaping @MainActor (QuickEntrySaveOutcome) -> Void = { _ in }
 ) -> QuickEntryViewModel {
     QuickEntryViewModel(
@@ -805,6 +1154,10 @@ private func makeSubject(
         saver: saver,
         context: parseContext,
         destinations: options,
+        categories: categories,
+        creationProfile: creationProfile,
+        historyStore: historyStore,
+        historyNow: { parseContext.now },
         onCommitted: onCommitted
     )
 }
@@ -846,6 +1199,29 @@ private func calendarDescriptor(_ id: String, _ title: String, writable: Bool = 
 
 private func listDescriptor(_ id: String, _ title: String, writable: Bool = true) -> ReminderListDescriptor {
     .init(id: id, title: title, colorHex: "#000000", allowsContentModifications: writable)
+}
+
+private func category(id: UUID) -> CategorySnapshot {
+    .init(id: id, name: "Study", colorHex: "#4868A8", sortOrder: 0)
+}
+
+private func creationProfile(
+    id: UUID,
+    calendarIDs: Set<String> = ["school"],
+    reminderListIDs: Set<String> = ["tasks"],
+    defaultCalendarID: String? = "school",
+    defaultReminderListID: String? = "tasks"
+) -> CreationProfileContext {
+    CreationProfileContext(
+        profileID: id,
+        profileName: "School",
+        memberCalendarIDs: calendarIDs,
+        memberReminderListIDs: reminderListIDs,
+        defaultCalendarID: defaultCalendarID,
+        defaultReminderListID: defaultReminderListID,
+        requiresExplicitCalendarDestination: defaultCalendarID == nil,
+        requiresExplicitReminderDestination: defaultReminderListID == nil
+    )
 }
 
 private func options(
