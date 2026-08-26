@@ -33,14 +33,15 @@ struct WeekPlannerView: View {
     }
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                accessibleAgenda
-            } else {
-                sevenDayTimeline
-            }
+        if dynamicTypeSize.isAccessibilitySize {
+            accessibleAgenda
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("week-planner")
+        } else {
+            sevenDayTimeline
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("week-planner")
         }
-        .accessibilityIdentifier("week-planner")
     }
 
     private var sevenDayTimeline: some View {
