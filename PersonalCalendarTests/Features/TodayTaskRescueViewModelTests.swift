@@ -182,6 +182,92 @@ final class TodayTaskRescueViewModelTests: XCTestCase {
         XCTAssertNil(editedSubject.latestRescheduleUndo)
     }
 
+    func testAccessLossClearsPublishedRescheduleStateWithoutAnotherProviderWrite() async throws {
+        let calendar = singaporeCalendar()
+        let profileID = UUID()
+        let service = failClosedService(calendar: calendar)
+        let subject = makeSubject(
+            service: service,
+            calendar: calendar,
+            currentScope: { self.scope(id: profileID, reminderListIDs: ["school"]) }
+        )
+        await populateOverdueUndoAndRescheduleError(subject: subject, service: service)
+        let writes = service.reminderUpdateCalls.count
+
+        service.accessState = .denied
+        await subject.quickRescheduleTask(id: "visible", command: .tomorrow)
+
+        XCTAssertTrue(subject.overdueTasks.isEmpty)
+        XCTAssertNil(subject.latestRescheduleUndo)
+        XCTAssertNil(subject.rescheduleError)
+        XCTAssertEqual(service.reminderUpdateCalls.count, writes)
+    }
+
+    func testScopeFailureFromScopedReminderLookupClearsPublishedRescheduleStateWithoutWriting() async throws {
+        let calendar = singaporeCalendar()
+        let profileID = UUID()
+        let scopeControl = TodayTaskRescueScopeControl()
+        let service = failClosedService(calendar: calendar)
+        let subject = makeSubject(
+            service: service,
+            calendar: calendar,
+            currentScope: {
+                if scopeControl.fails { throw TodayTaskRescueTestError.scopeFailure }
+                return self.scope(id: profileID, reminderListIDs: ["school"])
+            }
+        )
+        await populateOverdueUndoAndRescheduleError(subject: subject, service: service)
+        let writes = service.reminderUpdateCalls.count
+
+        scopeControl.fails = true
+        XCTAssertNil(subject.scopedIncompleteReminder(id: "visible"))
+
+        XCTAssertTrue(subject.overdueTasks.isEmpty)
+        XCTAssertNil(subject.latestRescheduleUndo)
+        XCTAssertNil(subject.rescheduleError)
+        XCTAssertEqual(service.reminderUpdateCalls.count, writes)
+    }
+
+    func testProfileIdentityMismatchFromScopedReminderLookupClearsPublishedRescheduleStateWithoutWriting() async throws {
+        let calendar = singaporeCalendar()
+        var activeProfileID = UUID()
+        let service = failClosedService(calendar: calendar)
+        let subject = makeSubject(
+            service: service,
+            calendar: calendar,
+            currentScope: { self.scope(id: activeProfileID, reminderListIDs: ["school"]) }
+        )
+        await populateOverdueUndoAndRescheduleError(subject: subject, service: service)
+        let writes = service.reminderUpdateCalls.count
+
+        activeProfileID = UUID()
+        XCTAssertNil(subject.scopedIncompleteReminder(id: "visible"))
+
+        XCTAssertTrue(subject.overdueTasks.isEmpty)
+        XCTAssertNil(subject.latestRescheduleUndo)
+        XCTAssertNil(subject.rescheduleError)
+        XCTAssertEqual(service.reminderUpdateCalls.count, writes)
+    }
+
+    func testSameProfileRescheduleWriteFailureRetainsOverdueRowsPriorUndoAndError() async throws {
+        let calendar = singaporeCalendar()
+        let profileID = UUID()
+        let service = failClosedService(calendar: calendar)
+        let subject = makeSubject(
+            service: service,
+            calendar: calendar,
+            currentScope: { self.scope(id: profileID, reminderListIDs: ["school"]) }
+        )
+
+        await populateOverdueUndoAndRescheduleError(subject: subject, service: service)
+
+        XCTAssertEqual(Set(subject.overdueTasks.map(\.id)), ["failed", "visible"])
+        XCTAssertEqual(subject.latestRescheduleUndo?.reminderID, "undo")
+        XCTAssertNotNil(subject.rescheduleError)
+        XCTAssertNotNil(subject.scopedIncompleteReminder(id: "visible"))
+        XCTAssertEqual(service.reminderUpdateCalls.count, 1)
+    }
+
     func testRecurringReadOnlyCompletedAndOutOfProfileTasksNeverReschedule() async throws {
         let calendar = singaporeCalendar()
         let original = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
@@ -266,6 +352,35 @@ final class TodayTaskRescueViewModelTests: XCTestCase {
         )
     }
 
+    private func failClosedService(calendar: Calendar) -> FakeRemindersService {
+        let original = calendar.date(byAdding: .day, value: -1, to: now)!
+        return FakeRemindersService(
+            access: .granted,
+            reminders: [
+                reminder(id: "undo", dueDate: original, listID: "school"),
+                reminder(id: "failed", dueDate: original, listID: "school"),
+                reminder(id: "visible", dueDate: original, listID: "school")
+            ],
+            descriptors: [descriptor(id: "school")]
+        )
+    }
+
+    private func populateOverdueUndoAndRescheduleError(
+        subject: TodayViewModel,
+        service: FakeRemindersService
+    ) async {
+        await subject.load()
+        await subject.quickRescheduleTask(id: "undo", command: .tomorrow)
+        service.updateError = TodayTaskRescueTestError.writeFailure
+        await subject.quickRescheduleTask(id: "failed", command: .tomorrow)
+        service.updateError = nil
+
+        XCTAssertEqual(Set(subject.overdueTasks.map(\.id)), ["failed", "visible"])
+        XCTAssertEqual(subject.latestRescheduleUndo?.reminderID, "undo")
+        XCTAssertNotNil(subject.rescheduleError)
+        XCTAssertEqual(service.reminderUpdateCalls.count, 1)
+    }
+
     private func reminder(
         id: String,
         dueDate: Date?,
@@ -313,6 +428,16 @@ final class TodayTaskRescueViewModelTests: XCTestCase {
         value.timeZone = TimeZone(identifier: "Asia/Singapore")!
         return value
     }
+}
+
+private enum TodayTaskRescueTestError: Error {
+    case scopeFailure
+    case writeFailure
+}
+
+@MainActor
+private final class TodayTaskRescueScopeControl {
+    var fails = false
 }
 
 private extension AgendaItem {

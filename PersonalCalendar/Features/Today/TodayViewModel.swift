@@ -359,6 +359,7 @@ final class TodayViewModel {
             return
         }
         adopt(scope)
+        reconcileReminderState(scope: scope)
         guard let live = writableRescheduleReminder(id: id, scope: scope),
               !mutatingItemIDs.contains(id)
         else {
@@ -420,6 +421,7 @@ final class TodayViewModel {
             return
         }
         adopt(scope)
+        reconcileReminderState(scope: scope)
         guard latestRescheduleUndo == undo,
               let live = writableRescheduleReminder(id: undo.reminderID, scope: scope),
               live.listID == rescheduleUndoExpectedListID,
@@ -465,8 +467,17 @@ final class TodayViewModel {
     }
 
     func scopedIncompleteReminder(id: String) -> ReminderSnapshot? {
-        guard let scope = try? currentScope(),
-              cachedScopeIdentity == scope.identity,
+        let scope: ProfileScope
+        do {
+            scope = try currentScope()
+        } catch {
+            failScopeResolution()
+            return nil
+        }
+        let identityMatches = cachedScopeIdentity == scope.identity
+        adopt(scope)
+        reconcileReminderState(scope: scope)
+        guard identityMatches,
               reminders.accessState == .granted,
               cachedReminders.contains(where: { $0.id == id }),
               let live = reminders.reminder(id: id),
