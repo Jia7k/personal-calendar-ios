@@ -27,25 +27,33 @@ struct WeekTimetableWidgetView: View {
 
     @ViewBuilder
     var body: some View {
-        switch entry.content {
-        case .chooseProfile:
-            message(title: "Timetable", detail: "Choose a profile")
-        case .profileDeleted:
-            message(title: "Timetable", detail: "Choose another profile")
-        case let .calendarAccessRequired(profileName):
-            message(title: profileName, detail: "Allow Calendar access in My Calendar")
-        case let .emptyProfile(profileName):
-            message(title: profileName, detail: "No calendars in this profile")
-        case let .noClasses(profileName):
-            message(title: profileName, detail: "No classes this week")
-        case let .ready(profileName, snapshot):
-            TimeRailsView(
-                snapshot: snapshot,
-                now: entry.date,
-                showsStatusStrip: false,
-                profileName: profileName
-            )
+        let routeURL = TimetableWidgetRouteResolver().weekURL(
+            content: entry.content,
+            date: entry.date
+        )
+        Group {
+            switch entry.content {
+            case .chooseProfile:
+                message(title: "Timetable", detail: "Choose a profile")
+            case .profileDeleted:
+                message(title: "Timetable", detail: "Choose another profile")
+            case let .calendarAccessRequired(profileName):
+                message(title: profileName, detail: "Allow Calendar access in My Calendar")
+            case let .emptyProfile(profileName):
+                message(title: profileName, detail: "No calendars in this profile")
+            case let .noClasses(profileName):
+                message(title: profileName, detail: "No classes this week")
+            case let .ready(_, profileName, snapshot):
+                TimeRailsView(
+                    snapshot: snapshot,
+                    now: entry.date,
+                    showsStatusStrip: false,
+                    profileName: profileName
+                )
+            }
         }
+        .widgetURL(routeURL)
+        .accessibilityHint(routeURL == nil ? "" : "Opens this week in My Calendar")
     }
 
     private func message(title: String, detail: String) -> some View {

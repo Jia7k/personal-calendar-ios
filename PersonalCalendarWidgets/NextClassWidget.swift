@@ -27,23 +27,31 @@ struct NextClassWidgetView: View {
 
     @ViewBuilder
     var body: some View {
-        switch entry.content {
-        case .chooseProfile:
-            message(title: "TIMETABLE", detail: "Choose a profile")
-        case .profileDeleted:
-            message(title: "TIMETABLE", detail: "Choose another profile")
-        case let .calendarAccessRequired(profileName):
-            message(title: profileName, detail: "Allow Calendar access")
-        case let .emptyProfile(profileName):
-            message(title: profileName, detail: "No calendars in this profile")
-        case let .noClasses(profileName):
-            message(title: profileName, detail: "No classes this week")
-        case let .ready(profileName, snapshot):
-            content(
-                for: snapshot.moment(at: entry.date, calendar: calendar(for: snapshot)),
-                profileName: profileName
-            )
+        let routeURL = TimetableWidgetRouteResolver().nextClassURL(
+            content: entry.content,
+            date: entry.date
+        )
+        Group {
+            switch entry.content {
+            case .chooseProfile:
+                message(title: "TIMETABLE", detail: "Choose a profile")
+            case .profileDeleted:
+                message(title: "TIMETABLE", detail: "Choose another profile")
+            case let .calendarAccessRequired(profileName):
+                message(title: profileName, detail: "Allow Calendar access")
+            case let .emptyProfile(profileName):
+                message(title: profileName, detail: "No calendars in this profile")
+            case let .noClasses(profileName):
+                message(title: profileName, detail: "No classes this week")
+            case let .ready(_, profileName, snapshot):
+                content(
+                    for: snapshot.moment(at: entry.date, calendar: calendar(for: snapshot)),
+                    profileName: profileName
+                )
+            }
         }
+        .widgetURL(routeURL)
+        .accessibilityHint(routeURL == nil ? "" : "Opens this timetable in My Calendar")
     }
 
     @ViewBuilder

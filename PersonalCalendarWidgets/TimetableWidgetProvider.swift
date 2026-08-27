@@ -2,26 +2,17 @@ import AppIntents
 import Foundation
 import WidgetKit
 
-enum TimetableWidgetContent: Hashable, Sendable {
-    case chooseProfile
-    case profileDeleted
-    case calendarAccessRequired(profileName: String)
-    case emptyProfile(profileName: String)
-    case noClasses(profileName: String)
-    case ready(profileName: String, snapshot: TimetableSnapshotV1)
-}
-
 struct TimetableWidgetEntry: TimelineEntry {
     let date: Date
     let content: TimetableWidgetContent
 
     var isPlaceholder: Bool {
-        guard case let .ready(_, snapshot) = content else { return false }
+        guard case let .ready(_, _, snapshot) = content else { return false }
         return snapshot.generatedAt == .distantPast
     }
 
     var containsPrivateData: Bool {
-        guard case let .ready(_, snapshot) = content else { return false }
+        guard case let .ready(_, _, snapshot) = content else { return false }
         return !snapshot.entries.isEmpty
     }
 }
@@ -31,7 +22,11 @@ struct TimetableWidgetProvider: AppIntentTimelineProvider {
         let now = Date()
         return TimetableWidgetEntry(
             date: now,
-            content: .ready(profileName: "School", snapshot: placeholderSnapshot(now: now))
+            content: .ready(
+                profile: .everything,
+                profileName: "School",
+                snapshot: placeholderSnapshot(now: now)
+            )
         )
     }
 
@@ -50,7 +45,7 @@ struct TimetableWidgetProvider: AppIntentTimelineProvider {
     ) async -> Timeline<TimetableWidgetEntry> {
         let now = Date()
         let content = loadContent(configuration: configuration)
-        guard case let .ready(_, snapshot) = content else {
+        guard case let .ready(_, _, snapshot) = content else {
             return Timeline(
                 entries: [TimetableWidgetEntry(date: now, content: content)],
                 policy: .never
@@ -91,7 +86,11 @@ struct TimetableWidgetProvider: AppIntentTimelineProvider {
             guard !snapshot.entries.isEmpty else {
                 return .noClasses(profileName: profileName)
             }
-            return .ready(profileName: profileName, snapshot: snapshot)
+            return .ready(
+                profile: identity,
+                profileName: profileName,
+                snapshot: snapshot
+            )
         }
     }
 
