@@ -437,9 +437,12 @@ struct TodayView: View {
     }
 
     private func presentTimeBlock(reminderID: String) {
-        guard editorPresentation == nil,
-              taskActionPresentation == nil,
-              let reminder = model.scopedIncompleteReminder(id: reminderID),
+        guard !TodayTaskActionPresentationGate.isBusy(
+            editorIsPresented: editorPresentation != nil,
+            actionIsPresented: taskActionPresentation != nil
+        ) else { return }
+
+        guard let reminder = model.scopedIncompleteReminder(id: reminderID),
               let session = TaskTimeBlockSession.make(
                 task: reminder,
                 environment: environment

@@ -7,6 +7,36 @@ private enum TodayTaskActionPresentationTestError: Error {
 
 @MainActor
 final class TodayTaskActionPresentationTests: XCTestCase {
+    func testEditorActiveAttemptIsBusyEvenWhenTheActionIsUnavailable() {
+        let decision = TodayTaskActionPresentationGate.decide(
+            editorIsPresented: true,
+            actionIsPresented: false,
+            actionIsAvailable: false
+        )
+
+        XCTAssertEqual(decision, .busy)
+    }
+
+    func testActionSheetActiveAttemptIsBusyEvenWhenTheActionIsUnavailable() {
+        let decision = TodayTaskActionPresentationGate.decide(
+            editorIsPresented: false,
+            actionIsPresented: true,
+            actionIsAvailable: false
+        )
+
+        XCTAssertEqual(decision, .busy)
+    }
+
+    func testIdleUnavailableAttemptIsClassifiedUnavailable() {
+        let decision = TodayTaskActionPresentationGate.decide(
+            editorIsPresented: false,
+            actionIsPresented: false,
+            actionIsAvailable: false
+        )
+
+        XCTAssertEqual(decision, .unavailable)
+    }
+
     func testPickDateRetainsReminderIDAndUsesAStablePresentationID() {
         let request = TodayTaskPickDate(reminderID: "task-42")
         let presentation = TodayTaskActionPresentation.pickDate(request)
