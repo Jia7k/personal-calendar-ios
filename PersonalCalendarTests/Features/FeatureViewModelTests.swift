@@ -1201,7 +1201,7 @@ final class FeatureViewModelTests: XCTestCase {
 
     func testTaskUnchangedSelectionFetchFailurePreservesVisibleRecoveryWithoutWrite() async {
         let item = ReminderSnapshot(id: "a", title: "A", notes: nil, dueDate: nil, dueHasTime: false, priority: 0, listID: "list", listTitle: "List", isCompleted: false, allowsModification: true, hasRecurrence: false); let service = FakeRemindersService(access: .granted, reminders: [item]); let subject = TasksViewModel(service: service, settings: AppSettingsStore(defaults: .ephemeral), calendar: calendar); await subject.load(); service.completionError = TestError.failed; await subject.setCompleted(id: "a", completed: true); let expected = subject.failedMutationOperation; let error = subject.mutationErrorMessage
-        service.completionError = nil; service.fetchError = TestError.failed; await subject.load(); XCTAssertTrue(subject.upcoming.contains { $0.id == "a" }); XCTAssertEqual(subject.failedMutationOperation, expected); XCTAssertEqual(subject.mutationErrorMessage, error); XCTAssertTrue(service.completedCalls.isEmpty)
+        service.completionError = nil; service.fetchError = TestError.failed; await subject.load(); XCTAssertTrue(subject.needsScheduling.contains { $0.id == "a" }); XCTAssertFalse(subject.upcoming.contains { $0.id == "a" }); XCTAssertEqual(subject.failedMutationOperation, expected); XCTAssertEqual(subject.mutationErrorMessage, error); XCTAssertTrue(service.completedCalls.isEmpty)
     }
 
     func testTaskDirectCompletionAfterAccessRevocationMakesNoWrite() async {
