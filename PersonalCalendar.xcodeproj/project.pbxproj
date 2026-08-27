@@ -48,6 +48,7 @@
 		25D6FF2820874F3FAE7CA38C /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DB1BD4F52A8EE50910BC467 /* BackupService.swift */; };
 		26924EB8B191A5E28AA0674E /* PermissionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */; };
 		27CD7B0F0980F9EA7E512484 /* MonthGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0305691ED4EE8A7D16468599 /* MonthGridView.swift */; };
+		28D03848B9E739FD6978019B /* TimetableActivityRouteResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6160753D7F698AD2CC060D09 /* TimetableActivityRouteResolver.swift */; };
 		2A77B412EB00DF027D6C6BB8 /* PermissionOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6701BC3732DB260CE0FB7AB0 /* PermissionOnboardingView.swift */; };
 		2AC6BB8C8B1E3E13778B2233 /* CategoryRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11606057D572CC85B248770A /* CategoryRepositoryTests.swift */; };
 		2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */; };
@@ -178,9 +179,11 @@
 		AF7C9FF4EC19C5921E08DF6A /* QuickEntryPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73BB5B46213314A1766A96CA /* QuickEntryPreview.swift */; };
 		B0A493DA47E0A15A4F194AD2 /* TimetableLiveActivityCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2747FB88388E16E398FE474 /* TimetableLiveActivityCoordinatorTests.swift */; };
 		B24681A4D06EE60A60149AE4 /* RoutineEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97BCFF23F6E67827A782E2A /* RoutineEditorView.swift */; };
+		B4B2883C1C48DF5CE7C764DC /* TimetableActivityRouteResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6160753D7F698AD2CC060D09 /* TimetableActivityRouteResolver.swift */; };
 		B725C64256C97782027C43E8 /* RoutineProfileMutationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4359A0D244D360CE1966EC0 /* RoutineProfileMutationCoordinator.swift */; };
 		B8267D7E960D5A4A2D52D8BE /* TimetableSnapshotBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B118E633BA21B7BD5EBB303 /* TimetableSnapshotBuilderTests.swift */; };
 		B86E720D087E56010028276A /* RuleBasedQuickEntryParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99B52C8A386EC9982A48F656 /* RuleBasedQuickEntryParser.swift */; };
+		BB4CB16467FB7ED77D4F57C9 /* TimetableActivityRouteResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C93933B78B2A519EB3211F92 /* TimetableActivityRouteResolverTests.swift */; };
 		BB5CBCDF43C332E840CB627B /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B88E152BB724F5C32324CEE /* NotificationCoordinator.swift */; };
 		BB782DCDAC7E289308C76830 /* SaveRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 794AFAEBD26BCA485FAAFB90 /* SaveRouterTests.swift */; };
 		BB93192B8A47DEC76AEA7CA2 /* ProfileScopeResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 258A64CC181CBE385142C861 /* ProfileScopeResolverTests.swift */; };
@@ -363,6 +366,7 @@
 		5F2D905A9966AC69BD458FA6 /* DailyQOLFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyQOLFlowUITests.swift; sourceTree = "<group>"; };
 		5F4437608BB6A0848DB58C5B /* TodayTaskActionPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayTaskActionPresentationTests.swift; sourceTree = "<group>"; };
 		601C1B2C329102F7A07180BD /* RoutinesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutinesView.swift; sourceTree = "<group>"; };
+		6160753D7F698AD2CC060D09 /* TimetableActivityRouteResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableActivityRouteResolver.swift; sourceTree = "<group>"; };
 		6273DDA991A00906B766D1FD /* ProfileFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileFlowUITests.swift; sourceTree = "<group>"; };
 		62F7492038E7ED78BCB2E73C /* ProfileSettingsStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingsStateTests.swift; sourceTree = "<group>"; };
 		653C74A2AD5C5F0981FF20F1 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
@@ -459,6 +463,7 @@
 		C4915ADDAF699A819650A494 /* FakesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakesTests.swift; sourceTree = "<group>"; };
 		C88C1F7B2C0C5B1D5C56C9BB /* DailyTaskRescueFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTaskRescueFlowUITests.swift; sourceTree = "<group>"; };
 		C8A5519E33A981E727A926B4 /* TimetableWidgetCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidgetCatalogTests.swift; sourceTree = "<group>"; };
+		C93933B78B2A519EB3211F92 /* TimetableActivityRouteResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableActivityRouteResolverTests.swift; sourceTree = "<group>"; };
 		CB967637C56AFC66EA20405A /* DayTrayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTrayView.swift; sourceTree = "<group>"; };
 		CC4972998C4330CCEFD837A5 /* ClassAlertCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassAlertCoordinatorTests.swift; sourceTree = "<group>"; };
 		CE194D5D8177DBC3B3BBB94E /* RoutineProfileMutationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineProfileMutationCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -996,6 +1001,7 @@
 			isa = PBXGroup;
 			children = (
 				78B8B90754A272E063A9767F /* TimeRailsLayoutTests.swift */,
+				C93933B78B2A519EB3211F92 /* TimetableActivityRouteResolverTests.swift */,
 				C2747FB88388E16E398FE474 /* TimetableLiveActivityCoordinatorTests.swift */,
 				E77A26CB62379E8D790BA60F /* TimetableProfileActivityTests.swift */,
 				5B118E633BA21B7BD5EBB303 /* TimetableSnapshotBuilderTests.swift */,
@@ -1080,6 +1086,7 @@
 			children = (
 				EDE1DE5ADE2762E80CEDD282 /* TimeRailsLayout.swift */,
 				01FBA66B8E35DDC840528CC3 /* TimetableActivityAttributes.swift */,
+				6160753D7F698AD2CC060D09 /* TimetableActivityRouteResolver.swift */,
 				1EBA6F5D46317158C80AAD66 /* TimetableSnapshot.swift */,
 				1008A1F56F8A1FD12DDE16B1 /* TimetableSnapshotStore.swift */,
 				2D97B653770B9C8FE9A44B65 /* TimetableTimelineBuilder.swift */,
@@ -1331,6 +1338,7 @@
 				09CD005F40CC60020B43B017 /* TimeRailsLayout.swift in Sources */,
 				ABE326F7C84ED6BB24E51748 /* TimeRailsView.swift in Sources */,
 				851F301BE9D898C9399873B5 /* TimetableActivityAttributes.swift in Sources */,
+				B4B2883C1C48DF5CE7C764DC /* TimetableActivityRouteResolver.swift in Sources */,
 				7B827146780BA97C16A5E130 /* TimetableLiveActivity.swift in Sources */,
 				F999BE73A2CDCF435D955986 /* TimetableProfileIntent.swift in Sources */,
 				12FFD28EA0A2029E104D7C7E /* TimetableSnapshot.swift in Sources */,
@@ -1461,6 +1469,7 @@
 				C112F29A1FD1C5BF2588746B /* TimeRailsLayout.swift in Sources */,
 				A4B42576ACAAE963E5B6B2CB /* TimetableActivityAttributes.swift in Sources */,
 				5B87A661FF0C52717D55F243 /* TimetableActivityDriver.swift in Sources */,
+				28D03848B9E739FD6978019B /* TimetableActivityRouteResolver.swift in Sources */,
 				8CC407129F0774658C4E9307 /* TimetableLiveActivityCoordinator.swift in Sources */,
 				A257A51B55889A28C39CDE17 /* TimetableSettingsView.swift in Sources */,
 				3ACE7E41FC333CBC0F29F3F5 /* TimetableSnapshot.swift in Sources */,
@@ -1544,6 +1553,7 @@
 				2F2858D663EBD69259C7C184 /* TaskTimeBlockPlannerTests.swift in Sources */,
 				8A662A6601D96C54E921E54A /* TaskTimeBlockViewModelTests.swift in Sources */,
 				9EC8F95DC06A23C1F8B6D6A3 /* TimeRailsLayoutTests.swift in Sources */,
+				BB4CB16467FB7ED77D4F57C9 /* TimetableActivityRouteResolverTests.swift in Sources */,
 				B0A493DA47E0A15A4F194AD2 /* TimetableLiveActivityCoordinatorTests.swift in Sources */,
 				75F9DF0C0194C82F4728ED2D /* TimetableProfileActivityTests.swift in Sources */,
 				B8267D7E960D5A4A2D52D8BE /* TimetableSnapshotBuilderTests.swift in Sources */,

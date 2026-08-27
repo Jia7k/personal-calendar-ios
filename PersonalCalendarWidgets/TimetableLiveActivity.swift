@@ -13,7 +13,12 @@ struct TimetableLiveActivity: Widget {
                 .activityBackgroundTint(.black.opacity(0.82))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
-            DynamicIsland {
+            let routeURL = TimetableActivityRouteResolver().url(
+                attributes: context.attributes,
+                state: context.state,
+                now: .now
+            )
+            return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     CourseStatusCode(
                         state: context.state,
@@ -38,6 +43,7 @@ struct TimetableLiveActivity: Widget {
                     .fill(Color(red: 0.38, green: 0.73, blue: 0.68))
                     .frame(width: 9, height: 9)
             }
+            .widgetURL(routeURL)
             .keylineTint(Color(red: 0.38, green: 0.73, blue: 0.68))
         }
     }
@@ -49,6 +55,11 @@ private struct TimetableLockScreenView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
+            let routeURL = TimetableActivityRouteResolver().url(
+                attributes: attributes,
+                state: state,
+                now: context.date
+            )
             VStack(spacing: 2) {
                 TimeRailsView(
                     snapshot: compactSnapshot(state: state, attributes: attributes),
@@ -66,6 +77,7 @@ private struct TimetableLockScreenView: View {
             .padding(.vertical, 8)
             .frame(height: 148)
             .environment(\.timeZone, activityTimeZone)
+            .widgetURL(routeURL)
         }
     }
 
@@ -195,7 +207,8 @@ private func compactSnapshot(
                 shortTitle: $0.shortTitle,
                 start: $0.start,
                 end: $0.end,
-                location: $0.location
+                location: $0.location,
+                routeID: $0.routeID
             )
         },
         omittedEntryCount: state.omittedEntryCount

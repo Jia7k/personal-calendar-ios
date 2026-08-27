@@ -3,6 +3,35 @@ import XCTest
 
 @MainActor
 final class TimetableLiveActivityCoordinatorTests: XCTestCase {
+    func testCompactProjectionPreservesOpaqueOccurrenceRouteID() async throws {
+        let fixture = TimetableTestFixture()
+        let now = fixture.date(day: 1, hour: 9, minute: 30)
+        let routeID = "entry-0123456789abcdef"
+        let snapshot = TimetableSnapshotV1(
+            version: TimetableSnapshotV1.currentVersion,
+            availability: .ready,
+            generatedAt: now,
+            weekStart: fixture.mondayStart,
+            timeZoneIdentifier: fixture.timeZone.identifier,
+            entries: [
+                entry(
+                    id: "occurrence:1788234000000:0",
+                    routeID: routeID,
+                    title: "Algorithms",
+                    start: fixture.date(day: 1, hour: 9),
+                    end: fixture.date(day: 1, hour: 11)
+                )
+            ]
+        )
+        let driver = RecordingTimetableActivityDriver()
+        let subject = TimetableLiveActivityCoordinator(driver: driver, calendar: fixture.calendar)
+
+        await subject.start(profile: makeProfile(snapshot: snapshot), now: now)
+
+        let state = try XCTUnwrap(driver.requestedStates.first)
+        XCTAssertEqual(state.entries.map(\.routeID), [routeID])
+    }
+
     func testStartProjectsOnlyTodaysCurrentAndUpcomingEntries() async throws {
         let fixture = TimetableTestFixture()
         let now = fixture.date(day: 1, hour: 9, minute: 30)
@@ -154,6 +183,7 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
         let entries = (0..<80).map { index in
             entry(
                 id: "entry-\(index)",
+                routeID: String(format: "entry-%016llx", index),
                 title: "Course \(index) " + String(repeating: "T", count: 80),
                 start: now.addingTimeInterval(TimeInterval(index * 60)),
                 end: fixture.date(day: 1, hour: 23),
@@ -184,6 +214,10 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertEqual(
             state.entries.map(\.id),
             Array(entries.prefix(state.entries.count)).map(\.id)
+        )
+        XCTAssertEqual(
+            state.entries.map(\.routeID),
+            Array(entries.prefix(state.entries.count)).map(\.routeID)
         )
     }
 
@@ -503,6 +537,7 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
 
     private func entry(
         id: String,
+        routeID: String? = nil,
         title: String,
         start: Date,
         end: Date,
@@ -514,7 +549,8 @@ final class TimetableLiveActivityCoordinatorTests: XCTestCase {
             shortTitle: String(title.prefix(4)).uppercased(),
             start: start,
             end: end,
-            location: location
+            location: location,
+            routeID: routeID
         )
     }
 }

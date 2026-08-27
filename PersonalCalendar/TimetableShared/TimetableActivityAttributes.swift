@@ -17,6 +17,25 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
             let start: Date
             let end: Date
             let location: String?
+            let routeID: String?
+
+            init(
+                id: String,
+                title: String,
+                shortTitle: String,
+                start: Date,
+                end: Date,
+                location: String?,
+                routeID: String? = nil
+            ) {
+                self.id = id
+                self.title = title
+                self.shortTitle = shortTitle
+                self.start = start
+                self.end = end
+                self.location = location
+                self.routeID = routeID
+            }
 
             fileprivate init(_ entry: TimetableEntry) {
                 id = entry.id
@@ -25,6 +44,7 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
                 start = entry.start
                 end = entry.end
                 location = entry.location.map { String($0.prefix(64)) }
+                routeID = entry.routeID
             }
 
             private enum CodingKeys: String, CodingKey {
@@ -34,6 +54,29 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
                 case start = "b"
                 case end = "e"
                 case location = "l"
+                case routeID = "r"
+            }
+
+            init(from decoder: any Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                id = try container.decode(String.self, forKey: .id)
+                title = try container.decode(String.self, forKey: .title)
+                shortTitle = try container.decode(String.self, forKey: .shortTitle)
+                start = try container.decode(Date.self, forKey: .start)
+                end = try container.decode(Date.self, forKey: .end)
+                location = try container.decodeIfPresent(String.self, forKey: .location)
+                routeID = try container.decodeIfPresent(String.self, forKey: .routeID)
+            }
+
+            func encode(to encoder: any Encoder) throws {
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(id, forKey: .id)
+                try container.encode(title, forKey: .title)
+                try container.encode(shortTitle, forKey: .shortTitle)
+                try container.encode(start, forKey: .start)
+                try container.encode(end, forKey: .end)
+                try container.encodeIfPresent(location, forKey: .location)
+                try container.encodeIfPresent(routeID, forKey: .routeID)
             }
         }
 
