@@ -16,6 +16,7 @@ struct WeekPlannerView: View {
     let onSelectDay: (LocalDay) -> Void
     let onOpenItem: (AgendaItemOrigin) -> Void
     let onSetTaskCompleted: (String, Bool) -> Void
+    let onScheduleTaskTime: ((String) -> Void)?
 
     init(
         snapshot: WeekPlannerSnapshot,
@@ -24,7 +25,8 @@ struct WeekPlannerView: View {
         calendar: Calendar,
         onSelectDay: @escaping (LocalDay) -> Void,
         onOpenItem: @escaping (AgendaItemOrigin) -> Void,
-        onSetTaskCompleted: @escaping (String, Bool) -> Void = { _, _ in }
+        onSetTaskCompleted: @escaping (String, Bool) -> Void = { _, _ in },
+        onScheduleTaskTime: ((String) -> Void)? = nil
     ) {
         self.snapshot = snapshot
         self.selectedDay = selectedDay
@@ -33,6 +35,7 @@ struct WeekPlannerView: View {
         self.onSelectDay = onSelectDay
         self.onOpenItem = onOpenItem
         self.onSetTaskCompleted = onSetTaskCompleted
+        self.onScheduleTaskTime = onScheduleTaskTime
     }
 
     var body: some View {
@@ -269,6 +272,20 @@ struct WeekPlannerView: View {
                 if let reminderID = reminderID(for: selectedItem.item),
                    selectedItem.item.allowsModification,
                    !selectedItem.item.isCompleted {
+                    if let onScheduleTaskTime {
+                        Button("Schedule") {
+                            onScheduleTaskTime(reminderID)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(
+                            minWidth: CalendarTheme.minimumTapSize,
+                            minHeight: CalendarTheme.minimumTapSize
+                        )
+                        .accessibilityIdentifier("week-task-schedule-\(reminderID)")
+                        .accessibilityLabel("Schedule time for \(selectedItem.item.title)")
+                        .accessibilityHint("Creates a separate calendar event and leaves the reminder unchanged.")
+                    }
                     Button("Complete") {
                         self.selectedItem = nil
                         onSetTaskCompleted(reminderID, true)
@@ -359,7 +376,7 @@ struct WeekPlannerView: View {
     }
 
     private func accessibleRow(_ item: AgendaItem, prefix: String) -> some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             Button {
                 onOpenItem(item.origin)
             } label: {
@@ -382,11 +399,30 @@ struct WeekPlannerView: View {
             if let reminderID = reminderID(for: item),
                item.allowsModification,
                !item.isCompleted {
-                Button("Complete") {
-                    onSetTaskCompleted(reminderID, true)
+                HStack(spacing: 8) {
+                    if let onScheduleTaskTime {
+                        Button("Schedule") {
+                            onScheduleTaskTime(reminderID)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(
+                            minWidth: CalendarTheme.minimumTapSize,
+                            minHeight: CalendarTheme.minimumTapSize
+                        )
+                        .accessibilityIdentifier("week-task-schedule-\(reminderID)")
+                        .accessibilityLabel("Schedule time for \(item.title)")
+                        .accessibilityHint("Creates a separate calendar event and leaves the reminder unchanged.")
+                    }
+                    Button("Complete") {
+                        onSetTaskCompleted(reminderID, true)
+                    }
+                    .frame(
+                        minWidth: CalendarTheme.minimumTapSize,
+                        minHeight: CalendarTheme.minimumTapSize
+                    )
+                    .accessibilityIdentifier("week-task-complete-\(reminderID)")
                 }
-                .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                .accessibilityIdentifier("week-task-complete-\(reminderID)")
             }
         }
     }

@@ -5,6 +5,8 @@ struct CalendarHomeView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var viewModel: CalendarViewModel
     @State private var editorPresentation: CalendarEditorPresentation?
+    @State private var timeBlockPresentation: TaskTimeBlockSession?
+    @State private var taskActionError: String?
     @State private var showingSearch = false
     @State private var showingJumpToDate = false
     @State private var jumpDate = Date()
@@ -78,6 +80,11 @@ struct CalendarHomeView: View {
                 ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("Search", systemImage: "magnifyingglass") {
+                        guard editorPresentation == nil,
+                              timeBlockPresentation == nil,
+                              !showingJumpToDate,
+                              calendarDeepLink == nil,
+                              !isTransitioningPresentation else { return }
                         showingSearch = true
                         onPresentationChanged(true)
                     }
@@ -85,6 +92,7 @@ struct CalendarHomeView: View {
                     .accessibilityIdentifier("calendar-search-open")
                     Button("Jump to Date", systemImage: "calendar.badge.clock") {
                         guard editorPresentation == nil,
+                              timeBlockPresentation == nil,
                               !showingSearch,
                               calendarDeepLink == nil,
                               !isTransitioningPresentation else { return }
@@ -115,6 +123,7 @@ struct CalendarHomeView: View {
             .task(id: CalendarDeepLinkProcessingKey(
                 signalID: calendarDeepLink?.id,
                 editorID: editorPresentation?.id,
+                timeBlockID: timeBlockPresentation?.id,
                 showsSearch: showingSearch,
                 showsJumpToDate: showingJumpToDate
             )) {
@@ -122,6 +131,7 @@ struct CalendarHomeView: View {
             }
             .onChange(
                 of: editorPresentation != nil
+                    || timeBlockPresentation != nil
                     || showingSearch
                     || showingJumpToDate
                     || isTransitioningPresentation,
@@ -152,6 +162,15 @@ struct CalendarHomeView: View {
                         onDismiss: dismissEditor
                     )
                 }
+            }
+            .sheet(item: $timeBlockPresentation) { session in
+                TaskTimeBlockView(
+                    model: session.model,
+                    profiles: session.profiles,
+                    resolveProfile: session.resolveProfile,
+                    onSaved: session.onSaved,
+                    onDismiss: dismissTimeBlock
+                )
             }
             .sheet(isPresented: $showingJumpToDate) {
                 jumpToDateSheet
@@ -259,6 +278,9 @@ struct CalendarHomeView: View {
                             completed: completed
                         )
                     }
+                },
+                onScheduleTaskTime: { reminderID in
+                    presentTimeBlock(reminderID: reminderID)
                 }
             )
         }
@@ -276,6 +298,11 @@ struct CalendarHomeView: View {
                 Spacer()
                 Button("Retry") { Task { await viewModel.load() } }
             }
+        }
+        if let taskActionError {
+            Label(taskActionError, systemImage: "exclamationmark.triangle")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
         ForEach(viewModel.sourceAccessNotices) { notice in
             HStack {
@@ -347,6 +374,7 @@ struct CalendarHomeView: View {
     }
 
     private func openAgendaItem(_ origin: AgendaItemOrigin) {
+        guard timeBlockPresentation == nil else { return }
         let capturedProfileIdentity = environment.profileSelection.activeIdentity
         let capturedScope = try? environment.profileScopes.resolve(capturedProfileIdentity)
         switch origin {
@@ -388,6 +416,10 @@ struct CalendarHomeView: View {
     }
 
     private func selectSearchResult(_ origin: AgendaItemOrigin) {
+        guard editorPresentation == nil,
+              timeBlockPresentation == nil,
+              !showingJumpToDate,
+              !isTransitioningPresentation else { return }
         isTransitioningPresentation = true
         showingSearch = false
         Task { @MainActor in
@@ -398,6 +430,10 @@ struct CalendarHomeView: View {
     }
 
     private func jumpToChosenDate() {
+        guard editorPresentation == nil,
+              timeBlockPresentation == nil,
+              !showingSearch,
+              !isTransitioningPresentation else { return }
         let day = LocalDay(date: jumpDate, calendar: calendar)
         isTransitioningPresentation = true
         showingJumpToDate = false
@@ -412,6 +448,7 @@ struct CalendarHomeView: View {
 
     private func handleCalendarDeepLink() async {
         guard editorPresentation == nil,
+              timeBlockPresentation == nil,
               !showingSearch,
               !showingJumpToDate,
               !isTransitioningPresentation,
@@ -423,6 +460,7 @@ struct CalendarHomeView: View {
             await viewModel.load()
         }
         let localPresentationIsActive = editorPresentation != nil
+            || timeBlockPresentation != nil
             || showingSearch
             || showingJumpToDate
             || isTransitioningPresentation
@@ -439,6 +477,7 @@ struct CalendarHomeView: View {
         guard !Task.isCancelled,
               calendarDeepLink?.id == signal.id,
               editorPresentation == nil,
+              timeBlockPresentation == nil,
               !showingSearch,
               !showingJumpToDate,
               !isTransitioningPresentation else { return }
@@ -477,6 +516,31 @@ struct CalendarHomeView: View {
         onPresentationChanged(false)
     }
 
+    private func presentTimeBlock(reminderID: String) {
+        guard editorPresentation == nil,
+              timeBlockPresentation == nil,
+              !showingSearch,
+              !showingJumpToDate,
+              calendarDeepLink == nil,
+              !isTransitioningPresentation else { return }
+        guard let reminder = viewModel.scopedIncompleteReminder(id: reminderID),
+              let session = TaskTimeBlockSession.make(
+                  task: reminder,
+                  environment: environment
+              ) else {
+            taskActionError = "This task is no longer available in this profile. Refresh and try again."
+            return
+        }
+        taskActionError = nil
+        timeBlockPresentation = session
+        onPresentationChanged(true)
+    }
+
+    private func dismissTimeBlock() {
+        timeBlockPresentation = nil
+        onPresentationChanged(false)
+    }
+
     private func reconcileEditorWithoutDismissing() {
         Task { @MainActor in await viewModel.load() }
     }
@@ -511,6 +575,7 @@ private struct CalendarEditorPresentation: Identifiable {
 private struct CalendarDeepLinkProcessingKey: Hashable {
     let signalID: UUID?
     let editorID: UUID?
+    let timeBlockID: UUID?
     let showsSearch: Bool
     let showsJumpToDate: Bool
 }

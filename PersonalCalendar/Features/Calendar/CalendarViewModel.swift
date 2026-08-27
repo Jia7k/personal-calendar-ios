@@ -503,6 +503,26 @@ final class CalendarViewModel {
         }
     }
 
+    func scopedIncompleteReminder(id: String) -> ReminderSnapshot? {
+        guard remindersService.accessState == .granted else { return nil }
+
+        let scope: ProfileScope
+        do {
+            scope = try currentScope()
+        } catch {
+            return nil
+        }
+
+        guard !scope.reminderListIDs.isEmpty,
+              cachedScopeIdentity == scope.identity,
+              let cached = cachedReminders.first(where: { $0.id == id }),
+              scope.reminderListIDs.contains(cached.listID),
+              let live = remindersService.reminder(id: id),
+              scope.reminderListIDs.contains(live.listID),
+              !live.isCompleted else { return nil }
+        return live
+    }
+
     private var shouldFilterLegacyCalendarResults: Bool {
         !usesLegacyScope || settings.calendarSelectionIsExplicit
     }

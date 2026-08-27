@@ -343,6 +343,154 @@ final class CalendarViewModelTests: XCTestCase {
         }
     }
 
+    func testScopedIncompleteReminderReturnsTheExactLiveVisibleIncompleteReminder() async throws {
+        let profileID = UUID()
+        let cached = scopedReminder(title: "Cached task")
+        let live = scopedReminder(title: "Live task")
+        let reminders = FakeRemindersService(
+            access: .granted,
+            reminders: [cached],
+            descriptors: [
+                .init(
+                    id: "school",
+                    title: "School",
+                    colorHex: "#4868A8",
+                    allowsContentModifications: true
+                )
+            ]
+        )
+        let model = makeScopedModel(
+            reminders: reminders,
+            scope: reminderScope(id: profileID, listIDs: ["school"])
+        )
+        await model.load()
+        reminders.reminders = [live]
+
+        let result = try XCTUnwrap(
+            model.scopedIncompleteReminder(id: cached.id)
+        )
+
+        XCTAssertEqual(result, live)
+    }
+
+    func testScopedIncompleteReminderFailsClosedAfterProfileChangeAccessLossDeletionCompletionOrListMove() async {
+        let originalProfileID = UUID()
+        let originalScope = reminderScope(
+            id: originalProfileID,
+            listIDs: ["school"]
+        )
+        let descriptors = [
+            ReminderListDescriptor(
+                id: "school",
+                title: "School",
+                colorHex: "#4868A8",
+                allowsContentModifications: true
+            ),
+            ReminderListDescriptor(
+                id: "work",
+                title: "Work",
+                colorHex: "#CB6B4F",
+                allowsContentModifications: true
+            )
+        ]
+
+        var activeScope = originalScope
+        let profileService = FakeRemindersService(
+            access: .granted,
+            reminders: [scopedReminder()],
+            descriptors: descriptors
+        )
+        let profileModel = CalendarViewModel(
+            today: today,
+            calendarService: FakeCalendarService(access: .granted),
+            remindersService: profileService,
+            routines: FakeRoutineRepository(),
+            composer: AgendaComposer(),
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { activeScope },
+            systemCalendar: calendar
+        )
+        await profileModel.load()
+        activeScope = reminderScope(id: UUID(), listIDs: ["school"])
+        XCTAssertNil(profileModel.scopedIncompleteReminder(id: "task"))
+
+        let accessService = FakeRemindersService(
+            access: .granted,
+            reminders: [scopedReminder()],
+            descriptors: descriptors
+        )
+        let accessModel = makeScopedModel(
+            reminders: accessService,
+            scope: originalScope
+        )
+        await accessModel.load()
+        accessService.accessState = .denied
+        XCTAssertNil(accessModel.scopedIncompleteReminder(id: "task"))
+
+        let deletionService = FakeRemindersService(
+            access: .granted,
+            reminders: [scopedReminder()],
+            descriptors: descriptors
+        )
+        let deletionModel = makeScopedModel(
+            reminders: deletionService,
+            scope: originalScope
+        )
+        await deletionModel.load()
+        deletionService.reminders = []
+        XCTAssertNil(deletionModel.scopedIncompleteReminder(id: "task"))
+
+        let completionService = FakeRemindersService(
+            access: .granted,
+            reminders: [scopedReminder()],
+            descriptors: descriptors
+        )
+        let completionModel = makeScopedModel(
+            reminders: completionService,
+            scope: originalScope
+        )
+        await completionModel.load()
+        completionService.reminders = [scopedReminder(isCompleted: true)]
+        XCTAssertNil(completionModel.scopedIncompleteReminder(id: "task"))
+
+        let moveService = FakeRemindersService(
+            access: .granted,
+            reminders: [scopedReminder()],
+            descriptors: descriptors
+        )
+        let moveModel = makeScopedModel(
+            reminders: moveService,
+            scope: originalScope
+        )
+        await moveModel.load()
+        moveService.reminders = [scopedReminder(listID: "work")]
+        XCTAssertNil(moveModel.scopedIncompleteReminder(id: "task"))
+    }
+
+    func testScopedIncompleteReminderDoesNotExposeAnythingForAnEmptyScope() async {
+        let reminders = FakeRemindersService(
+            access: .granted,
+            reminders: [scopedReminder()],
+            descriptors: [
+                .init(
+                    id: "school",
+                    title: "School",
+                    colorHex: "#4868A8",
+                    allowsContentModifications: true
+                )
+            ]
+        )
+        let model = makeScopedModel(
+            reminders: reminders,
+            scope: reminderScope(id: UUID(), listIDs: [])
+        )
+
+        await model.load()
+
+        XCTAssertNil(model.scopedIncompleteReminder(id: "task"))
+        XCTAssertTrue(reminders.fetchListIDs.isEmpty)
+    }
+
     func testVisibleAgendasIncludeNonselectedDaySourceItems() async {
         let other = LocalDay(year: 2026, month: 8, day: 25)
         let start = other.startDate(in: calendar).addingTimeInterval(3_600)
@@ -675,6 +823,40 @@ final class CalendarViewModelTests: XCTestCase {
             settings: AppSettingsStore(defaults: .ephemeral),
             currentScope: { scope },
             systemCalendar: systemCalendar ?? calendar
+        )
+    }
+
+    private func scopedReminder(
+        title: String = "Task",
+        listID: String = "school",
+        isCompleted: Bool = false
+    ) -> ReminderSnapshot {
+        ReminderSnapshot(
+            id: "task",
+            title: title,
+            notes: "Provider-backed",
+            dueDate: today.startDate(in: calendar).addingTimeInterval(10 * 3_600),
+            dueHasTime: true,
+            priority: 5,
+            listID: listID,
+            listTitle: listID == "school" ? "School" : "Work",
+            isCompleted: isCompleted,
+            allowsModification: true,
+            hasRecurrence: false
+        )
+    }
+
+    private func reminderScope(
+        id: UUID,
+        listIDs: Set<String>
+    ) -> ProfileScope {
+        ProfileScope(
+            identity: .saved(id),
+            calendarIDs: [],
+            reminderListIDs: listIDs,
+            routineIDs: [],
+            defaultCalendarID: nil,
+            defaultReminderListID: nil
         )
     }
 }

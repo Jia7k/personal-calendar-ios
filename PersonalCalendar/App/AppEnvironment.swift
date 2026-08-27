@@ -178,6 +178,7 @@ struct AppEnvironment {
 
     static func demo(container: ModelContainer, arguments: [String]) -> AppEnvironment {
         let usesProfileFixtures = arguments.contains("-demo-profiles")
+        let usesDailyTaskRescueFixtures = arguments.contains("-demo-daily-task-rescue")
         let calendarAccess: AccessState = arguments.contains("-calendar-not-determined") ? .notDetermined : arguments.contains("-calendar-restricted") ? .restricted : arguments.contains("-calendar-denied") ? .denied : .granted
         let calendar = DemoCalendarService(
             access: calendarAccess,
@@ -204,7 +205,8 @@ struct AppEnvironment {
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
             includeOverdueTask: arguments.contains("-demo-overdue-task"),
             profileFixtures: usesProfileFixtures,
-            dailyQOLFixtures: arguments.contains("-demo-daily-qol")
+            dailyQOLFixtures: arguments.contains("-demo-daily-qol"),
+            dailyTaskRescueFixtures: usesDailyTaskRescueFixtures
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)

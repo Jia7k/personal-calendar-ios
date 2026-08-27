@@ -297,7 +297,7 @@ final class DemoRemindersService: RemindersServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false, dailyTaskRescueFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -339,6 +339,59 @@ final class DemoRemindersService: RemindersServicing {
                     hasRecurrence: false
                 )
             )
+        }
+        if dailyTaskRescueFixtures {
+            let weekDue = calendar.date(
+                bySettingHour: 16,
+                minute: 0,
+                second: 0,
+                of: capturedToday
+            )!
+            values.append(contentsOf: [
+                .init(
+                    id: "demo-undated-task",
+                    title: "Plan reading time",
+                    notes: nil,
+                    dueDate: nil,
+                    dueHasTime: false,
+                    priority: 5,
+                    listID: "demo-list",
+                    listTitle: "Tasks",
+                    isCompleted: false,
+                    allowsModification: true,
+                    hasRecurrence: false
+                ),
+                .init(
+                    id: "demo-overdue-task",
+                    title: "Submit assignment",
+                    notes: nil,
+                    dueDate: calendar.date(
+                        byAdding: .day,
+                        value: -2,
+                        to: weekDue
+                    ),
+                    dueHasTime: true,
+                    priority: 7,
+                    listID: "demo-list",
+                    listTitle: "Tasks",
+                    isCompleted: false,
+                    allowsModification: true,
+                    hasRecurrence: false
+                ),
+                .init(
+                    id: "demo-week-task",
+                    title: "Prepare weekly review",
+                    notes: nil,
+                    dueDate: weekDue,
+                    dueHasTime: true,
+                    priority: 3,
+                    listID: "demo-list",
+                    listTitle: "Tasks",
+                    isCompleted: false,
+                    allowsModification: true,
+                    hasRecurrence: false
+                )
+            ])
         }
         if includeReadOnlySource {
             values.append(

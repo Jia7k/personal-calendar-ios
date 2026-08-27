@@ -60,6 +60,7 @@
 		342F001F91C59DBB302B4E60 /* TaskTimeBlockFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77289970CD433D2BDCB5CCFA /* TaskTimeBlockFlowUITests.swift */; };
 		3579609AC6B39AB3B25A5D5F /* ProfileMigrationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92CB7D40732AC4D6A34CC88 /* ProfileMigrationCoordinatorTests.swift */; };
 		36244D3E0442DB32F753458B /* NotificationContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8971AC3F5D81FB0722D097D2 /* NotificationContracts.swift */; };
+		36B2A37F46C1FFA0A2B4547C /* DailyTaskRescueFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C88C1F7B2C0C5B1D5C56C9BB /* DailyTaskRescueFlowUITests.swift */; };
 		39290C76AB5EB3BBBC7ED042 /* RuleBasedQuickEntryParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430D7E4FEBDE8C4F07DB1B32 /* RuleBasedQuickEntryParserTests.swift */; };
 		394675A289A87CA98F83F833 /* RoutinesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A9588BA0EA24F41535C7D3D /* RoutinesViewModel.swift */; };
 		394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58031A19F30F77687CDBD3D7 /* PermissionOnboardingModelTests.swift */; };
@@ -446,6 +447,7 @@
 		C37AFC48FC93ADAE03B27DE0 /* AppRouteHostResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouteHostResolverTests.swift; sourceTree = "<group>"; };
 		C40A3CD03BA272B2DDBA996E /* AppRouteHostSignals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouteHostSignals.swift; sourceTree = "<group>"; };
 		C4915ADDAF699A819650A494 /* FakesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakesTests.swift; sourceTree = "<group>"; };
+		C88C1F7B2C0C5B1D5C56C9BB /* DailyTaskRescueFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyTaskRescueFlowUITests.swift; sourceTree = "<group>"; };
 		C8A5519E33A981E727A926B4 /* TimetableWidgetCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidgetCatalogTests.swift; sourceTree = "<group>"; };
 		CB967637C56AFC66EA20405A /* DayTrayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTrayView.swift; sourceTree = "<group>"; };
 		CC4972998C4330CCEFD837A5 /* ClassAlertCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassAlertCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -719,6 +721,7 @@
 				5A66A88AD55E31E80C8D3907 /* CalendarSearchFlowUITests.swift */,
 				AF917735FCD674F8418D3F18 /* CompletionFlowUITests.swift */,
 				5F2D905A9966AC69BD458FA6 /* DailyQOLFlowUITests.swift */,
+				C88C1F7B2C0C5B1D5C56C9BB /* DailyTaskRescueFlowUITests.swift */,
 				45DCFAF94E8F26BAE8AA574E /* DuplicateFlowUITests.swift */,
 				1FCBF7F7DC1AF2645B93CCA8 /* EditorReviewUITests.swift */,
 				22DAB01B8520317B6B9484A9 /* FoundationFlowUITests.swift */,
@@ -1290,6 +1293,7 @@
 				8F42F4C7CF2A1A887774E504 /* CalendarSearchFlowUITests.swift in Sources */,
 				03D30364CBC923D48AA1A8C4 /* CompletionFlowUITests.swift in Sources */,
 				EDE58EA5A55702B3C372A3E4 /* DailyQOLFlowUITests.swift in Sources */,
+				36B2A37F46C1FFA0A2B4547C /* DailyTaskRescueFlowUITests.swift in Sources */,
 				436A447CE8AD1FD04A11D495 /* DuplicateFlowUITests.swift in Sources */,
 				8A5DF308EE185223FA1FF14B /* EditorReviewUITests.swift in Sources */,
 				C79693272B1AD1AE438ECD91 /* FoundationFlowUITests.swift in Sources */,
