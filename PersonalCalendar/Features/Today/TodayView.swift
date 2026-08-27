@@ -3,6 +3,10 @@ import SwiftUI
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var editorPresentation: TodayEditorPresentation?
+    @State private var taskActionPresentation: TodayTaskActionPresentation?
+    @State private var pickedDate = Date()
+    @State private var pickedDateHasTime = true
+    @State private var taskActionError: String?
     @State private var refreshRegistrationID = UUID()
     private let environment: AppEnvironment
     private let openSettings: @MainActor () -> Void
@@ -51,8 +55,35 @@ struct TodayView: View {
                 errorRow(model.calendarError, source: "Calendar")
                 errorRow(model.remindersError, source: "Reminders")
                 errorRow(model.routinesError, source: "Routines")
+                errorRow(model.rescheduleError, source: "Task schedule")
+                if let taskActionError {
+                    Section {
+                        Label(taskActionError, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                overdueSection
                 if let nextUp = model.nextUp {
                     nextUpSection(nextUp)
+                }
+                if model.latestRescheduleUndo != nil {
+                    Section {
+                        HStack {
+                            Text("Task rescheduled")
+                            Spacer(minLength: 8)
+                            Button("Undo") {
+                                Task { await model.undoLastTaskReschedule() }
+                            }
+                            .frame(
+                                minWidth: CalendarTheme.minimumTapSize,
+                                minHeight: CalendarTheme.minimumTapSize
+                            )
+                            .disabled(!model.mutatingItemIDs.isEmpty)
+                            .accessibilityIdentifier("today-reschedule-undo")
+                            .accessibilityLabel("Undo task reschedule")
+                            .accessibilityHint("Restores the task's previous due date and time.")
+                        }
+                    }
                 }
                 if let undo = model.latestTaskUndo {
                     Section {
@@ -121,7 +152,55 @@ struct TodayView: View {
                     )
                 }
             }
-            .onChange(of: editorPresentation != nil, initial: true) { _, isPresented in
+            .sheet(item: $taskActionPresentation) { presentation in
+                switch presentation {
+                case let .pickDate(request):
+                    NavigationStack {
+                        Form {
+                            DatePicker(
+                                "Due date",
+                                selection: $pickedDate,
+                                displayedComponents: pickedDateHasTime
+                                    ? [.date, .hourAndMinute]
+                                    : .date
+                            )
+                            Toggle("Include time", isOn: $pickedDateHasTime)
+                        }
+                        .navigationTitle("Reschedule")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel") { taskActionPresentation = nil }
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Save") {
+                                    let date = pickedDate
+                                    let hasTime = pickedDateHasTime
+                                    taskActionPresentation = nil
+                                    Task {
+                                        await model.quickRescheduleTask(
+                                            id: request.reminderID,
+                                            command: .pick(date, hasTime: hasTime)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                case let .timeBlock(session):
+                    TaskTimeBlockView(
+                        model: session.model,
+                        profiles: session.profiles,
+                        resolveProfile: session.resolveProfile,
+                        onSaved: session.onSaved,
+                        onDismiss: dismissTaskAction
+                    )
+                }
+            }
+            .onChange(
+                of: editorPresentation != nil || taskActionPresentation != nil,
+                initial: true
+            ) { _, isPresented in
                 onPresentationChanged(isPresented)
             }
         }
@@ -135,22 +214,139 @@ struct TodayView: View {
         }
     }
 
+    @ViewBuilder private var overdueSection: some View {
+        if !model.overdueTasks.isEmpty {
+            Section("Overdue") {
+                ForEach(model.overdueTasks) { overdue in
+                    overdueTaskRow(overdue)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("today-overdue")
+        }
+    }
+
+    private func overdueTaskRow(_ overdue: TodayOverdueTask) -> some View {
+        let reminder = overdue.reminder
+        let item = AgendaItem(reminder: reminder)
+        return HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(reminder.title)
+                Text(overdueDescription(overdue))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(reminder.title), \(overdueDescription(overdue))")
+
+            Button {
+                Task { await model.setTaskCompleted(item, completed: true) }
+            } label: {
+                Image(systemName: "circle")
+                    .foregroundStyle(CalendarTheme.task)
+            }
+            .buttonStyle(.borderless)
+            .frame(
+                minWidth: CalendarTheme.minimumTapSize,
+                minHeight: CalendarTheme.minimumTapSize
+            )
+            .disabled(!reminder.allowsModification || isTaskMutating(reminder.id))
+            .accessibilityIdentifier("today-overdue-complete-\(reminder.id)")
+            .accessibilityLabel("Mark \(reminder.title) complete")
+            .accessibilityValue("Not completed")
+            .accessibilityHint(
+                reminder.allowsModification
+                    ? ""
+                    : "This task is read-only."
+            )
+
+            taskActionsMenu(
+                reminderID: reminder.id,
+                title: reminder.title,
+                identifier: "today-overdue-actions-\(reminder.id)"
+            )
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func overdueDescription(_ overdue: TodayOverdueTask) -> String {
+        let age = overdue.daysOverdue == 1
+            ? "Due yesterday"
+            : "Due \(overdue.daysOverdue) days ago"
+        guard overdue.reminder.dueHasTime,
+              let dueDate = overdue.reminder.dueDate else { return age }
+        return "\(age) · \(dueDate.formatted(date: .omitted, time: .shortened))"
+    }
+
     @ViewBuilder private func section(_ title: LocalizedStringKey, items: [AgendaItem]) -> some View {
         if !items.isEmpty {
             Section(title) {
                 ForEach(items) { item in
-                    AgendaRow(item: item, isMutating: model.mutatingItemIDs.contains(item.id), open: openAction(for: item)) { state in
-                        Task {
-                            if item.source == .task {
-                                await model.setTaskCompleted(item, completed: state)
-                            } else {
-                                await model.setRoutineCompleted(item, completed: state)
+                    HStack(spacing: 4) {
+                        AgendaRow(
+                            item: item,
+                            isMutating: model.mutatingItemIDs.contains(item.id),
+                            open: openAction(for: item)
+                        ) { state in
+                            Task {
+                                if item.source == .task {
+                                    await model.setTaskCompleted(item, completed: state)
+                                } else {
+                                    await model.setRoutineCompleted(item, completed: state)
+                                }
                             }
+                        }
+                        if case let .reminder(reminderID) = item.origin,
+                           !item.isCompleted {
+                            taskActionsMenu(
+                                reminderID: reminderID,
+                                title: item.title,
+                                identifier: "today-task-actions-\(reminderID)"
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    private func taskActionsMenu(
+        reminderID: String,
+        title: String,
+        identifier: String
+    ) -> some View {
+        Menu {
+            if canQuickReschedule(reminderID: reminderID) {
+                Button("Later Today", systemImage: "clock") {
+                    quickReschedule(reminderID: reminderID, command: .laterToday)
+                }
+                Button("Tomorrow", systemImage: "sunrise") {
+                    quickReschedule(reminderID: reminderID, command: .tomorrow)
+                }
+                Button("Pick Date", systemImage: "calendar") {
+                    presentPickDate(reminderID: reminderID)
+                }
+                Divider()
+            }
+            Button("Schedule Time", systemImage: "calendar.badge.clock") {
+                presentTimeBlock(reminderID: reminderID)
+            }
+            Divider()
+            Button("Open", systemImage: "square.and.pencil") {
+                openAgendaItem(.reminder(id: reminderID))
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.title3)
+        }
+        .frame(
+            minWidth: CalendarTheme.minimumTapSize,
+            minHeight: CalendarTheme.minimumTapSize
+        )
+        .accessibilityIdentifier(identifier)
+        .accessibilityLabel("Actions for \(title)")
+        .accessibilityHint("Choose scheduling, rescheduling, or open actions.")
     }
 
     private func openAction(for item: AgendaItem) -> (() -> Void)? {
@@ -163,6 +359,7 @@ struct TodayView: View {
     }
 
     private func openAgendaItem(_ origin: AgendaItemOrigin) {
+        guard taskActionPresentation == nil else { return }
         let capturedProfileIdentity = environment.profileSelection.activeIdentity
         let capturedScope = try? environment.profileScopes.resolve(capturedProfileIdentity)
         switch origin {
@@ -180,7 +377,6 @@ struct TodayView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .event(model: editorModel, calendars: environment.calendar.calendars()))
-            onPresentationChanged(true)
         case let .reminder(reminderID):
             let editorModel = TaskEditorViewModel.editing(
                 reminderID: reminderID,
@@ -195,12 +391,68 @@ struct TodayView: View {
                 onReconciliationNeeded: reconcileEditorWithoutDismissing
             )
             editorPresentation = .init(content: .task(model: editorModel, lists: environment.reminders.lists()))
-            onPresentationChanged(true)
         case let .routine(id, _):
             onOpenRoutine(id)
         case .synthetic:
             break
         }
+    }
+
+    private func canQuickReschedule(reminderID: String) -> Bool {
+        guard let reminder = environment.reminders.reminder(id: reminderID) else {
+            return false
+        }
+        return !reminder.isCompleted
+            && reminder.allowsModification
+            && !reminder.hasRecurrence
+            && !isTaskMutating(reminderID)
+    }
+
+    private func isTaskMutating(_ reminderID: String) -> Bool {
+        model.mutatingItemIDs.contains(reminderID)
+            || model.mutatingItemIDs.contains("task|\(reminderID)")
+    }
+
+    private func quickReschedule(
+        reminderID: String,
+        command: TaskQuickReschedule
+    ) {
+        Task {
+            await model.quickRescheduleTask(id: reminderID, command: command)
+        }
+    }
+
+    private func presentPickDate(reminderID: String) {
+        guard editorPresentation == nil,
+              taskActionPresentation == nil,
+              let reminder = model.scopedIncompleteReminder(id: reminderID),
+              reminder.allowsModification,
+              !reminder.hasRecurrence else { return }
+        taskActionError = nil
+        pickedDate = reminder.dueDate ?? .now
+        pickedDateHasTime = reminder.dueHasTime
+        taskActionPresentation = .pickDate(
+            TodayTaskPickDate(reminderID: reminderID)
+        )
+    }
+
+    private func presentTimeBlock(reminderID: String) {
+        guard editorPresentation == nil,
+              taskActionPresentation == nil,
+              let reminder = model.scopedIncompleteReminder(id: reminderID),
+              let session = TaskTimeBlockSession.make(
+                task: reminder,
+                environment: environment
+              ) else {
+            taskActionError = "This task is no longer available in this profile. Refresh and try again."
+            return
+        }
+        taskActionError = nil
+        taskActionPresentation = .timeBlock(session)
+    }
+
+    private func dismissTaskAction() {
+        taskActionPresentation = nil
     }
 
     private func nextUpSection(_ snapshot: NextUpSnapshot) -> some View {
@@ -304,7 +556,6 @@ struct TodayView: View {
 
     private func dismissEditor() {
         editorPresentation = nil
-        onPresentationChanged(false)
     }
 
     private func reconcileEditorWithoutDismissing() {
@@ -314,7 +565,6 @@ struct TodayView: View {
     private func finishEventEditorAndReload(_ commit: EventEditorCommit) {
         Task { @MainActor in
             editorPresentation = nil
-            onPresentationChanged(false)
             await model.refreshAfterEventEditorCommit(commit)
         }
     }
@@ -322,7 +572,6 @@ struct TodayView: View {
     private func finishTaskEditorAndReload(_ commit: TaskEditorCommit) {
         Task { @MainActor in
             editorPresentation = nil
-            onPresentationChanged(false)
             await model.refreshAfterTaskEditorCommit(commit)
         }
     }

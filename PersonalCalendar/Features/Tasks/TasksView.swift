@@ -65,6 +65,7 @@ struct TasksView: View {
                     }
                 }
                 overdueSection
+                needsSchedulingSection
                 taskSection("Today", model.today)
                 taskSection("Upcoming", model.upcoming)
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
@@ -177,7 +178,7 @@ struct TasksView: View {
         if !model.overdue.isEmpty {
             Section("Overdue") {
                 ForEach(model.overdue) { task in
-                    taskRow(task, offersQuickReschedule: true)
+                    taskRow(task, actionMode: .overdue)
                 }
             }
             .accessibilityElement(children: .contain)
@@ -185,9 +186,24 @@ struct TasksView: View {
         }
     }
 
+    @ViewBuilder private var needsSchedulingSection: some View {
+        if !model.needsScheduling.isEmpty {
+            Section("Needs Scheduling") {
+                ForEach(model.needsScheduling) { task in
+                    taskRow(task, actionMode: .needsScheduling)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("tasks-needs-scheduling")
+        }
+    }
+
     @ViewBuilder private func taskSection(_ title: String, _ values: [ReminderSnapshot]) -> some View { if !values.isEmpty { Section(title) { ForEach(values) { taskRow($0) } } } }
 
-    private func taskRow(_ task: ReminderSnapshot, offersQuickReschedule: Bool = false) -> some View {
+    private func taskRow(
+        _ task: ReminderSnapshot,
+        actionMode: TaskRowActionMode = .none
+    ) -> some View {
         HStack(spacing: 12) {
             Button {
                 Task { await model.setCompleted(id: task.id, completed: !task.isCompleted) }
@@ -213,7 +229,7 @@ struct TasksView: View {
             .accessibilityIdentifier("task-open-\(task.id)")
             .accessibilityLabel("Open task \(task.title)")
 
-            if canScheduleTime(task) || (offersQuickReschedule && canQuickReschedule(task)) {
+            if canScheduleTime(task) || (actionMode != .none && canQuickReschedule(task)) {
                 Menu {
                     if canScheduleTime(task) {
                         Button("Schedule Time", systemImage: "calendar.badge.clock") {
@@ -221,9 +237,9 @@ struct TasksView: View {
                         }
                         .accessibilityIdentifier("task-schedule-time-\(task.id)")
                     }
-                    if offersQuickReschedule, canQuickReschedule(task) {
+                    if actionMode != .none, canQuickReschedule(task) {
                         Divider()
-                        quickRescheduleMenuActions(task)
+                        quickRescheduleMenuActions(task, mode: actionMode)
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -231,15 +247,16 @@ struct TasksView: View {
                 }
                 .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                 .accessibilityIdentifier(
-                    offersQuickReschedule && canQuickReschedule(task)
+                    actionMode != .none && canQuickReschedule(task)
                         ? "task-reschedule-more-\(task.id)"
                         : "task-actions-\(task.id)"
                 )
                 .accessibilityLabel("Actions for \(task.title)")
+                .accessibilityHint("Choose scheduling or due date actions.")
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            if offersQuickReschedule, canQuickReschedule(task) {
+            if actionMode == .overdue, canQuickReschedule(task) {
                 Button {
                     quickReschedule(task, command: .tomorrow)
                 } label: {
@@ -253,6 +270,21 @@ struct TasksView: View {
                 } label: {
                     Label("Next Week", systemImage: "calendar.badge.plus")
                 }
+            } else if actionMode == .needsScheduling, canQuickReschedule(task) {
+                Button {
+                    quickReschedule(task, command: .today)
+                } label: {
+                    Label("Today", systemImage: "sun.max")
+                }
+                .tint(CalendarTheme.task)
+                .accessibilityIdentifier("task-schedule-today-\(task.id)")
+
+                Button {
+                    quickReschedule(task, command: .tomorrow)
+                } label: {
+                    Label("Tomorrow", systemImage: "sunrise")
+                }
+                .accessibilityIdentifier("task-reschedule-tomorrow-\(task.id)")
             }
         }
         .contextMenu {
@@ -265,21 +297,33 @@ struct TasksView: View {
                 }
                 .accessibilityIdentifier("task-schedule-time-\(task.id)")
             }
-            if offersQuickReschedule, canQuickReschedule(task) {
-                quickRescheduleMenuActions(task)
+            if actionMode != .none, canQuickReschedule(task) {
+                quickRescheduleMenuActions(task, mode: actionMode)
             }
         }
     }
 
-    @ViewBuilder private func quickRescheduleMenuActions(_ task: ReminderSnapshot) -> some View {
-        Button("Later Today", systemImage: "clock") {
-            quickReschedule(task, command: .laterToday)
+    @ViewBuilder private func quickRescheduleMenuActions(
+        _ task: ReminderSnapshot,
+        mode: TaskRowActionMode
+    ) -> some View {
+        if mode == .needsScheduling {
+            Button("Today", systemImage: "sun.max") {
+                quickReschedule(task, command: .today)
+            }
+            .accessibilityIdentifier("task-schedule-today-\(task.id)")
+        } else if mode == .overdue {
+            Button("Later Today", systemImage: "clock") {
+                quickReschedule(task, command: .laterToday)
+            }
         }
         Button("Tomorrow", systemImage: "sunrise") {
             quickReschedule(task, command: .tomorrow)
         }
-        Button("Next Week", systemImage: "calendar.badge.plus") {
-            quickReschedule(task, command: .nextWeek)
+        if mode == .overdue {
+            Button("Next Week", systemImage: "calendar.badge.plus") {
+                quickReschedule(task, command: .nextWeek)
+            }
         }
         Button("Pick Date", systemImage: "calendar") {
             presentDatePicker(for: task)
@@ -430,6 +474,12 @@ struct TasksView: View {
         onPresentationChanged(false)
     }
 
+}
+
+private enum TaskRowActionMode {
+    case none
+    case overdue
+    case needsScheduling
 }
 
 private struct TasksEditorPresentation: Identifiable {
