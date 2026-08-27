@@ -373,6 +373,30 @@ final class CalendarViewModelTests: XCTestCase {
         XCTAssertEqual(result, live)
     }
 
+    func testScopedIncompleteReminderDoesNotExposeLiveInScopeReminderAbsentFromExactLoadedCache() async {
+        let reminders = FakeRemindersService(
+            access: .granted,
+            reminders: [],
+            descriptors: [
+                .init(
+                    id: "school",
+                    title: "School",
+                    colorHex: "#4868A8",
+                    allowsContentModifications: true
+                )
+            ]
+        )
+        let model = makeScopedModel(
+            reminders: reminders,
+            scope: reminderScope(id: UUID(), listIDs: ["school"])
+        )
+        await model.load()
+
+        reminders.reminders = [scopedReminder(title: "Provider-only task")]
+
+        XCTAssertNil(model.scopedIncompleteReminder(id: "task"))
+    }
+
     func testScopedIncompleteReminderFailsClosedAfterProfileChangeAccessLossDeletionCompletionOrListMove() async {
         let originalProfileID = UUID()
         let originalScope = reminderScope(
