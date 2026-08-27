@@ -238,7 +238,8 @@ struct TodayView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(reminder.title), \(overdueDescription(overdue))")
+            .accessibilityLabel(overdueAccessibilityLabel(overdue))
+            .accessibilityHint(overdueAccessibilityHint(reminder))
 
             Button {
                 Task { await model.setTaskCompleted(item, completed: true) }
@@ -286,7 +287,7 @@ struct TodayView: View {
                     HStack(spacing: 4) {
                         AgendaRow(
                             item: item,
-                            isMutating: model.mutatingItemIDs.contains(item.id),
+                            isMutating: isAgendaItemMutating(item),
                             open: openAction(for: item)
                         ) { state in
                             Task {
@@ -332,6 +333,7 @@ struct TodayView: View {
             Button("Schedule Time", systemImage: "calendar.badge.clock") {
                 presentTimeBlock(reminderID: reminderID)
             }
+            .accessibilityIdentifier("today-schedule-time-\(reminderID)")
             Divider()
             Button("Open", systemImage: "square.and.pencil") {
                 openAgendaItem(.reminder(id: reminderID))
@@ -411,6 +413,39 @@ struct TodayView: View {
     private func isTaskMutating(_ reminderID: String) -> Bool {
         model.mutatingItemIDs.contains(reminderID)
             || model.mutatingItemIDs.contains("task|\(reminderID)")
+    }
+
+    private func isAgendaItemMutating(_ item: AgendaItem) -> Bool {
+        guard case let .reminder(reminderID) = item.origin else {
+            return model.mutatingItemIDs.contains(item.id)
+        }
+        return isTaskMutating(reminderID)
+    }
+
+    private func overdueAccessibilityLabel(_ overdue: TodayOverdueTask) -> String {
+        let reminder = overdue.reminder
+        return [
+            reminder.title,
+            overdueDescription(overdue),
+            overdueAccessibilityLimitation(reminder)
+        ]
+        .compactMap { $0 }
+        .joined(separator: ", ")
+    }
+
+    private func overdueAccessibilityHint(_ reminder: ReminderSnapshot) -> String {
+        overdueAccessibilityLimitation(reminder)
+            ?? "Use the actions menu to reschedule, schedule time, or open the task."
+    }
+
+    private func overdueAccessibilityLimitation(_ reminder: ReminderSnapshot) -> String? {
+        if !reminder.allowsModification {
+            return "Read-only task. It cannot be changed."
+        }
+        if reminder.hasRecurrence {
+            return "Recurring task. Use the full editor to change its schedule."
+        }
+        return nil
     }
 
     private func quickReschedule(

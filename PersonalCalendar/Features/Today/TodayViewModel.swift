@@ -269,6 +269,10 @@ final class TodayViewModel {
     }
 
     func setTaskCompleted(_ item: AgendaItem, completed: Bool) async {
+        guard case let .reminder(id) = item.origin,
+              item.allowsModification,
+              !mutatingItemIDs.contains(id)
+        else { return }
         let scope: ProfileScope
         do {
             scope = try currentScope()
@@ -278,14 +282,11 @@ final class TodayViewModel {
         }
         adopt(scope)
         reconcileReminderState(scope: scope)
-        guard case let .reminder(id) = item.origin,
-              item.allowsModification,
-              !mutatingItemIDs.contains(item.id),
-              let snapshot = writableSelectedReminder(id: id, scope: scope)
+        guard let snapshot = writableSelectedReminder(id: id, scope: scope)
         else { return }
         invalidateOlderReminderWork()
-        mutatingItemIDs.insert(item.id)
-        defer { mutatingItemIDs.remove(item.id) }
+        mutatingItemIDs.insert(id)
+        defer { mutatingItemIDs.remove(id) }
         do {
             try reminders.setCompleted(id: id, completed: completed)
             cachedReminders = cachedReminders.map { value in
@@ -309,6 +310,10 @@ final class TodayViewModel {
     }
 
     func undoLastTaskCompletion() async {
+        guard let capturedUndo = latestTaskUndo,
+              !capturedUndo.isPending,
+              !mutatingItemIDs.contains(capturedUndo.rawID)
+        else { return }
         let scope: ProfileScope
         do {
             scope = try currentScope()
@@ -320,11 +325,13 @@ final class TodayViewModel {
         reconcileReminderState(scope: scope)
         let context = reminderContext(scope: scope)
         guard var undo = latestTaskUndo,
-              !undo.isPending,
+              undo.generation == capturedUndo.generation,
               capturedUndoIsEligible(undo, context: context)
         else { return }
         let undoGeneration = undo.generation
         invalidateOlderReminderWork()
+        mutatingItemIDs.insert(undo.rawID)
+        defer { mutatingItemIDs.remove(undo.rawID) }
         undo.isPending = true
         if latestTaskUndo?.generation == undoGeneration { latestTaskUndo = undo }
         do {
@@ -351,6 +358,7 @@ final class TodayViewModel {
     }
 
     func quickRescheduleTask(id: String, command: TaskQuickReschedule) async {
+        guard !mutatingItemIDs.contains(id) else { return }
         let scope: ProfileScope
         do {
             scope = try currentScope()
@@ -358,12 +366,14 @@ final class TodayViewModel {
             failScopeResolution()
             return
         }
+        let identityMatches = cachedScopeIdentity == scope.identity
         adopt(scope)
         reconcileReminderState(scope: scope)
-        guard let live = writableRescheduleReminder(id: id, scope: scope),
-              !mutatingItemIDs.contains(id)
-        else {
+        guard identityMatches, reminders.accessState == .granted else { return }
+        guard let live = writableRescheduleReminder(id: id, scope: scope) else {
             clearRescheduleUndo(for: id)
+            reconcileRescheduleAuthorityFailure(id: id, scope: scope)
+            rescheduleError = "This task could not be rescheduled. Refresh and try again."
             return
         }
 
@@ -413,6 +423,7 @@ final class TodayViewModel {
 
     func undoLastTaskReschedule() async {
         guard let undo = latestRescheduleUndo else { return }
+        guard !mutatingItemIDs.contains(undo.reminderID) else { return }
         let scope: ProfileScope
         do {
             scope = try currentScope()
@@ -425,8 +436,7 @@ final class TodayViewModel {
         guard latestRescheduleUndo == undo,
               let live = writableRescheduleReminder(id: undo.reminderID, scope: scope),
               live.listID == rescheduleUndoExpectedListID,
-              schedulesMatch(currentSchedule(of: live), rescheduleUndoExpectedSchedule),
-              !mutatingItemIDs.contains(live.id)
+              schedulesMatch(currentSchedule(of: live), rescheduleUndoExpectedSchedule)
         else {
             clearRescheduleUndo(for: undo.reminderID)
             return
@@ -752,6 +762,23 @@ final class TodayViewModel {
                 || (usesLegacyScope && context.descriptorIDs.isEmpty)
         else { return nil }
         return live
+    }
+
+    private func reconcileRescheduleAuthorityFailure(
+        id: String,
+        scope: ProfileScope
+    ) {
+        guard cachedReminders.contains(where: { $0.id == id }) else {
+            compose(day: localDay, calendar: calendarProvider(), scope: scope)
+            return
+        }
+        let selectedIDs = selectedReminderIDs(scope: scope)
+        if let live = reminders.reminder(id: id), selectedIDs.contains(live.listID) {
+            cachedReminders = cachedReminders.map { $0.id == id ? live : $0 }
+        } else {
+            cachedReminders.removeAll { $0.id == id }
+        }
+        compose(day: localDay, calendar: calendarProvider(), scope: scope)
     }
 
     private func selectedReminderIDs(

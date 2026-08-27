@@ -51,6 +51,22 @@ final class DailyTaskRescueFlowUITests: XCTestCase {
         todayUndo.tap()
         XCTAssertTrue(overdue.waitForExistence(timeout: 3))
 
+        app.buttons["today-overdue-actions-demo-overdue-task"].tap()
+        let scheduleTodayTask = app.buttons[
+            "today-schedule-time-demo-overdue-task"
+        ]
+        XCTAssertTrue(scheduleTodayTask.waitForExistence(timeout: 3))
+        scheduleTodayTask.tap()
+
+        let todayTimeBlockForm = app.descendants(matching: .any)[
+            "time-block-form"
+        ]
+        XCTAssertTrue(todayTimeBlockForm.waitForExistence(timeout: 3))
+        let cancelTodayTimeBlock = app.buttons["time-block-cancel"]
+        XCTAssertTrue(cancelTodayTimeBlock.waitForExistence(timeout: 3))
+        cancelTodayTimeBlock.tap()
+        XCTAssertTrue(waitForDisappearance(todayTimeBlockForm, timeout: 3))
+
         app.tabBars.buttons["Calendar"].tap()
         let weekMode = app.buttons["calendar-mode-week"]
         XCTAssertTrue(weekMode.waitForExistence(timeout: 3))

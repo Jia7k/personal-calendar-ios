@@ -268,6 +268,147 @@ final class TodayTaskRescueViewModelTests: XCTestCase {
         XCTAssertEqual(service.reminderUpdateCalls.count, 1)
     }
 
+    func testQuickRescheduleAuthorityFailurePrunesDeletedMovedAndCompletedTasksAndShowsRetryGuidance() async throws {
+        let calendar = singaporeCalendar()
+        let original = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
+        let profileID = UUID()
+
+        for state in TodayTaskAuthorityFailureState.allCases {
+            let service = FakeRemindersService(
+                access: .granted,
+                reminders: [reminder(id: "target", dueDate: original, listID: "school")],
+                descriptors: [descriptor(id: "school"), descriptor(id: "work")]
+            )
+            let subject = makeSubject(
+                service: service,
+                calendar: calendar,
+                currentScope: { self.scope(id: profileID, reminderListIDs: ["school"]) }
+            )
+            await subject.load()
+
+            switch state {
+            case .deleted:
+                service.reminders = []
+            case .moved:
+                service.reminders = [reminder(id: "target", dueDate: original, listID: "work")]
+            case .completed:
+                service.reminders = [
+                    reminder(
+                        id: "target",
+                        dueDate: original,
+                        listID: "school",
+                        isCompleted: true
+                    )
+                ]
+            }
+
+            await subject.quickRescheduleTask(id: "target", command: .tomorrow)
+
+            XCTAssertTrue(service.reminderUpdateCalls.isEmpty, "Unexpected write for \(state)")
+            XCTAssertTrue(subject.overdueTasks.isEmpty, "Stale overdue row for \(state)")
+            XCTAssertFalse(subject.hasIncompleteReminder(id: "target"), "Stale agenda row for \(state)")
+            XCTAssertEqual(
+                subject.rescheduleError,
+                "This task could not be rescheduled. Refresh and try again.",
+                "Missing retry guidance for \(state)"
+            )
+        }
+    }
+
+    func testReadOnlyAndRecurringAuthorityFailuresRemainVisibleButCannotQuickReschedule() async throws {
+        let calendar = singaporeCalendar()
+        let original = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
+        let profileID = UUID()
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [
+                reminder(id: "read-only", dueDate: original, listID: "school"),
+                reminder(id: "recurring", dueDate: original, listID: "school")
+            ],
+            descriptors: [descriptor(id: "school")]
+        )
+        let subject = makeSubject(
+            service: service,
+            calendar: calendar,
+            currentScope: { self.scope(id: profileID, reminderListIDs: ["school"]) }
+        )
+        await subject.load()
+
+        await subject.quickRescheduleTask(id: "read-only", command: .tomorrow)
+        service.reminders = service.reminders.map { item in
+            guard item.id == "read-only" else { return item }
+            return reminder(
+                id: item.id,
+                dueDate: original,
+                listID: item.listID,
+                allowsModification: false
+            )
+        }
+        await subject.quickRescheduleTask(id: "read-only", command: .tomorrow)
+
+        XCTAssertNil(subject.latestRescheduleUndo)
+        XCTAssertEqual(subject.overdueTasks.map(\.id), ["read-only", "recurring"])
+        XCTAssertNotNil(subject.scopedIncompleteReminder(id: "read-only"))
+        XCTAssertEqual(
+            subject.rescheduleError,
+            "This task could not be rescheduled. Refresh and try again."
+        )
+
+        await subject.quickRescheduleTask(id: "recurring", command: .tomorrow)
+        service.reminders = service.reminders.map { item in
+            guard item.id == "recurring" else { return item }
+            return reminder(
+                id: item.id,
+                dueDate: original,
+                listID: item.listID,
+                hasRecurrence: true
+            )
+        }
+        await subject.quickRescheduleTask(id: "recurring", command: .tomorrow)
+
+        XCTAssertNil(subject.latestRescheduleUndo)
+        XCTAssertEqual(subject.overdueTasks.map(\.id), ["read-only", "recurring"])
+        XCTAssertNotNil(subject.scopedIncompleteReminder(id: "recurring"))
+        XCTAssertEqual(service.reminderUpdateCalls.count, 2)
+        XCTAssertEqual(
+            subject.rescheduleError,
+            "This task could not be rescheduled. Refresh and try again."
+        )
+    }
+
+    func testSuspendedRescheduleRefreshSerializesSameReminderActionsUsingRawID() async throws {
+        let calendar = singaporeCalendar()
+        let original = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [reminder(id: "same", dueDate: original)],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        let item = AgendaItem(reminder: try XCTUnwrap(subject.overdueTasks.first?.reminder))
+        service.suspendNextFetch = true
+
+        let reschedule = Task {
+            await subject.quickRescheduleTask(id: "same", command: .tomorrow)
+        }
+        for _ in 0..<50 where !service.isFetchSuspended { await Task.yield() }
+        XCTAssertTrue(service.isFetchSuspended)
+        let undo = subject.latestRescheduleUndo
+        let error = subject.rescheduleError
+
+        await subject.quickRescheduleTask(id: "same", command: .laterToday)
+        await subject.setTaskCompleted(item, completed: true)
+
+        XCTAssertEqual(service.reminderUpdateCalls.count, 1)
+        XCTAssertTrue(service.completedCalls.isEmpty)
+        XCTAssertEqual(subject.latestRescheduleUndo, undo)
+        XCTAssertEqual(subject.rescheduleError, error)
+
+        service.resumeSuspendedFetch()
+        await reschedule.value
+    }
+
     func testRecurringReadOnlyCompletedAndOutOfProfileTasksNeverReschedule() async throws {
         let calendar = singaporeCalendar()
         let original = try XCTUnwrap(calendar.date(byAdding: .day, value: -1, to: now))
@@ -435,6 +576,12 @@ private enum TodayTaskRescueTestError: Error {
     case writeFailure
 }
 
+private enum TodayTaskAuthorityFailureState: CaseIterable {
+    case deleted
+    case moved
+    case completed
+}
+
 @MainActor
 private final class TodayTaskRescueScopeControl {
     var fails = false
@@ -444,5 +591,14 @@ private extension AgendaItem {
     var reminderID: String? {
         guard case let .reminder(id) = origin else { return nil }
         return id
+    }
+}
+
+private extension TodayViewModel {
+    func hasIncompleteReminder(id: String) -> Bool {
+        (agenda.allDay + agenda.scheduled + agenda.priority).contains {
+            guard case let .reminder(reminderID) = $0.origin else { return false }
+            return reminderID == id && !$0.isCompleted
+        }
     }
 }

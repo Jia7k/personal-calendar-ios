@@ -633,7 +633,7 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.subject.agenda.scheduled.map(\.title), ["Captured"])
     }
 
-    func testOlderUndoRefreshDoesNotClearNewCompletionUndo() async {
+    func testSuspendedCompletionUndoSerializesSameReminderCompletion() async {
         let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 24, hour: 9))!
         let service = FakeRemindersService(access: .granted, reminders: [reminder(id: "raw", title: "Task", due: now, hasTime: true)], descriptors: [.init(id: "list", title: "List", colorHex: "#000000", allowsContentModifications: true)])
         let subject = TodayViewModel(calendar: FakeCalendarService(access: .granted), reminders: service, routines: FakeRoutineRepository(), composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral), calendarProvider: { self.calendar }, now: { now })
@@ -643,10 +643,13 @@ final class FeatureViewModelTests: XCTestCase {
         for _ in 0..<20 where !service.isFetchSuspended { await Task.yield() }
         let restored = subject.agenda.scheduled[0]
         await subject.setTaskCompleted(restored, completed: true)
-        let newGeneration = subject.latestTaskUndo?.generation
         service.resumeSuspendedFetch(); await oldUndo.value
-        XCTAssertEqual(subject.latestTaskUndo?.generation, newGeneration)
-        XCTAssertTrue(subject.agenda.scheduled.isEmpty)
+        XCTAssertEqual(
+            service.completedCalls,
+            [.init(id: "raw", completed: true), .init(id: "raw", completed: false)]
+        )
+        XCTAssertNil(subject.latestTaskUndo)
+        XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Task"])
     }
 
     func testTasksGroupsOverdueTodayTomorrowUndatedAndCompletedInInjectedTimezone() async {
