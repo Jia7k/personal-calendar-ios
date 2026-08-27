@@ -87,7 +87,8 @@ final class FeatureViewModelTests: XCTestCase {
         await subject.load()
         XCTAssertEqual(subject.agenda.allDay.map(\.title), ["Holiday"])
         XCTAssertEqual(subject.agenda.scheduled.map(\.title), ["Morning routine", "Meeting", "Timed task"])
-        XCTAssertEqual(subject.agenda.priority.map(\.title), ["Overdue"])
+        XCTAssertTrue(subject.agenda.priority.isEmpty)
+        XCTAssertEqual(subject.overdueTasks.map(\.reminder.title), ["Overdue"])
     }
 
     func testTodayKeepsConfirmedMutationWhenPostSaveRefreshFails() async {
