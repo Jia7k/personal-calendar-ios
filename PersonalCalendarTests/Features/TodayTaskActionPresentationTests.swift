@@ -8,33 +8,49 @@ private enum TodayTaskActionPresentationTestError: Error {
 @MainActor
 final class TodayTaskActionPresentationTests: XCTestCase {
     func testEditorActiveAttemptIsBusyEvenWhenTheActionIsUnavailable() {
+        var availabilityResolutionCount = 0
         let decision = TodayTaskActionPresentationGate.decide(
             editorIsPresented: true,
-            actionIsPresented: false,
-            actionIsAvailable: false
-        )
+            actionIsPresented: false
+        ) {
+            availabilityResolutionCount += 1
+            return false
+        }
 
         XCTAssertEqual(decision, .busy)
+        XCTAssertEqual(availabilityResolutionCount, 0)
     }
 
     func testActionSheetActiveAttemptIsBusyEvenWhenTheActionIsUnavailable() {
+        var availabilityResolutionCount = 0
         let decision = TodayTaskActionPresentationGate.decide(
             editorIsPresented: false,
-            actionIsPresented: true,
-            actionIsAvailable: false
-        )
+            actionIsPresented: true
+        ) {
+            availabilityResolutionCount += 1
+            return false
+        }
 
         XCTAssertEqual(decision, .busy)
+        XCTAssertEqual(availabilityResolutionCount, 0)
     }
 
     func testIdleUnavailableAttemptIsClassifiedUnavailable() {
         let decision = TodayTaskActionPresentationGate.decide(
             editorIsPresented: false,
-            actionIsPresented: false,
-            actionIsAvailable: false
-        )
+            actionIsPresented: false
+        ) { false }
 
         XCTAssertEqual(decision, .unavailable)
+    }
+
+    func testIdleAvailableAttemptIsClassifiedReady() {
+        let decision = TodayTaskActionPresentationGate.decide(
+            editorIsPresented: false,
+            actionIsPresented: false
+        ) { true }
+
+        XCTAssertEqual(decision, .ready)
     }
 
     func testPickDateRetainsReminderIDAndUsesAStablePresentationID() {

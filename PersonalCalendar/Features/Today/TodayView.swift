@@ -437,21 +437,30 @@ struct TodayView: View {
     }
 
     private func presentTimeBlock(reminderID: String) {
-        guard !TodayTaskActionPresentationGate.isBusy(
+        var resolvedSession: TaskTimeBlockSession?
+        let decision = TodayTaskActionPresentationGate.decide(
             editorIsPresented: editorPresentation != nil,
             actionIsPresented: taskActionPresentation != nil
-        ) else { return }
-
-        guard let reminder = model.scopedIncompleteReminder(id: reminderID),
-              let session = TaskTimeBlockSession.make(
-                task: reminder,
-                environment: environment
-              ) else {
-            taskActionError = "This task is no longer available in this profile. Refresh and try again."
-            return
+        ) {
+            guard let reminder = model.scopedIncompleteReminder(id: reminderID),
+                  let session = TaskTimeBlockSession.make(
+                    task: reminder,
+                    environment: environment
+                  ) else { return false }
+            resolvedSession = session
+            return true
         }
-        taskActionError = nil
-        taskActionPresentation = .timeBlock(session)
+
+        switch decision {
+        case .busy:
+            return
+        case .unavailable:
+            taskActionError = "This task is no longer available in this profile. Refresh and try again."
+        case .ready:
+            guard let resolvedSession else { return }
+            taskActionError = nil
+            taskActionPresentation = .timeBlock(resolvedSession)
+        }
     }
 
     private func dismissTaskAction() {

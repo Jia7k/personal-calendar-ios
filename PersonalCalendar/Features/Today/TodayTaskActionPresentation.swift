@@ -10,20 +10,10 @@ enum TodayTaskActionPresentationGate {
     static func decide(
         editorIsPresented: Bool,
         actionIsPresented: Bool,
-        actionIsAvailable: Bool
+        resolveAvailability: () -> Bool
     ) -> Decision {
-        if isBusy(
-            editorIsPresented: editorIsPresented,
-            actionIsPresented: actionIsPresented
-        ) { return .busy }
-        return actionIsAvailable ? .ready : .unavailable
-    }
-
-    static func isBusy(
-        editorIsPresented: Bool,
-        actionIsPresented: Bool
-    ) -> Bool {
-        editorIsPresented || actionIsPresented
+        guard !editorIsPresented, !actionIsPresented else { return .busy }
+        return resolveAvailability() ? .ready : .unavailable
     }
 }
 
