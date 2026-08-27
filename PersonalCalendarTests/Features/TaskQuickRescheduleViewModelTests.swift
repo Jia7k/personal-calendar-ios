@@ -5,6 +5,111 @@ import XCTest
 final class TaskQuickRescheduleViewModelTests: XCTestCase {
     private let now = Date(timeIntervalSinceReferenceDate: 777_636_000)
 
+    func testUndatedRemindersPublishOnlyInNeedsScheduling() async {
+        let calendar = singaporeCalendar()
+        let future = calendar.date(byAdding: .day, value: 1, to: now)!
+        let service = FakeRemindersService(access: .granted, reminders: [
+            reminder(id: "undated", dueDate: nil, dueHasTime: false),
+            reminder(id: "future", dueDate: future),
+            reminder(id: "completed-undated", dueDate: nil, dueHasTime: false, isCompleted: true)
+        ])
+        let subject = makeSubject(service: service, calendar: calendar)
+
+        await subject.load()
+
+        XCTAssertEqual(subject.overdue.map(\.id), [])
+        XCTAssertEqual(subject.today.map(\.id), [])
+        XCTAssertEqual(subject.needsScheduling.map(\.id), ["undated"])
+        XCTAssertEqual(subject.upcoming.map(\.id), ["future"])
+        XCTAssertEqual(subject.completed.map(\.id), ["completed-undated"])
+    }
+
+    func testNeedsSchedulingIsClearedWhenTheActiveProfileChanges() async {
+        let calendar = singaporeCalendar()
+        let profileA = UUID()
+        let profileB = UUID()
+        var activeScope = scope(id: profileA, reminderListIDs: ["school"])
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [reminder(id: "undated", dueDate: nil, listID: "school", dueHasTime: false)]
+        )
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { activeScope },
+            calendar: calendar,
+            now: { self.now }
+        )
+        await subject.load()
+        XCTAssertEqual(subject.needsScheduling.map(\.id), ["undated"])
+
+        activeScope = scope(id: profileB, reminderListIDs: ["work"])
+        await subject.quickReschedule(id: "undated", command: .today)
+
+        XCTAssertEqual(subject.needsScheduling.map(\.id), [])
+    }
+
+    func testTodayCommandPublishesUndoWhosePreviousScheduleIsNil() async {
+        let calendar = singaporeCalendar()
+        let item = reminder(id: "undated", dueDate: nil, dueHasTime: false)
+        let service = FakeRemindersService(access: .granted, reminders: [item])
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+
+        await subject.quickReschedule(id: item.id, command: .today)
+
+        XCTAssertEqual(
+            service.reminderUpdateCalls.first?.draft.schedule,
+            .replace(.init(date: calendar.date(from: DateComponents(year: 2025, month: 8, day: 23))!, hasTime: false))
+        )
+        XCTAssertEqual(subject.rescheduleUndo, .init(reminderID: item.id, previousSchedule: nil))
+    }
+
+    func testUndoTodayCommandClearsTheScheduleExactlyOnce() async {
+        let calendar = singaporeCalendar()
+        let item = reminder(id: "undated", dueDate: nil, dueHasTime: false)
+        let service = FakeRemindersService(access: .granted, reminders: [item])
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.quickReschedule(id: item.id, command: .today)
+
+        await subject.undoQuickReschedule()
+
+        XCTAssertEqual(service.reminderUpdateCalls.count, 2)
+        XCTAssertEqual(service.reminderUpdateCalls[1].draft.schedule, .clear)
+        XCTAssertNil(service.reminders.first?.dueDate)
+        XCTAssertNil(subject.rescheduleUndo)
+        await subject.undoQuickReschedule()
+        XCTAssertEqual(service.reminderUpdateCalls.count, 2)
+    }
+
+    func testRecurringReadOnlyAndOutOfProfileUndatedRemindersNeverQuickWrite() async {
+        let calendar = singaporeCalendar()
+        let profileA = UUID()
+        let profileB = UUID()
+        var activeScope = scope(id: profileA, reminderListIDs: ["school"])
+        let recurring = reminder(id: "recurring", dueDate: nil, listID: "school", hasRecurrence: true, dueHasTime: false)
+        let readOnly = reminder(id: "read-only", dueDate: nil, listID: "school", allowsModification: false, dueHasTime: false)
+        let outOfProfile = reminder(id: "out-of-profile", dueDate: nil, listID: "school", dueHasTime: false)
+        let service = FakeRemindersService(access: .granted, reminders: [recurring, readOnly, outOfProfile])
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { activeScope },
+            calendar: calendar,
+            now: { self.now }
+        )
+        await subject.load()
+
+        await subject.quickReschedule(id: recurring.id, command: .today)
+        await subject.quickReschedule(id: readOnly.id, command: .today)
+        activeScope = scope(id: profileB, reminderListIDs: ["work"])
+        await subject.quickReschedule(id: outOfProfile.id, command: .today)
+
+        XCTAssertTrue(service.reminderUpdateCalls.isEmpty)
+        XCTAssertTrue(service.reminders.allSatisfy { $0.dueDate == nil })
+    }
+
     func testTasksPublishOverdueSeparatelyFromToday() async {
         let calendar = singaporeCalendar()
         let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
@@ -321,24 +426,26 @@ final class TaskQuickRescheduleViewModelTests: XCTestCase {
 
     private func reminder(
         id: String,
-        dueDate: Date,
+        dueDate: Date?,
         listID: String = "list",
         title: String? = nil,
         notes: String? = "Keep",
         priority: Int = 1,
         allowsModification: Bool = true,
-        hasRecurrence: Bool = false
+        hasRecurrence: Bool = false,
+        dueHasTime: Bool = true,
+        isCompleted: Bool = false
     ) -> ReminderSnapshot {
         .init(
             id: id,
             title: title ?? id,
             notes: notes,
             dueDate: dueDate,
-            dueHasTime: true,
+            dueHasTime: dueHasTime,
             priority: priority,
             listID: listID,
             listTitle: listID,
-            isCompleted: false,
+            isCompleted: isCompleted,
             allowsModification: allowsModification,
             hasRecurrence: hasRecurrence
         )

@@ -1,6 +1,7 @@
 import Foundation
 
 enum TaskQuickReschedule: Equatable, Sendable {
+    case today
     case laterToday
     case tomorrow
     case nextWeek
@@ -34,6 +35,9 @@ struct TaskQuickReschedulePlanner: Sendable {
 
         let result: ReminderScheduleValue
         switch command {
+        case .today:
+            result = .init(date: calendar.startOfDay(for: now), hasTime: false)
+
         case .laterToday:
             if reminder.dueHasTime,
                let dueDate = reminder.dueDate,

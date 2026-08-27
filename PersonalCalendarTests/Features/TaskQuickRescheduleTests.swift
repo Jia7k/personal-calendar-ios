@@ -2,6 +2,22 @@ import XCTest
 @testable import PersonalCalendar
 
 final class TaskQuickRescheduleTests: XCTestCase {
+    func testTodayMakesAnUndatedReminderDateOnlyOnTheCurrentLocalDay() throws {
+        let calendar = singaporeCalendar()
+        let now = date(2026, 8, 24, 10, 15, calendar: calendar)
+
+        let result = try TaskQuickReschedulePlanner(calendar: calendar).schedule(
+            for: reminder(dueDate: nil, dueHasTime: false),
+            command: .today,
+            now: now
+        )
+
+        XCTAssertEqual(
+            result,
+            .init(date: date(2026, 8, 24, calendar: calendar), hasTime: false)
+        )
+    }
+
     func testLaterTodayUsesSixPMWhenItIsStillFuture() throws {
         let calendar = singaporeCalendar()
         let now = date(2026, 8, 24, 10, 0, calendar: calendar)

@@ -661,7 +661,8 @@ final class FeatureViewModelTests: XCTestCase {
 
         XCTAssertEqual(subject.overdue.map(\.id), ["overdue"])
         XCTAssertEqual(subject.today.map(\.id), ["today"])
-        XCTAssertEqual(subject.upcoming.map(\.id), ["tomorrow", "undated"])
+        XCTAssertEqual(subject.needsScheduling.map(\.id), ["undated"])
+        XCTAssertEqual(subject.upcoming.map(\.id), ["tomorrow"])
         XCTAssertEqual(subject.completed.map(\.id), ["done"])
     }
 

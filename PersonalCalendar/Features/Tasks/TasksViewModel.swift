@@ -7,6 +7,7 @@ final class TasksViewModel {
     struct TaskMutationOperation: Equatable { let id: String; let completed: Bool }
     private(set) var overdue: [ReminderSnapshot] = []
     private(set) var today: [ReminderSnapshot] = []
+    private(set) var needsScheduling: [ReminderSnapshot] = []
     private(set) var upcoming: [ReminderSnapshot] = []
     private(set) var completed: [ReminderSnapshot] = []
     private(set) var refreshErrorMessage: String?
@@ -325,6 +326,7 @@ final class TasksViewModel {
             confirmed = []
             overdue = []
             today = []
+            needsScheduling = []
             upcoming = []
             completed = []
             clearAllMutationRecovery()
@@ -359,6 +361,7 @@ final class TasksViewModel {
         confirmed = []
         overdue = []
         today = []
+        needsScheduling = []
         upcoming = []
         completed = []
         cachedScopeIdentity = nil
@@ -373,7 +376,10 @@ final class TasksViewModel {
         let incomplete = visible.filter { !$0.isCompleted }
         overdue = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) < todayDay } ?? false }.sorted(by: sort)
         today = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) == todayDay } ?? false }.sorted(by: sort)
-        upcoming = incomplete.filter { item in item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? true }.sorted(by: sort)
+        needsScheduling = incomplete.filter { $0.dueDate == nil }.sorted(by: sort)
+        upcoming = incomplete.filter { item in
+            item.dueDate.map { LocalDay(date: $0, calendar: calendar) > todayDay } ?? false
+        }.sorted(by: sort)
         completed = visible.filter(\.isCompleted).sorted(by: sort)
     }
     private func reconcileMutationRecovery(authoritativeFetch: Bool, scope: CapturedScope) {
