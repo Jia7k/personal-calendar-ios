@@ -558,7 +558,7 @@ final class FoundationFlowUITests: XCTestCase {
         let taskUnavailableEdit = app.buttons["task-editor-edit-unavailable"]
         let taskUnavailableDelete = app.buttons["task-editor-delete"]
         scrollToExistence(taskUnavailableEdit, in: app)
-        XCTAssertTrue(taskUnavailableDelete.exists)
+        scrollToExistence(taskUnavailableDelete, in: app)
         XCTAssertFalse(taskUnavailableEdit.isEnabled)
         XCTAssertFalse(taskUnavailableDelete.isEnabled)
     }
