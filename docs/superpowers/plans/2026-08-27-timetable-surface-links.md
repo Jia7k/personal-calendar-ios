@@ -52,10 +52,11 @@ struct TimetableSurfaceRouteBuilder: Sendable {
 enum TimetableSurfaceRouteBuilderError: Error, Equatable, Sendable {
     case invalidTimeZoneIdentifier(String)
     case invalidLocalDay
+    case invalidEntryRouteID(String)
 }
 ```
 
-The builder trims whitespace/newlines from `entryRouteID`; an empty result becomes nil. It creates a Gregorian calendar with the supplied time zone and derives year/month/day from `date`. An unknown time-zone identifier throws `invalidTimeZoneIdentifier` so a surface fails closed instead of routing to the wrong day.
+The builder trims whitespace/newlines from `entryRouteID`; an empty result becomes nil. A nonblank value must be exactly ASCII `entry-` followed by 16 lowercase hexadecimal bytes or throw `invalidEntryRouteID`. It creates a Gregorian calendar with the supplied time zone and derives year/month/day from `date`. An unknown time-zone identifier throws `invalidTimeZoneIdentifier` so a surface fails closed instead of routing to the wrong day.
 
 - [ ] **Step 1: Add focused RED tests**
 
@@ -69,6 +70,7 @@ func testGregorianDayRemainsCorrectAcrossDSTTransition()
 func testInvalidTimeZoneFailsClosed()
 func testURLDoesNotContainTitleLocationDisplayIDNotesOrMutationID()
 func testTwoProfilesProduceDifferentRoutesForTheSameOccurrence()
+func testNoncanonicalUppercaseWrongLengthSyntheticAndPrivateLookingEntryIDsFailClosed()
 ```
 
 Use literal expected `AppRoute.calendar` values decoded through the real `AppRouteCodec`. The privacy test must provide recognizable forbidden strings only as unrelated fixture data and assert the encoded URL contains none of them; do not derive expectations with the builder.
@@ -103,6 +105,10 @@ func url(
     }
     let normalized = entryRouteID?
         .trimmingCharacters(in: .whitespacesAndNewlines)
+    if let normalized, !normalized.isEmpty,
+       !Self.isCanonicalEntryRouteID(normalized) {
+        throw TimetableSurfaceRouteBuilderError.invalidEntryRouteID(normalized)
+    }
     return try codec.url(for: .calendar(
         day: .init(year: year, month: month, day: day),
         profile: profile,
@@ -119,7 +125,7 @@ git add PersonalCalendar/ProfileShared/TimetableSurfaceRouteBuilder.swift Person
 git commit -m "feat: add timetable surface route builder"
 ```
 
-Mutating the builder to use device-local time, omit the profile, or keep a blank entry ID must fail a focused test.
+Mutating the builder to use device-local time, omit the profile, keep a blank entry ID, or admit a noncanonical ID must fail a focused test.
 
 ---
 
@@ -170,9 +176,10 @@ func testNextClassAfterLastClassFallsBackToExactProfileAndCurrentLocalDay()
 func testWeekUsesExactProfileAndTimelineLocalDayWithoutEntryID()
 func testTwoReadyWidgetConfigurationsProduceDifferentProfileURLs()
 func testChooseDeletedPermissionEmptyAndNoClassesStatesHaveNoURL()
+func testInvalidTimeZoneAndNoncanonicalRouteIDHaveNoURL()
 ```
 
-Fixtures must use an opaque `routeID` different from the entry's synthetic `id`, so accidentally routing with `id` fails.
+Fixtures must use a canonical opaque `routeID` (`entry-` plus 16 lowercase hex bytes) different from the entry's synthetic `id`, so accidentally routing with `id` fails. A decoded noncanonical value must produce no URL.
 
 - [ ] **Step 2: Run RED**
 
@@ -213,7 +220,7 @@ Add the resolver by calling `TimetableSurfaceRouteBuilder.url(profile:date:timeZ
     date: entry.date
 ))
 .accessibilityHint(
-    routeURL == nil ? "" : "Opens this class in My Calendar"
+    routeURL == nil ? "" : "Opens this timetable in My Calendar"
 )
 ```
 
@@ -245,9 +252,9 @@ git commit -m "feat: link timetable widgets to exact profiles"
 - Produces:
 
 ```swift
-extension TimetableActivityAttributes.ContentState.Entry {
-    let routeID: String?
-}
+// Add this as a stored optional property inside
+// TimetableActivityAttributes.ContentState.Entry:
+let routeID: String?
 
 struct TimetableActivityRouteResolver: Sendable {
     func url(
@@ -271,9 +278,10 @@ func testActivityCurrentAndUpcomingEntriesOpenExactProfileOccurrence()
 func testActivityWithoutEntryRouteIDFallsBackToExactProfileAndLocalDay()
 func testActivityRoutesForDifferentProfilesRemainDistinct()
 func testActivityURLContainsNoTitleLocationOrSyntheticEntryID()
+func testActivityInvalidTimeZoneAndMalformedNonblankRouteIDHaveNoURL()
 ```
 
-Construct the legacy JSON by hand using existing compact keys `i/t/s/b/e/l` and omit `r`; do not encode it using the new type.
+Construct the legacy JSON by hand using existing compact keys `i/t/s/b/e/l` and omit `r`; do not encode it using the new type. Resolver fixtures use canonical opaque IDs; a decoded malformed nonblank value must remain inert.
 
 - [ ] **Step 2: Run RED**
 
@@ -286,7 +294,7 @@ Expected: missing `routeID`/resolver and projection assertion failure.
 
 - [ ] **Step 3: Add compact route identity without breaking payload limits**
 
-Add optional `routeID`, copy a bounded opaque value from the source entry, and include it in compact Codable. Retain the existing 3,500-byte loop: if the extra compact field makes the state too large, the loop still drops only the chronological tail entry and increments omissions honestly. When rebuilding `compactSnapshot` in the widget extension, pass `routeID: $0.routeID`.
+Add optional `routeID`, copy a canonical opaque value from the source entry, and include it in compact Codable. Retain the existing 3,500-byte loop: if the extra compact field makes the state too large, the loop still drops only the chronological tail entry and increments omissions honestly. When rebuilding `compactSnapshot` in the widget extension, pass `routeID: $0.routeID`. A missing legacy value gets the exact profile/day fallback; a malformed nonblank decoded value produces no link.
 
 - [ ] **Step 4: Attach one URL to Lock Screen and Dynamic Island roots**
 
@@ -356,7 +364,7 @@ Update the README timetable section to state:
 - deleted profiles or occurrences show the app's neutral unavailable state, never Everything;
 - links do not improve the existing foreground/local-refresh limitations.
 
-Add manual QA checks for exact School versus Personal profile routing, after-last-class day fallback, a deleted-profile inert/unavailable path, legacy running Activity fallback, and VoiceOver's `Opens this class/week in My Calendar` hint.
+Add manual QA checks for exact School versus Personal profile routing, after-last-class day fallback, a deleted-profile inert/unavailable path, legacy running Activity fallback, and VoiceOver's `Opens this timetable/week in My Calendar` hint.
 
 - [ ] **Step 4: Commit integrated verification and docs**
 
