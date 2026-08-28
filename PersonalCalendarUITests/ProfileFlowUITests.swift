@@ -71,7 +71,11 @@ final class ProfileFlowUITests: XCTestCase {
         let tab = app.tabBars.buttons[name]
         XCTAssertTrue(tab.waitForExistence(timeout: 3))
         tab.tap()
-        XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 3))
+        if name == "Calendar" {
+            XCTAssertTrue(app.buttons["calendar-search-open"].waitForExistence(timeout: 3))
+        } else {
+            XCTAssertTrue(app.navigationBars[name].waitForExistence(timeout: 3))
+        }
     }
 
     private func assertCalendarContainsSchoolEvent(in app: XCUIApplication) {

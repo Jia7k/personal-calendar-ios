@@ -108,7 +108,9 @@ final class FoundationFlowUITests: XCTestCase {
         let todayValue = today.value as? String ?? ""
         XCTAssertTrue(todayValue.contains("Today"), "Expected Today in accessibility value: \(todayValue)")
         XCTAssertTrue(todayValue.contains("Selected"), "Expected Selected in accessibility value: \(todayValue)")
-        XCTAssertNotNil(todayValue.range(of: #"\b\d+ items\b"#, options: .regularExpression), "Expected an item count in accessibility value: \(todayValue)")
+        XCTAssertTrue(todayValue.contains("1 event"), "Expected the event count in accessibility value: \(todayValue)")
+        XCTAssertTrue(todayValue.contains("1 task"), "Expected the task count in accessibility value: \(todayValue)")
+        XCTAssertTrue(todayValue.contains("1 routine"), "Expected the routine count in accessibility value: \(todayValue)")
         XCTAssertTrue(app.otherElements["month-grid"].exists)
         app.buttons["Expand day"].tap()
 
@@ -259,7 +261,16 @@ final class FoundationFlowUITests: XCTestCase {
         app.launchArguments = ["-ui-testing", "-reduce-motion"]
         app.launch()
 
-        XCTAssertTrue(app.navigationBars["Calendar"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["calendar-search-open"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["calendar-header-period"].waitForExistence(timeout: 3))
+        let monthMode = app.buttons["calendar-mode-month"]
+        let weekMode = app.buttons["calendar-mode-week"]
+        let today = app.buttons["calendar-period-today"]
+        XCTAssertTrue(monthMode.exists)
+        XCTAssertGreaterThanOrEqual(monthMode.frame.width, 60)
+        XCTAssertGreaterThanOrEqual(weekMode.frame.width, 60)
+        XCTAssertGreaterThanOrEqual(today.frame.width, 44)
+        XCTAssertFalse(app.navigationBars["Calendar"].exists)
         XCTAssertTrue(app.otherElements["month-grid"].waitForExistence(timeout: 3))
         app.buttons["Expand day"].tap()
         XCTAssertTrue(app.otherElements["selected-week-strip"].waitForExistence(timeout: 3))
@@ -723,7 +734,6 @@ final class FoundationFlowUITests: XCTestCase {
 
         app.buttons["Expand day"].tap()
         let recurringEvent = app.buttons["agenda-open-event-demo-event-recurring"]
-        scrollToHittable(recurringEvent, in: app)
         recurringEvent.tap()
         let scope = app.descendants(matching: .any)["event-editor-recurrence-scope"]
         scrollToHittable(scope, in: app)

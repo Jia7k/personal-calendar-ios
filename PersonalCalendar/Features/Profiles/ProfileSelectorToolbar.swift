@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileSelectorToolbar: View {
     let selection: ProfileSelectionController
+    var showsName = true
 
     var body: some View {
         Menu {
@@ -21,8 +22,12 @@ struct ProfileSelectorToolbar: View {
                 )
             }
         } label: {
-            Label(currentName, systemImage: currentSymbolName)
-                .lineLimit(1)
+            if showsName {
+                Label(currentName, systemImage: currentSymbolName)
+                    .lineLimit(1)
+            } else {
+                Image(systemName: currentSymbolName)
+            }
         }
         .frame(
             minWidth: CalendarTheme.minimumTapSize,

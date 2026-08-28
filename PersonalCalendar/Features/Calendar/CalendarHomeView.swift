@@ -1,5 +1,35 @@
 import SwiftUI
 
+struct CalendarHeaderIdentityText {
+    static func selectedDayTitle(
+        for day: LocalDay,
+        displayedMonth: LocalDay,
+        calendar: Calendar,
+        locale: Locale? = nil
+    ) -> String {
+        let resolvedLocale = locale ?? calendar.locale ?? .current
+        let date = day.startDate(in: calendar)
+        let includesMonth = day.year != displayedMonth.year || day.month != displayedMonth.month
+        let title = if includesMonth {
+            date.formatted(
+                .dateTime
+                    .weekday(.wide)
+                    .month(.abbreviated)
+                    .day()
+                    .locale(resolvedLocale)
+            )
+        } else {
+            date.formatted(
+                .dateTime
+                    .weekday(.wide)
+                    .day()
+                    .locale(resolvedLocale)
+            )
+        }
+        return title.uppercased(with: resolvedLocale)
+    }
+}
+
 struct CalendarHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -64,9 +94,7 @@ struct CalendarHomeView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                displayModePicker
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                calendarHeader
                 switch viewModel.displayMode {
                 case .month:
                     monthContent
@@ -75,36 +103,6 @@ struct CalendarHomeView: View {
                 }
             }
             .background(CalendarTheme.background)
-            .navigationTitle("Calendar")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("Settings", systemImage: "gearshape", action: openSettings).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button("Search", systemImage: "magnifyingglass") {
-                        guard editorPresentation == nil,
-                              timeBlockPresentation == nil,
-                              !showingJumpToDate,
-                              calendarDeepLink == nil,
-                              !isTransitioningPresentation else { return }
-                        showingSearch = true
-                        onPresentationChanged(true)
-                    }
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                    .accessibilityIdentifier("calendar-search-open")
-                    Button("Jump to Date", systemImage: "calendar.badge.clock") {
-                        guard editorPresentation == nil,
-                              timeBlockPresentation == nil,
-                              !showingSearch,
-                              calendarDeepLink == nil,
-                              !isTransitioningPresentation else { return }
-                        jumpDate = viewModel.selectedDay.startDate(in: calendar)
-                        showingJumpToDate = true
-                        onPresentationChanged(true)
-                    }
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                    .accessibilityIdentifier("calendar-jump-open")
-                    ProfileSelectorToolbar(selection: environment.profileSelection)
-                }
-            }
             .navigationDestination(isPresented: $showingSearch) {
                 CalendarSearchView(
                     environment: environment,
@@ -186,26 +184,204 @@ struct CalendarHomeView: View {
         }
     }
 
-    private var displayModePicker: some View {
-        Picker("Calendar view", selection: Binding(
-            get: { viewModel.displayMode },
-            set: { mode in Task { await viewModel.setDisplayMode(mode) } }
-        )) {
-            Text("Month")
-                .tag(CalendarDisplayMode.month)
-                .accessibilityIdentifier("calendar-mode-month")
-            Text("Week")
-                .tag(CalendarDisplayMode.week)
-                .accessibilityIdentifier("calendar-mode-week")
+    private var calendarHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    headerIdentity
+                    HStack(spacing: 4) {
+                        settingsButton
+                        searchButton
+                        jumpToDateButton
+                        compactProfileSelector
+                    }
+                }
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    headerIdentity
+                    Spacer(minLength: 8)
+                    VStack(spacing: 2) {
+                        HStack(spacing: 2) {
+                            searchButton
+                                .background(CalendarTheme.surface, in: Circle())
+                            compactProfileSelector
+                                .background(CalendarTheme.surface, in: Circle())
+                        }
+                        HStack(spacing: 2) {
+                            settingsButton
+                            jumpToDateButton
+                        }
+                    }
+                }
+            }
+
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    displayModeTabs
+                    periodNavigation
+                }
+            } else {
+                HStack(spacing: 8) {
+                    displayModeTabs
+                    Spacer(minLength: 8)
+                    periodNavigation
+                }
+            }
+
+            Divider()
         }
-        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+    }
+
+    private var headerIdentity: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(selectedDayTitle.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(1.1)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("calendar-header-day")
+            Text(periodTitle)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.primary)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("calendar-header-period")
+            Text(activeProfileName)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var displayModeTabs: some View {
+        HStack(spacing: 18) {
+            ForEach(CalendarDisplayMode.allCases, id: \.self) { mode in
+                Button {
+                    Task { await viewModel.setDisplayMode(mode) }
+                } label: {
+                    Text(mode == .month ? "Month" : "Week")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(viewModel.displayMode == mode ? CalendarTheme.accent : .secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .frame(
+                            minWidth: CalendarTheme.minimumTapSize,
+                            minHeight: CalendarTheme.minimumTapSize
+                        )
+                        .overlay(alignment: .bottom) {
+                            Capsule()
+                                .fill(viewModel.displayMode == mode ? CalendarTheme.accent : Color.clear)
+                                .frame(height: 3)
+                        }
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 64, minHeight: CalendarTheme.minimumTapSize)
+                .contentShape(Rectangle())
+                .accessibilityAddTraits(viewModel.displayMode == mode ? .isSelected : [])
+                .accessibilityIdentifier(mode == .month ? "calendar-mode-month" : "calendar-mode-week")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Calendar view")
+    }
+
+    private var periodNavigation: some View {
+        HStack(spacing: 2) {
+            Button {
+                Task { await viewModel.movePeriod(by: -1) }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(viewModel.displayMode == .week ? "Previous week" : "Previous month")
+            .accessibilityIdentifier("calendar-period-previous")
+
+            Button {
+                Task { await viewModel.showToday() }
+            } label: {
+                Text("Today")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 4)
+                    .frame(
+                        minWidth: CalendarTheme.minimumTapSize,
+                        minHeight: CalendarTheme.minimumTapSize
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(
+                minWidth: 52,
+                minHeight: CalendarTheme.minimumTapSize
+            )
+            .contentShape(Rectangle())
+            .foregroundStyle(CalendarTheme.accent)
+            .accessibilityIdentifier("calendar-period-today")
+
+            Button {
+                Task { await viewModel.movePeriod(by: 1) }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(viewModel.displayMode == .week ? "Next week" : "Next month")
+            .accessibilityIdentifier("calendar-period-next")
+        }
+    }
+
+    private var settingsButton: some View {
+        Button("Settings", systemImage: "gearshape", action: openSettings)
+            .labelStyle(.iconOnly)
+            .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            .foregroundStyle(CalendarTheme.accent)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("calendar-settings-open")
+    }
+
+    private var searchButton: some View {
+        Button("Search", systemImage: "magnifyingglass", action: presentSearch)
+            .labelStyle(.iconOnly)
+            .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            .foregroundStyle(CalendarTheme.accent)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("calendar-search-open")
+    }
+
+    private var jumpToDateButton: some View {
+        Button("Jump to Date", systemImage: "calendar.badge.clock", action: presentJumpToDate)
+            .labelStyle(.iconOnly)
+            .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+            .foregroundStyle(CalendarTheme.accent)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("calendar-jump-open")
+    }
+
+    private var compactProfileSelector: some View {
+        ProfileSelectorToolbar(selection: environment.profileSelection, showsName: false)
+            .foregroundStyle(CalendarTheme.accent)
+            .buttonStyle(.plain)
+    }
+
+    private var selectedDayTitle: String {
+        CalendarHeaderIdentityText.selectedDayTitle(
+            for: viewModel.selectedDay,
+            displayedMonth: viewModel.displayedMonth,
+            calendar: calendar
+        )
+    }
+
+    private var activeProfileName: String {
+        switch environment.profileSelection.activeIdentity {
+        case .everything:
+            return "Everything"
+        case let .saved(id):
+            return environment.profileSelection.profiles.first(where: { $0.id == id })?.name ?? "Profile"
+        }
     }
 
     private var monthContent: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
-                    periodHeader
                     grid
                     DayTrayView(day: viewModel.selectedDay, agenda: viewModel.agenda, state: viewModel.trayState, isLoading: viewModel.isLoading, errorMessage: viewModel.errorMessage, sourceAccessNotices: viewModel.sourceAccessNotices, calendar: calendar, openSettings: openSettings, onSetState: setTray, onRetry: { Task { await viewModel.load() } }, onOpenItem: openAgendaItem, onSetTaskCompleted: { item, completed in Task { await viewModel.setTaskCompleted(item, completed: completed) } })
                 }
@@ -260,8 +436,6 @@ struct CalendarHomeView: View {
 
     private var weekContent: some View {
         VStack(spacing: 12) {
-            periodHeader
-                .padding(.horizontal, 16)
             weekStatus
                 .padding(.horizontal, 16)
             WeekPlannerView(
@@ -318,23 +492,6 @@ struct CalendarHomeView: View {
         }
     }
 
-    private var periodHeader: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Button { Task { await viewModel.movePeriod(by: -1) } } label: { Image(systemName: "chevron.left") }
-                    .accessibilityLabel(viewModel.displayMode == .week ? "Previous week" : "Previous month")
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-                Spacer()
-                Text(periodTitle).font(.title2.weight(.semibold))
-                Spacer()
-                Button { Task { await viewModel.movePeriod(by: 1) } } label: { Image(systemName: "chevron.right") }
-                    .accessibilityLabel(viewModel.displayMode == .week ? "Next week" : "Next month")
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-            }
-            Button("Today") { Task { await viewModel.showToday() } }.frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-        }
-    }
-
     private var periodTitle: String {
         switch viewModel.displayMode {
         case .month:
@@ -371,6 +528,27 @@ struct CalendarHomeView: View {
     private func setTray(_ state: TrayState) {
         if reduceMotion || environment.reduceMotionOverride { viewModel.setTray(state) }
         else { withAnimation(.easeInOut(duration: 0.2)) { viewModel.setTray(state) } }
+    }
+
+    private func presentSearch() {
+        guard editorPresentation == nil,
+              timeBlockPresentation == nil,
+              !showingJumpToDate,
+              calendarDeepLink == nil,
+              !isTransitioningPresentation else { return }
+        showingSearch = true
+        onPresentationChanged(true)
+    }
+
+    private func presentJumpToDate() {
+        guard editorPresentation == nil,
+              timeBlockPresentation == nil,
+              !showingSearch,
+              calendarDeepLink == nil,
+              !isTransitioningPresentation else { return }
+        jumpDate = viewModel.selectedDay.startDate(in: calendar)
+        showingJumpToDate = true
+        onPresentationChanged(true)
     }
 
     private func openAgendaItem(_ origin: AgendaItemOrigin) {

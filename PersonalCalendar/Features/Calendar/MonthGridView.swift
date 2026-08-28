@@ -1,5 +1,37 @@
 import SwiftUI
 
+struct MonthGridActivitySummary: Equatable {
+    let markerSources: [AgendaSource]
+    let eventCount: Int
+    let taskCount: Int
+    let routineCount: Int
+
+    init(items: [AgendaItem]) {
+        markerSources = Array(items.prefix(3).map(\.source))
+        eventCount = items.count { $0.source == .event }
+        taskCount = items.count { $0.source == .task }
+        routineCount = items.count { $0.source == .routine }
+    }
+
+    var totalCount: Int {
+        eventCount + taskCount + routineCount
+    }
+
+    var sourceCountDescription: String {
+        let parts = [
+            Self.countDescription(eventCount, singular: "event"),
+            Self.countDescription(taskCount, singular: "task"),
+            Self.countDescription(routineCount, singular: "routine")
+        ].compactMap { $0 }
+        return parts.isEmpty ? "0 items" : parts.joined(separator: ", ")
+    }
+
+    private static func countDescription(_ count: Int, singular: String) -> String? {
+        guard count > 0 else { return nil }
+        return "\(count) \(singular)\(count == 1 ? "" : "s")"
+    }
+}
+
 struct MonthGridView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let cells: [CalendarCell]
@@ -57,7 +89,7 @@ struct MonthGridView: View {
 
     private func dayButton(_ cell: CalendarCell) -> some View {
         let items = items(for: cell.day)
-        let itemCount = items.count
+        let summary = MonthGridActivitySummary(items: items)
         let isSelected = cell.day == selectedDay
         let isToday = cell.day == today
         return Button {
@@ -65,19 +97,23 @@ struct MonthGridView: View {
         } label: {
             VStack(spacing: 2) {
                 dayTitle(cell.day, isSelected: isSelected)
-                HStack(spacing: 3) {
-                    ForEach(Array(items.prefix(3))) { item in
-                        Image(systemName: indicatorSymbol(for: item))
-                            .font(.caption2)
-                            .foregroundStyle(CalendarTheme.sourceColor(item.source))
+                if dynamicTypeSize.isAccessibilitySize {
+                    if summary.totalCount > 0 {
+                        Text(summary.sourceCountDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    if itemCount > 3 {
-                        Text("+\(itemCount - 3)")
-                            .font(.caption2)
-                            .foregroundStyle(CalendarTheme.accent)
+                } else {
+                    HStack(spacing: 4) {
+                        ForEach(Array(summary.markerSources.enumerated()), id: \.offset) { _, source in
+                            Circle()
+                                .fill(CalendarTheme.sourceColor(source))
+                                .frame(width: 5, height: 5)
+                                .accessibilityHidden(true)
+                        }
                     }
+                    .frame(minHeight: 12)
                 }
-                .frame(minHeight: 12)
             }
             .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
             .background(isSelected ? CalendarTheme.selectionFill : Color.clear, in: RoundedRectangle(cornerRadius: 10))
@@ -88,7 +124,7 @@ struct MonthGridView: View {
         .id(cell.day)
         .accessibilityIdentifier(cell.day == today ? "calendar-day-today" : "calendar-day-\(cell.day.year)-\(cell.day.month)-\(cell.day.day)")
         .accessibilityLabel(accessibilityDateLabel(for: cell.day))
-        .accessibilityValue(accessibilityValue(isToday: isToday, isSelected: isSelected, itemCount: itemCount))
+        .accessibilityValue(accessibilityValue(isToday: isToday, isSelected: isSelected, summary: summary))
     }
 
     private func items(for day: LocalDay) -> [AgendaItem] {
@@ -96,25 +132,19 @@ struct MonthGridView: View {
         return agenda.allDay + agenda.scheduled + agenda.priority
     }
 
-    private func indicatorSymbol(for item: AgendaItem) -> String {
-        switch (item.source, item.placement) {
-        case (.event, .allDay): "calendar.badge.clock"
-        case (.event, .timed): "calendar"
-        case (.task, _): "checkmark.circle"
-        case (.routine, .window): "repeat"
-        default: "circle"
-        }
-    }
-
     private func accessibilityDateLabel(for day: LocalDay) -> String {
         day.startDate(in: calendar).formatted(.dateTime.weekday(.wide).month(.wide).day().year())
     }
 
-    private func accessibilityValue(isToday: Bool, isSelected: Bool, itemCount: Int) -> String {
+    private func accessibilityValue(
+        isToday: Bool,
+        isSelected: Bool,
+        summary: MonthGridActivitySummary
+    ) -> String {
         var values: [String] = []
         if isToday { values.append("Today") }
         if isSelected { values.append("Selected") }
-        values.append("\(itemCount) items")
+        values.append(summary.sourceCountDescription)
         return values.joined(separator: ", ")
     }
 }
