@@ -7,7 +7,9 @@ struct MonthGridActivitySummary: Equatable {
     let routineCount: Int
 
     init(items: [AgendaItem]) {
-        markerSources = Array(items.prefix(3).map(\.source))
+        markerSources = [AgendaSource.event, .task, .routine].filter { source in
+            items.contains { $0.source == source }
+        }
         eventCount = items.count { $0.source == .event }
         taskCount = items.count { $0.source == .task }
         routineCount = items.count { $0.source == .routine }

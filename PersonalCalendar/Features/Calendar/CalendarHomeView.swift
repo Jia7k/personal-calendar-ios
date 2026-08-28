@@ -455,7 +455,8 @@ struct CalendarHomeView: View {
                 },
                 onScheduleTaskTime: { reminderID in
                     presentTimeBlock(reminderID: reminderID)
-                }
+                },
+                onOpenEvent: openWeekEvent
             )
         }
         .padding(.vertical, 12)
@@ -557,20 +558,12 @@ struct CalendarHomeView: View {
         let capturedScope = try? environment.profileScopes.resolve(capturedProfileIdentity)
         switch origin {
         case let .event(displayID):
-            let model = EventEditorViewModel.edit(
+            openEventEditor(
                 displayID: displayID,
-                service: environment.calendar,
-                categories: environment.categories,
-                duplicateDestinationCalendarIDs: capturedScope?.calendarIDs ?? [],
-                resolveDuplicateDestinationCalendarIDs: {
-                    try environment.profileScopes
-                        .resolve(capturedProfileIdentity).calendarIDs
-                },
-                onCommitted: { commit in finishEditorAndReload(operation: calendarOperation(for: commit)) },
-                onReconciliationNeeded: reconcileEditorWithoutDismissing
+                occurrence: nil,
+                capturedProfileIdentity: capturedProfileIdentity,
+                capturedScope: capturedScope
             )
-            editorPresentation = .init(content: .event(model: model, calendars: environment.calendar.calendars(), nilDestinationLabel: "Preserve Current", showsDelete: true))
-            onPresentationChanged(true)
         case let .reminder(reminderID):
             let model = TaskEditorViewModel.editing(
                 reminderID: reminderID,
@@ -591,6 +584,52 @@ struct CalendarHomeView: View {
         case .synthetic:
             break
         }
+    }
+
+    private func openWeekEvent(_ event: CalendarEventSnapshot) {
+        guard timeBlockPresentation == nil else { return }
+        let capturedProfileIdentity = environment.profileSelection.activeIdentity
+        let capturedScope = try? environment.profileScopes.resolve(
+            capturedProfileIdentity
+        )
+        openEventEditor(
+            displayID: event.id,
+            occurrence: event.occurrenceAddress,
+            capturedProfileIdentity: capturedProfileIdentity,
+            capturedScope: capturedScope
+        )
+    }
+
+    private func openEventEditor(
+        displayID: String,
+        occurrence: EventOccurrenceAddress?,
+        capturedProfileIdentity: ProfileIdentity,
+        capturedScope: ProfileScope?
+    ) {
+        let model = EventEditorViewModel.edit(
+            displayID: displayID,
+            occurrence: occurrence,
+            service: environment.calendar,
+            categories: environment.categories,
+            duplicateDestinationCalendarIDs: capturedScope?.calendarIDs ?? [],
+            resolveDuplicateDestinationCalendarIDs: {
+                try environment.profileScopes
+                    .resolve(capturedProfileIdentity).calendarIDs
+            },
+            onCommitted: { commit in
+                finishEditorAndReload(operation: calendarOperation(for: commit))
+            },
+            onReconciliationNeeded: reconcileEditorWithoutDismissing
+        )
+        editorPresentation = .init(
+            content: .event(
+                model: model,
+                calendars: environment.calendar.calendars(),
+                nilDestinationLabel: "Preserve Current",
+                showsDelete: true
+            )
+        )
+        onPresentationChanged(true)
     }
 
     private func selectSearchResult(_ origin: AgendaItemOrigin) {
@@ -682,7 +721,7 @@ struct CalendarHomeView: View {
         case .navigate:
             onDeepLinkHandled(signal.id, true)
         case let .open(_, event):
-            openAgendaItem(.event(id: event.id))
+            openWeekEvent(event)
             onDeepLinkHandled(signal.id, true)
         case .unavailable:
             onDeepLinkHandled(signal.id, false)

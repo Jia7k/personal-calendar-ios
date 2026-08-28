@@ -5,6 +5,30 @@ enum WeekPlannerTimedKind: Equatable, Sendable {
     case taskDue
 }
 
+struct WeekPlannerEventOccurrenceKey: Hashable, Sendable {
+    let displayID: String
+    let start: Date
+    let occurrenceDate: Date
+
+    init(displayID: String, start: Date, occurrenceDate: Date? = nil) {
+        self.displayID = displayID
+        self.start = start
+        self.occurrenceDate = occurrenceDate ?? start
+    }
+
+    init?(item: AgendaItem) {
+        guard case let .event(displayID) = item.origin,
+              case let .timed(start) = item.placement else {
+            return nil
+        }
+        self.init(
+            displayID: displayID,
+            start: start,
+            occurrenceDate: item.eventOccurrenceDate
+        )
+    }
+}
+
 struct WeekPlannerAllDayItem: Identifiable, Equatable, Sendable {
     let id: String
     let day: LocalDay
@@ -27,6 +51,7 @@ struct WeekPlannerSnapshot: Equatable, Sendable {
     let allDayItems: [WeekPlannerAllDayItem]
     let timedItems: [WeekPlannerTimedItem]
     let laterItems: [AgendaItem]
+    let eventDetailsByOccurrence: [WeekPlannerEventOccurrenceKey: CalendarEventSnapshot]
     let startHour: Int
     let endHour: Int
 
@@ -35,6 +60,7 @@ struct WeekPlannerSnapshot: Equatable, Sendable {
         allDayItems: [],
         timedItems: [],
         laterItems: [],
+        eventDetailsByOccurrence: [:],
         startHour: 8,
         endHour: 18
     )

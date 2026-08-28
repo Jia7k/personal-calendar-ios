@@ -16,6 +16,33 @@ final class SystemEventKitStoreDriver: EventKitStoreDriving {
     func eventAccessGranted() -> Bool { EventKitAccessMapper.map(EKEventStore.authorizationStatus(for: .event)) == .granted }
     func reminderAccessGranted() -> Bool { EventKitAccessMapper.map(EKEventStore.authorizationStatus(for: .reminder)) == .granted }
     func event(id: String) -> (any EventMutationHandling)? { store.event(withIdentifier: id).map { SystemEventHandle(event: $0, store: store) } }
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> (any EventMutationHandling)? {
+        guard let occurrence else { return event(id: id) }
+        guard occurrence.isValid else {
+            return nil
+        }
+        let predicate = store.predicateForEvents(
+            withStart: occurrence.displayStart.addingTimeInterval(-1),
+            end: occurrence.displayStart.addingTimeInterval(1),
+            calendars: nil
+        )
+        let candidates = store.events(matching: predicate).compactMap { event in
+            event.eventIdentifier.map {
+                EventOccurrenceCandidate(
+                    id: $0,
+                    displayStart: event.startDate,
+                    occurrenceDate: event.occurrenceDate ?? event.startDate,
+                    value: event
+                )
+            }
+        }
+        guard let event = EventOccurrenceSelector.exact(
+            id: id,
+            occurrence: occurrence,
+            candidates: candidates
+        ) else { return nil }
+        return SystemEventHandle(event: event, store: store)
+    }
     func reminder(id: String) -> (any ReminderMutationHandling)? { (store.calendarItem(withIdentifier: id) as? EKReminder).map { SystemReminderHandle(reminder: $0, store: store) } }
     func newEvent() -> any EventMutationHandling { SystemEventHandle(event: EKEvent(eventStore: store), store: store, isNew: true) }
     func newReminder() -> any ReminderMutationHandling { SystemReminderHandle(reminder: EKReminder(eventStore: store), store: store, isNew: true) }

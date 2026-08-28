@@ -219,8 +219,35 @@ final class DemoCalendarService: CalendarServicing {
         guard accessState == .granted, let index = eventIndex(forDetailID: id) else { return nil }
         return events[index]
     }
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> CalendarEventSnapshot? {
+        guard let occurrence else { return event(id: id) }
+        guard accessState == .granted, occurrence.isValid,
+              let index = events.firstIndex(where: {
+                  $0.id == id && $0.occurrenceAddress == occurrence
+              }) else { return nil }
+        return events[index]
+    }
     func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws {
-        guard accessState == .granted, let index = eventIndex(forMutationID: id) else { throw DraftValidationError.itemNotFound }
+        try updateEvent(
+            id: id,
+            occurrence: nil,
+            draft: draft,
+            scope: scope
+        )
+    }
+    func updateEvent(id: String, occurrence: EventOccurrenceAddress?, draft: EventDraft, scope: RecurrenceEditScope) throws {
+        let index: Int?
+        if let occurrence {
+            guard occurrence.isValid else {
+                throw DraftValidationError.itemNotFound
+            }
+            index = events.firstIndex(where: {
+                $0.mutationID == id && $0.occurrenceAddress == occurrence
+            })
+        } else {
+            index = eventIndex(forMutationID: id)
+        }
+        guard accessState == .granted, let index else { throw DraftValidationError.itemNotFound }
         let old = events[index]
         guard old.allowsModification else { throw DraftValidationError.readOnlyDestination }
         guard scope != .futureOccurrences || old.hasRecurrence else { throw DraftValidationError.invalidRecurrenceScope }
@@ -234,10 +261,31 @@ final class DemoCalendarService: CalendarServicing {
         } else { destination = .init(id: old.calendarID, title: old.calendarTitle, colorHex: "#000000", allowsContentModifications: true) }
         if shouldFailNextUpdate { shouldFailNextUpdate = false; throw DemoCreateError.failed }
         let recurrence = recurrence(from: draft.recurrence, preserving: old.recurrence)
-        events[index] = .init(id: old.id, mutationID: old.mutationID, title: trimmed(draft.title), start: draft.start, end: draft.end, isAllDay: draft.isAllDay, calendarID: destination.id, calendarTitle: destination.title, allowsModification: old.allowsModification, hasRecurrence: recurrence != .none, notes: draft.notes, location: draft.location, url: draft.url, alarms: alarms(from: draft.alarms, preserving: old.alarms), recurrence: recurrence)
+        events[index] = .init(id: old.id, mutationID: old.mutationID, title: trimmed(draft.title), start: draft.start, end: draft.end, isAllDay: draft.isAllDay, calendarID: destination.id, calendarTitle: destination.title, allowsModification: old.allowsModification, hasRecurrence: recurrence != .none, notes: draft.notes, location: draft.location, url: draft.url, alarms: alarms(from: draft.alarms, preserving: old.alarms), recurrence: recurrence, occurrenceDate: old.occurrenceDate)
         successfulWriteCount += 1
     }
-    func deleteEvent(id: String, scope: RecurrenceEditScope) throws { guard accessState == .granted, let index = eventIndex(forMutationID: id) else { throw DraftValidationError.itemNotFound }; guard events[index].allowsModification else { throw DraftValidationError.readOnlyDestination }; guard scope != .futureOccurrences || events[index].hasRecurrence else { throw DraftValidationError.invalidRecurrenceScope }; if shouldFailNextDelete { shouldFailNextDelete = false; throw DemoCreateError.failed }; events.remove(at: index); successfulWriteCount += 1 }
+    func deleteEvent(id: String, scope: RecurrenceEditScope) throws {
+        try deleteEvent(id: id, occurrence: nil, scope: scope)
+    }
+    func deleteEvent(id: String, occurrence: EventOccurrenceAddress?, scope: RecurrenceEditScope) throws {
+        let index: Int?
+        if let occurrence {
+            guard occurrence.isValid else {
+                throw DraftValidationError.itemNotFound
+            }
+            index = events.firstIndex(where: {
+                $0.mutationID == id && $0.occurrenceAddress == occurrence
+            })
+        } else {
+            index = eventIndex(forMutationID: id)
+        }
+        guard accessState == .granted, let index else { throw DraftValidationError.itemNotFound }
+        guard events[index].allowsModification else { throw DraftValidationError.readOnlyDestination }
+        guard scope != .futureOccurrences || events[index].hasRecurrence else { throw DraftValidationError.invalidRecurrenceScope }
+        if shouldFailNextDelete { shouldFailNextDelete = false; throw DemoCreateError.failed }
+        events.remove(at: index)
+        successfulWriteCount += 1
+    }
 
     private func recurrence(from intent: RecurrenceMutationIntent, preserving previous: RecurrenceSnapshot = .none) -> RecurrenceSnapshot { switch intent { case .preserve: previous; case .clear: .none; case let .replace(rule): .editable(rule) } }
     private func alarms(from intent: EventAlarmMutationIntent, preserving previous: EventAlarmSnapshot = .none) -> EventAlarmSnapshot { switch intent { case .preserve: previous; case .clear: .none; case let .replace(offsets): .editable(offsets) } }

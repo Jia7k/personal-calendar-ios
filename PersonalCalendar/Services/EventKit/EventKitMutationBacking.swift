@@ -6,7 +6,9 @@ import Foundation
 protocol EventKitMutationBacking: AnyObject {
     func createEvent(_ request: EventCreateRequest) throws -> String?
     func updateEvent(id: String, request: EventUpdateRequest) throws
+    func updateEvent(id: String, occurrence: EventOccurrenceAddress?, request: EventUpdateRequest) throws
     func removeEvent(id: String, span: RecurrenceEditScope) throws
+    func removeEvent(id: String, occurrence: EventOccurrenceAddress?, span: RecurrenceEditScope) throws
     func createReminder(_ request: ReminderCreateRequest) throws -> String?
     func updateReminder(id: String, request: ReminderUpdateRequest) throws
     func removeReminder(id: String) throws
@@ -14,6 +16,24 @@ protocol EventKitMutationBacking: AnyObject {
 }
 
 extension EventKitMutationBacking {
+    func updateEvent(
+        id: String,
+        occurrence: EventOccurrenceAddress?,
+        request: EventUpdateRequest
+    ) throws {
+        guard occurrence == nil else { throw EventKitMutationError.itemNotFound }
+        try updateEvent(id: id, request: request)
+    }
+
+    func removeEvent(
+        id: String,
+        occurrence: EventOccurrenceAddress?,
+        span: RecurrenceEditScope
+    ) throws {
+        guard occurrence == nil else { throw EventKitMutationError.itemNotFound }
+        try removeEvent(id: id, span: span)
+    }
+
     /// Older value-only test backings that do not model completion stay safe:
     /// they fail instead of bypassing the live mutation policy.
     func setReminderCompleted(id: String, completed: Bool) throws {

@@ -1,10 +1,35 @@
 import Foundation
 
+struct EventOccurrenceCandidate<Value> {
+    let id: String
+    let displayStart: Date
+    let occurrenceDate: Date
+    let value: Value
+}
+
+enum EventOccurrenceSelector {
+    static func exact<Value>(
+        id: String,
+        occurrence: EventOccurrenceAddress,
+        candidates: [EventOccurrenceCandidate<Value>]
+    ) -> Value? {
+        guard !id.isEmpty, occurrence.isValid else {
+            return nil
+        }
+        return candidates.first {
+            $0.id == id
+                && $0.displayStart == occurrence.displayStart
+                && $0.occurrenceDate == occurrence.occurrenceDate
+        }?.value
+    }
+}
+
 @MainActor
 protocol EventKitStoreDriving: AnyObject {
     func eventAccessGranted() -> Bool
     func reminderAccessGranted() -> Bool
     func event(id: String) -> (any EventMutationHandling)?
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> (any EventMutationHandling)?
     func reminder(id: String) -> (any ReminderMutationHandling)?
     func newEvent() -> any EventMutationHandling
     func newReminder() -> any ReminderMutationHandling
@@ -12,6 +37,13 @@ protocol EventKitStoreDriving: AnyObject {
     func resolveEventDestination(_ destination: UpdateDestination) throws -> String?
     func resolveReminderDestination(_ destination: CreateDestination) throws -> String
     func resolveReminderDestination(_ destination: UpdateDestination) throws -> String?
+}
+
+extension EventKitStoreDriving {
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> (any EventMutationHandling)? {
+        guard occurrence == nil else { return nil }
+        return event(id: id)
+    }
 }
 
 @MainActor

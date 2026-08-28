@@ -26,12 +26,14 @@ struct AgendaItem: Identifiable, Equatable, Sendable {
     let allowsModification: Bool
     let origin: AgendaItemOrigin
     let category: CategorySnapshot?
+    let eventOccurrenceDate: Date?
 
-    init(id: String, title: String, source: AgendaSource, placement: AgendaPlacement, sortDate: Date?, priority: Int, isCompleted: Bool, allowsModification: Bool, origin: AgendaItemOrigin? = nil, category: CategorySnapshot? = nil) {
+    init(id: String, title: String, source: AgendaSource, placement: AgendaPlacement, sortDate: Date?, priority: Int, isCompleted: Bool, allowsModification: Bool, origin: AgendaItemOrigin? = nil, category: CategorySnapshot? = nil, eventOccurrenceDate: Date? = nil) {
         self.id = id; self.title = title; self.source = source; self.placement = placement; self.sortDate = sortDate
         self.priority = priority; self.isCompleted = isCompleted; self.allowsModification = allowsModification
         self.origin = origin ?? .synthetic
         self.category = category
+        self.eventOccurrenceDate = eventOccurrenceDate
     }
 }
 
@@ -69,7 +71,8 @@ extension AgendaItem {
             isCompleted: false,
             allowsModification: event.allowsModification,
             origin: .event(id: event.id),
-            category: category
+            category: category,
+            eventOccurrenceDate: event.occurrenceDate
         )
     }
 

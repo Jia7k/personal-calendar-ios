@@ -31,20 +31,20 @@ final class MonthGridBuilderTests: XCTestCase {
 }
 
 final class MonthGridActivitySummaryTests: XCTestCase {
-    func testQuietMarkersCapAtThreeWhileSourceCountsRemainExact() {
+    func testQuietMarkersShowEachPresentSourceOnceInFixedOrderWhileCountsRemainExact() {
         let items = [
-            item(id: "event-one", source: .event),
             item(id: "task-one", source: .task),
-            item(id: "routine-one", source: .routine),
+            item(id: "event-one", source: .event),
             item(id: "event-two", source: .event),
-            item(id: "event-three", source: .event)
+            item(id: "routine-one", source: .routine),
+            item(id: "task-two", source: .task)
         ]
 
         let summary = MonthGridActivitySummary(items: items)
 
         XCTAssertEqual(summary.markerSources, [.event, .task, .routine])
         XCTAssertEqual(summary.totalCount, 5)
-        XCTAssertEqual(summary.sourceCountDescription, "3 events, 1 task, 1 routine")
+        XCTAssertEqual(summary.sourceCountDescription, "2 events, 2 tasks, 1 routine")
     }
 
     func testSourceCountDescriptionOmitsAbsentSourcesAndHandlesEmptyDays() {
@@ -55,6 +55,7 @@ final class MonthGridActivitySummaryTests: XCTestCase {
         let empty = MonthGridActivitySummary(items: [])
 
         XCTAssertEqual(taskOnly.sourceCountDescription, "2 tasks")
+        XCTAssertEqual(taskOnly.markerSources, [.task])
         XCTAssertEqual(empty.sourceCountDescription, "0 items")
         XCTAssertTrue(empty.markerSources.isEmpty)
     }

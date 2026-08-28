@@ -10,8 +10,16 @@ struct WeekPlannerBuilder {
         reminders: [ReminderSnapshot],
         selectedDay: LocalDay
     ) -> WeekPlannerSnapshot {
-        let eventByID = events.reduce(into: [String: CalendarEventSnapshot]()) { result, event in
-            result[event.id] = event
+        let eventByOccurrence = events.reduce(
+            into: [WeekPlannerEventOccurrenceKey: CalendarEventSnapshot]()
+        ) { result, event in
+            result[
+                .init(
+                    displayID: event.id,
+                    start: event.start,
+                    occurrenceDate: event.occurrenceDate
+                )
+            ] = event
         }
         let reminderByID = reminders.reduce(into: [String: ReminderSnapshot]()) { result, reminder in
             result[reminder.id] = reminder
@@ -44,8 +52,8 @@ struct WeekPlannerBuilder {
             }
 
             let scheduledEvents = agenda.scheduled.compactMap { item -> EventDraft? in
-                guard case let .event(id) = item.origin,
-                      let event = eventByID[id],
+                guard let occurrenceKey = WeekPlannerEventOccurrenceKey(item: item),
+                      let event = eventByOccurrence[occurrenceKey],
                       !event.isAllDay else {
                     return nil
                 }
@@ -92,6 +100,7 @@ struct WeekPlannerBuilder {
             allDayItems: allDayItems,
             timedItems: timedItems,
             laterItems: laterItems,
+            eventDetailsByOccurrence: eventByOccurrence,
             startHour: bounds.start,
             endHour: bounds.end
         )
@@ -176,7 +185,18 @@ struct WeekPlannerBuilder {
     }
 
     private func occurrenceID(for item: AgendaItem, day: LocalDay) -> String {
-        "\(item.id)|\(day.year)-\(day.month)-\(day.day)"
+        var identifier = "\(item.id)|\(day.year)-\(day.month)-\(day.day)"
+        if case let .timed(start) = item.placement {
+            let startMilliseconds = Int64((start.timeIntervalSince1970 * 1_000).rounded())
+            identifier += "|\(startMilliseconds)"
+        }
+        if let occurrenceDate = item.eventOccurrenceDate {
+            let occurrenceMilliseconds = Int64(
+                (occurrenceDate.timeIntervalSince1970 * 1_000).rounded()
+            )
+            identifier += "|occurrence:\(occurrenceMilliseconds)"
+        }
+        return identifier
     }
 
     private func uniqueAllDayItems(_ values: [WeekPlannerAllDayItem]) -> [WeekPlannerAllDayItem] {

@@ -646,6 +646,7 @@ final class CalendarViewModel {
                 allDayItems: [],
                 timedItems: [],
                 laterItems: [],
+                eventDetailsByOccurrence: [:],
                 startHour: 8,
                 endHour: 18
             )

@@ -17,6 +17,7 @@ struct WeekPlannerView: View {
     let onOpenItem: (AgendaItemOrigin) -> Void
     let onSetTaskCompleted: (String, Bool) -> Void
     let onScheduleTaskTime: ((String) -> Void)?
+    let onOpenEvent: ((CalendarEventSnapshot) -> Void)?
 
     init(
         snapshot: WeekPlannerSnapshot,
@@ -26,7 +27,8 @@ struct WeekPlannerView: View {
         onSelectDay: @escaping (LocalDay) -> Void,
         onOpenItem: @escaping (AgendaItemOrigin) -> Void,
         onSetTaskCompleted: @escaping (String, Bool) -> Void = { _, _ in },
-        onScheduleTaskTime: ((String) -> Void)? = nil
+        onScheduleTaskTime: ((String) -> Void)? = nil,
+        onOpenEvent: ((CalendarEventSnapshot) -> Void)? = nil
     ) {
         self.snapshot = snapshot
         self.selectedDay = selectedDay
@@ -36,13 +38,18 @@ struct WeekPlannerView: View {
         self.onOpenItem = onOpenItem
         self.onSetTaskCompleted = onSetTaskCompleted
         self.onScheduleTaskTime = onScheduleTaskTime
+        self.onOpenEvent = onOpenEvent
     }
 
     var body: some View {
         if dynamicTypeSize.isAccessibilitySize {
-            accessibleAgenda
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("week-planner")
+            ScrollView {
+                accessibleAgenda
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("week-planner")
         } else {
             sevenDayTimeline
                 .accessibilityElement(children: .contain)
@@ -230,8 +237,24 @@ struct WeekPlannerView: View {
                 .buttonStyle(.plain)
                 .frame(width: eventWidth(value, dayWidth: dayWidth), height: height, alignment: .topLeading)
                 .offset(x: x, y: y)
+                .popover(isPresented: eventPopoverBinding(
+                    identifier: value.id,
+                    item: value.item
+                )) {
+                    if let event = eventDetails(for: value.item) {
+                        WeekEventDetailCard(
+                            event: event,
+                            calendar: calendar,
+                            onClose: { selectedItem = nil },
+                            onOpen: { openEvent(event) }
+                        )
+                        .presentationCompactAdaptation(.popover)
+                    }
+                }
                 .accessibilityIdentifier("week-event-\(originIdentifier(value.item.origin) ?? value.item.id)")
                 .accessibilityLabel("Event, \(value.item.title), \(timeRange(start: value.start, end: end)), \(dayLabel(value.day))")
+                .accessibilityValue(selectedItem?.id == value.id ? "Expanded" : "Collapsed")
+                .accessibilityHint("Shows full event details before opening the event.")
             case .taskDue:
                 Button {
                     select(day: value.day, item: value.item, identifier: value.id)
@@ -259,7 +282,7 @@ struct WeekPlannerView: View {
 
     @ViewBuilder
     private var selectedDetail: some View {
-        if let selectedItem {
+        if let selectedItem, eventDetails(for: selectedItem.item) == nil {
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(selectedItem.item.title)
@@ -349,19 +372,31 @@ struct WeekPlannerView: View {
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(day == selectedDay ? .isSelected : [])
 
-                    ForEach(allDay) { item in
-                        accessibleRow(item, prefix: "All day")
+                    ForEach(snapshot.allDayItems.filter { $0.day == day }) { value in
+                        accessibleRow(
+                            value.item,
+                            day: day,
+                            identifier: value.id,
+                            prefix: "All day"
+                        )
                     }
                     ForEach(timed) { value in
                         accessibleRow(
                             value.item,
+                            day: day,
+                            identifier: value.id,
                             prefix: value.kind == .event
                                 ? "Event, \(timeRange(start: value.start, end: value.end ?? value.start))"
                                 : "Task due, \(value.start.formatted(date: .omitted, time: .shortened))"
                         )
                     }
                     ForEach(routines) { item in
-                        accessibleRow(item, prefix: "Later routine")
+                        accessibleRow(
+                            item,
+                            day: day,
+                            identifier: item.id,
+                            prefix: "Later routine"
+                        )
                     }
                     if allDay.isEmpty && timed.isEmpty && routines.isEmpty {
                         Text("Nothing planned")
@@ -375,10 +410,19 @@ struct WeekPlannerView: View {
         }
     }
 
-    private func accessibleRow(_ item: AgendaItem, prefix: String) -> some View {
+    private func accessibleRow(
+        _ item: AgendaItem,
+        day: LocalDay,
+        identifier: String,
+        prefix: String
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                onOpenItem(item.origin)
+                if eventDetails(for: item) != nil {
+                    select(day: day, item: item, identifier: identifier)
+                } else {
+                    onOpenItem(item.origin)
+                }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: symbol(for: item.source))
@@ -394,7 +438,30 @@ struct WeekPlannerView: View {
                 .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier(accessibilityIdentifier(for: item))
             .accessibilityLabel("\(prefix), \(AgendaAccessibilityDescription.build(for: item))")
+            .accessibilityValue(
+                eventDetails(for: item) == nil
+                    ? ""
+                    : (selectedItem?.id == identifier ? "Expanded" : "Collapsed")
+            )
+            .accessibilityHint(
+                eventDetails(for: item) == nil
+                    ? "Opens the item."
+                    : "Shows full event details before opening the event."
+            )
+
+            if selectedItem?.id == identifier,
+               let event = eventDetails(for: item) {
+                WeekEventDetailCard(
+                    event: event,
+                    calendar: calendar,
+                    isInline: true,
+                    containerIdentifier: "week-event-detail-inline",
+                    onClose: { selectedItem = nil },
+                    onOpen: { openEvent(event) }
+                )
+            }
 
             if let reminderID = reminderID(for: item),
                item.allowsModification,
@@ -466,6 +533,48 @@ struct WeekPlannerView: View {
         selectedItem = .init(id: identifier, item: item)
     }
 
+    private func eventPopoverBinding(
+        identifier: String,
+        item: AgendaItem
+    ) -> Binding<Bool> {
+        Binding(
+            get: {
+                selectedItem?.id == identifier && eventDetails(for: item) != nil
+            },
+            set: { isPresented in
+                if !isPresented, selectedItem?.id == identifier {
+                    selectedItem = nil
+                }
+            }
+        )
+    }
+
+    private func accessibilityIdentifier(for item: AgendaItem) -> String {
+        let identifier = originIdentifier(item.origin) ?? item.id
+        return switch item.source {
+        case .event: "week-event-\(identifier)"
+        case .task: "week-task-\(identifier)"
+        case .routine: "week-routine-\(identifier)"
+        }
+    }
+
+    private func eventDetails(for item: AgendaItem) -> CalendarEventSnapshot? {
+        guard let key = WeekPlannerEventOccurrenceKey(item: item) else { return nil }
+        return snapshot.eventDetailsByOccurrence[key]
+    }
+
+    private func openEvent(_ event: CalendarEventSnapshot) {
+        selectedItem = nil
+        Task { @MainActor in
+            await Task.yield()
+            if let onOpenEvent {
+                onOpenEvent(event)
+            } else {
+                onOpenItem(.event(id: event.id))
+            }
+        }
+    }
+
     private func canOpen(_ origin: AgendaItemOrigin) -> Bool {
         switch origin {
         case .event, .reminder, .routine: true
@@ -510,6 +619,138 @@ struct WeekPlannerView: View {
 
     private func dayLabel(_ day: LocalDay) -> String {
         day.startDate(in: calendar).formatted(.dateTime.weekday(.wide).month(.wide).day())
+    }
+}
+
+private struct WeekEventDetailCard: View {
+    let event: CalendarEventSnapshot
+    let calendar: Calendar
+    var isInline = false
+    var containerIdentifier = "week-event-detail-card"
+    let onClose: () -> Void
+    let onOpen: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if isInline {
+                HStack(alignment: .top, spacing: 12) {
+                    title
+                    Spacer(minLength: 8)
+                    closeButton
+                }
+                detailRows
+            } else {
+                ZStack(alignment: .topTrailing) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            title
+                            detailRows
+                        }
+                        .padding(.trailing, CalendarTheme.minimumTapSize + 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    closeButton
+                        .accessibilitySortPriority(1)
+                }
+                .frame(maxHeight: 360)
+            }
+
+            Button("Open Event", action: onOpen)
+                .buttonStyle(.borderedProminent)
+                .tint(CalendarTheme.accent)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityIdentifier("week-open-selected-item")
+        }
+        .padding(20)
+        .frame(
+            idealWidth: isInline ? nil : 320,
+            maxWidth: isInline ? .infinity : 360,
+            alignment: .leading
+        )
+        .background(CalendarTheme.surface)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(containerIdentifier)
+    }
+
+    private var title: some View {
+        Text(event.title)
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("week-event-detail-title")
+    }
+
+    private var closeButton: some View {
+        Button("Close", systemImage: "xmark", action: onClose)
+            .labelStyle(.iconOnly)
+            .frame(
+                minWidth: CalendarTheme.minimumTapSize,
+                minHeight: CalendarTheme.minimumTapSize
+            )
+            .accessibilityIdentifier("week-event-detail-close")
+    }
+
+    private var timeDescription: String {
+        if event.isAllDay {
+            return "All day"
+        }
+        let start = event.start.formatted(date: .abbreviated, time: .shortened)
+        let end: String
+        if calendar.isDate(event.start, inSameDayAs: event.end) {
+            end = event.end.formatted(date: .omitted, time: .shortened)
+        } else {
+            end = event.end.formatted(date: .abbreviated, time: .shortened)
+        }
+        return "\(start)–\(end)"
+    }
+
+    private var detailRows: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            detailRow(systemImage: "clock", identifier: "week-event-detail-time") {
+                Text(timeDescription)
+            }
+
+            if let location = normalized(event.location) {
+                detailRow(systemImage: "mappin.and.ellipse", identifier: "week-event-detail-location") {
+                    Text(location)
+                }
+            }
+
+            detailRow(systemImage: "calendar", identifier: "week-event-detail-calendar") {
+                Text(event.calendarTitle)
+            }
+
+            if let notes = normalized(event.notes) {
+                Divider()
+                detailRow(systemImage: "note.text", identifier: "week-event-detail-notes") {
+                    Text(notes)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .font(.subheadline)
+    }
+
+    private func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func detailRow<Content: View>(
+        systemImage: String,
+        identifier: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: systemImage)
+                .foregroundStyle(CalendarTheme.accent)
+                .frame(width: 18)
+                .accessibilityHidden(true)
+            content()
+                .accessibilityIdentifier(identifier)
+        }
     }
 }
 

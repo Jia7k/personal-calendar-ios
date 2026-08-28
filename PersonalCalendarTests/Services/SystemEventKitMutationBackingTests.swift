@@ -106,6 +106,36 @@ final class SystemEventKitMutationBackingTests: XCTestCase {
         }
     }
 
+    func testEventUpdateAndRemoveResolveTheExactStableOccurrence() throws {
+        let occurrence = EventOccurrenceAddress(
+            displayStart: Date(timeIntervalSince1970: 8_000),
+            occurrenceDate: Date(timeIntervalSince1970: 7_000)
+        )
+        let updateDriver = RecordingDriver()
+
+        try backing(updateDriver).updateEvent(
+            id: "series",
+            occurrence: occurrence,
+            request: .init(
+                draft: eventDraft(),
+                destination: .preserveCurrent,
+                scope: .thisOccurrence
+            )
+        )
+
+        XCTAssertEqual(updateDriver.eventOccurrenceLookups, [occurrence])
+
+        let removeDriver = RecordingDriver()
+        removeDriver.eventHandle.hasRecurrenceValue = true
+        try backing(removeDriver).removeEvent(
+            id: "series",
+            occurrence: occurrence,
+            span: .futureOccurrences
+        )
+
+        XCTAssertEqual(removeDriver.eventOccurrenceLookups, [occurrence])
+    }
+
     func testNonRecurringEventCanBecomeRecurringOnlyFromThisOccurrence() throws {
         let driver = RecordingDriver()
         var draft = eventDraft(); draft.recurrence = .replace(.init(frequency: .daily, interval: 1, weekdays: [], endDate: nil))
@@ -565,10 +595,15 @@ private final class RecordingDriver: EventKitStoreDriving {
     var newReminderCount = 0
     var eventDestinationRequests: [DestinationRequest] = []
     var reminderDestinationRequests: [DestinationRequest] = []
+    var eventOccurrenceLookups: [EventOccurrenceAddress?] = []
 
     func eventAccessGranted() -> Bool { eventAccess }
     func reminderAccessGranted() -> Bool { reminderAccess }
     func event(id: String) -> (any EventMutationHandling)? { eventLookupEnabled ? eventHandle : nil }
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> (any EventMutationHandling)? {
+        eventOccurrenceLookups.append(occurrence)
+        return eventLookupEnabled ? eventHandle : nil
+    }
     func reminder(id: String) -> (any ReminderMutationHandling)? { reminderLookupEnabled ? reminderHandle : nil }
     func newEvent() -> any EventMutationHandling { newEventCount += 1; return eventHandle }
     func newReminder() -> any ReminderMutationHandling { newReminderCount += 1; return reminderHandle }

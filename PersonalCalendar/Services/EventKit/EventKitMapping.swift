@@ -174,7 +174,8 @@ extension CalendarEventSnapshot {
             location: event.location,
             url: event.url,
             alarms: eventAlarmSnapshot(event.alarms),
-            recurrence: EventKitRecurrenceMapper.snapshot(from: event.recurrenceRules ?? [], startsAt: event.startDate)
+            recurrence: EventKitRecurrenceMapper.snapshot(from: event.recurrenceRules ?? [], startsAt: event.startDate),
+            occurrenceDate: event.occurrenceDate
         )
     }
 }

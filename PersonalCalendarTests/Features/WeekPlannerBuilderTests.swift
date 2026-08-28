@@ -77,6 +77,117 @@ final class WeekPlannerBuilderTests: XCTestCase {
         XCTAssertEqual(result.timedItems[1].end, date(2026, 9, 1, 2, calendar: calendar))
     }
 
+    func testBuildIndexesFullEventDetailsByDisplayIDWithoutClippingMetadata() {
+        let calendar = makeCalendar()
+        let tuesday = LocalDay(year: 2026, month: 9, day: 1)
+        let originalStart = date(2026, 8, 31, 23, calendar: calendar)
+        let originalEnd = date(2026, 9, 1, 2, calendar: calendar)
+        let event = CalendarEventSnapshot(
+            id: "overnight",
+            mutationID: "mutation-overnight",
+            title: "Hackathon",
+            start: originalStart,
+            end: originalEnd,
+            isAllDay: false,
+            calendarID: "university",
+            calendarTitle: "University",
+            allowsModification: true,
+            hasRecurrence: false,
+            notes: "Bring a charger",
+            location: "Lab 4"
+        )
+        let item = AgendaItem(event: event)
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday, tuesday],
+            agendas: [monday: agenda(scheduled: [item]), tuesday: agenda(scheduled: [item])],
+            events: [event],
+            reminders: [],
+            selectedDay: monday
+        )
+
+        let details = result.eventDetailsByOccurrence[
+            WeekPlannerEventOccurrenceKey(displayID: "overnight", start: originalStart)
+        ]
+        XCTAssertEqual(details?.title, "Hackathon")
+        XCTAssertEqual(details?.start, originalStart)
+        XCTAssertEqual(details?.end, originalEnd)
+        XCTAssertEqual(details?.calendarTitle, "University")
+        XCTAssertEqual(details?.location, "Lab 4")
+        XCTAssertEqual(details?.notes, "Bring a charger")
+    }
+
+    func testBuildKeepsSameIdentityAndDisplayedStartOccurrencesDistinctByOriginalDate() {
+        let calendar = makeCalendar()
+        let sharedStart = date(2026, 8, 31, 9, calendar: calendar)
+        let firstOccurrenceDate = date(2026, 8, 24, 9, calendar: calendar)
+        let secondOccurrenceDate = date(2026, 8, 25, 9, calendar: calendar)
+        let morning = CalendarEventSnapshot(
+            id: "recurring-class",
+            mutationID: "recurring-class",
+            title: "Morning lecture",
+            start: sharedStart,
+            end: date(2026, 8, 31, 10, calendar: calendar),
+            isAllDay: false,
+            calendarID: "university",
+            calendarTitle: "University",
+            allowsModification: true,
+            hasRecurrence: true,
+            notes: "Chapter one",
+            location: "Room A",
+            occurrenceDate: firstOccurrenceDate
+        )
+        let afternoon = CalendarEventSnapshot(
+            id: "recurring-class",
+            mutationID: "recurring-class",
+            title: "Afternoon lecture",
+            start: sharedStart,
+            end: date(2026, 8, 31, 11, calendar: calendar),
+            isAllDay: false,
+            calendarID: "university",
+            calendarTitle: "University",
+            allowsModification: true,
+            hasRecurrence: true,
+            notes: "Chapter two",
+            location: "Room B",
+            occurrenceDate: secondOccurrenceDate
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [monday: agenda(scheduled: [
+                AgendaItem(event: morning),
+                AgendaItem(event: afternoon)
+            ])],
+            events: [morning, afternoon],
+            reminders: [],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.timedItems.map(\.start), [sharedStart, sharedStart])
+        XCTAssertEqual(Set(result.timedItems.map(\.id)).count, 2)
+        XCTAssertEqual(
+            result.eventDetailsByOccurrence[
+                WeekPlannerEventOccurrenceKey(
+                    displayID: morning.id,
+                    start: sharedStart,
+                    occurrenceDate: firstOccurrenceDate
+                )
+            ]?.location,
+            "Room A"
+        )
+        XCTAssertEqual(
+            result.eventDetailsByOccurrence[
+                WeekPlannerEventOccurrenceKey(
+                    displayID: afternoon.id,
+                    start: sharedStart,
+                    occurrenceDate: secondOccurrenceDate
+                )
+            ]?.location,
+            "Room B"
+        )
+    }
+
     func testBuildRepresentsTimedTaskAsPointMarker() {
         let calendar = makeCalendar()
         let wednesday = LocalDay(year: 2026, month: 9, day: 2)

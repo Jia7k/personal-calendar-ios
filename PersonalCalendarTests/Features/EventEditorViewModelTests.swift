@@ -145,6 +145,80 @@ final class EventEditorViewModelTests: XCTestCase {
         XCTAssertEqual(service.updates.single?.scope, .futureOccurrences)
     }
 
+    func testRecurringEditLoadsAndMutatesTheExactStableOccurrence() async {
+        let displayStart = start.addingTimeInterval(5 * 24 * 60 * 60)
+        let occurrenceDate = displayStart.addingTimeInterval(-3_600)
+        let occurrenceAddress = EventOccurrenceAddress(
+            displayStart: displayStart,
+            occurrenceDate: occurrenceDate
+        )
+        let occurrence = event(
+            title: "Exact Friday class",
+            recurrence: .editable(rule),
+            eventStart: displayStart,
+            eventEnd: displayStart.addingTimeInterval(3_600),
+            occurrenceDate: occurrenceDate
+        )
+        let service = RecordingCalendarService(
+            event: event(title: "First series occurrence", recurrence: .editable(rule)),
+            occurrences: [occurrenceAddress: occurrence]
+        )
+        let subject = EventEditorViewModel.edit(
+            displayID: "display",
+            occurrence: occurrenceAddress,
+            service: service
+        )
+
+        await subject.load()
+        XCTAssertEqual(subject.title, "Exact Friday class")
+        XCTAssertEqual(subject.start, displayStart)
+        subject.start = displayStart.addingTimeInterval(1_800)
+        subject.end = displayStart.addingTimeInterval(5_400)
+
+        await subject.requestSave(scope: .thisOccurrence)
+        subject.confirm()
+
+        XCTAssertEqual(
+            service.occurrenceLookups,
+            [occurrenceAddress, occurrenceAddress, occurrenceAddress]
+        )
+        XCTAssertEqual(service.occurrenceUpdates.compactMap { $0 }.single, occurrenceAddress)
+    }
+
+    func testRecurringDeleteMutatesTheExactStableOccurrence() async {
+        let displayStart = start.addingTimeInterval(7 * 24 * 60 * 60)
+        let occurrenceDate = displayStart.addingTimeInterval(-7_200)
+        let occurrenceAddress = EventOccurrenceAddress(
+            displayStart: displayStart,
+            occurrenceDate: occurrenceDate
+        )
+        let occurrence = event(
+            recurrence: .editable(rule),
+            eventStart: displayStart,
+            eventEnd: displayStart.addingTimeInterval(3_600),
+            occurrenceDate: occurrenceDate
+        )
+        let service = RecordingCalendarService(
+            event: event(recurrence: .editable(rule)),
+            occurrences: [occurrenceAddress: occurrence]
+        )
+        let subject = EventEditorViewModel.edit(
+            displayID: "display",
+            occurrence: occurrenceAddress,
+            service: service
+        )
+
+        await subject.load()
+        await subject.requestDelete(scope: .thisOccurrence)
+        subject.confirm()
+
+        XCTAssertEqual(
+            service.occurrenceLookups,
+            [occurrenceAddress, occurrenceAddress, occurrenceAddress]
+        )
+        XCTAssertEqual(service.occurrenceDeletes.compactMap { $0 }.single, occurrenceAddress)
+    }
+
     func testChangingRecurrenceBlocksThisOccurrenceButAllowsFuture() async {
         let service = RecordingCalendarService(event: event(recurrence: .editable(rule)))
         let subject = EventEditorViewModel.edit(displayID: "display", service: service)
@@ -681,7 +755,7 @@ final class EventEditorViewModelTests: XCTestCase {
     private var rule: RecurrenceRuleDraft { Self.rule }
     private func writable(_ id: String) -> CalendarDescriptor { .init(id: id, title: id, colorHex: "#000", allowsContentModifications: true) }
     private func readOnly(_ id: String) -> CalendarDescriptor { .init(id: id, title: id, colorHex: "#000", allowsContentModifications: false) }
-    private func event(id: String = "display", mutationID: String? = "opaque", allowsModification: Bool = true, notes: String? = nil, location: String? = nil, url: URL? = nil, alarms: EventAlarmSnapshot = .none, recurrence: RecurrenceSnapshot = .none) -> CalendarEventSnapshot { .init(id: id, mutationID: mutationID, title: "Event", start: start, end: end, isAllDay: false, calendarID: "home", calendarTitle: "Home", allowsModification: allowsModification, hasRecurrence: recurrence != .none, notes: notes, location: location, url: url, alarms: alarms, recurrence: recurrence) }
+    private func event(id: String = "display", mutationID: String? = "opaque", title: String = "Event", allowsModification: Bool = true, notes: String? = nil, location: String? = nil, url: URL? = nil, alarms: EventAlarmSnapshot = .none, recurrence: RecurrenceSnapshot = .none, eventStart: Date? = nil, eventEnd: Date? = nil, occurrenceDate: Date? = nil) -> CalendarEventSnapshot { .init(id: id, mutationID: mutationID, title: title, start: eventStart ?? start, end: eventEnd ?? end, isAllDay: false, calendarID: "home", calendarTitle: "Home", allowsModification: allowsModification, hasRecurrence: recurrence != .none, notes: notes, location: location, url: url, alarms: alarms, recurrence: recurrence, occurrenceDate: occurrenceDate) }
 
     private func mutationErrorTaxonomy(action: EventEditorAction) -> [(EventKitMutationError, EventEditorPhase)] {
         [
@@ -740,20 +814,37 @@ private final class RecordingCalendarService: CalendarServicing {
     var eventValues: [CalendarEventSnapshot?]
     var calendarResponses: [[CalendarDescriptor]]
     var onEventLookup: (() -> Void)?
+    var occurrences: [EventOccurrenceAddress: CalendarEventSnapshot]
     private(set) var displayLookups: [String] = []
+    private(set) var occurrenceLookups: [EventOccurrenceAddress] = []
+    private(set) var occurrenceUpdates: [EventOccurrenceAddress?] = []
+    private(set) var occurrenceDeletes: [EventOccurrenceAddress?] = []
     private(set) var creates: [EventDraft] = []
     private(set) var updates: [EventUpdateCall] = []
     private(set) var deletes: [EventDeleteCall] = []
     private(set) var fetchCount = 0
 
-    init(access: AccessState = .granted, event: CalendarEventSnapshot? = nil, events: [CalendarEventSnapshot?] = [], calendars: [CalendarDescriptor] = [], calendarResponses: [[CalendarDescriptor]] = [], createID: String? = "created", createError: Error? = nil, updateError: Error? = nil, deleteError: Error? = nil) { self.accessState = access; eventValue = event; eventValues = events; calendarValues = calendars; self.calendarResponses = calendarResponses; self.createID = createID; self.createError = createError; self.updateError = updateError; self.deleteError = deleteError }
+    init(access: AccessState = .granted, event: CalendarEventSnapshot? = nil, events: [CalendarEventSnapshot?] = [], occurrences: [EventOccurrenceAddress: CalendarEventSnapshot] = [:], calendars: [CalendarDescriptor] = [], calendarResponses: [[CalendarDescriptor]] = [], createID: String? = "created", createError: Error? = nil, updateError: Error? = nil, deleteError: Error? = nil) { self.accessState = access; eventValue = event; eventValues = events; self.occurrences = occurrences; calendarValues = calendars; self.calendarResponses = calendarResponses; self.createID = createID; self.createError = createError; self.updateError = updateError; self.deleteError = deleteError }
     func requestFullAccess() async -> AccessState { accessState }
     func calendars() -> [CalendarDescriptor] { calendarResponses.isEmpty ? calendarValues : calendarResponses.removeFirst() }
     func fetchEvents(in interval: DateInterval, calendarIDs: Set<String>) throws -> [CalendarEventSnapshot] { fetchCount += 1; return [] }
     func createEvent(_ draft: EventDraft) throws -> String? { creates.append(draft); if let createError { throw createError }; return createID }
     func event(id: String) -> CalendarEventSnapshot? { displayLookups.append(id); onEventLookup?(); guard accessState == .granted else { return nil }; return eventValues.isEmpty ? eventValue : eventValues.removeFirst() }
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> CalendarEventSnapshot? {
+        guard let occurrence else { return event(id: id) }
+        occurrenceLookups.append(occurrence)
+        return occurrences[occurrence]
+    }
     func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws { updates.append(.init(id: id, draft: draft, scope: scope)); if let updateError { throw updateError } }
+    func updateEvent(id: String, occurrence: EventOccurrenceAddress?, draft: EventDraft, scope: RecurrenceEditScope) throws {
+        occurrenceUpdates.append(occurrence)
+        try updateEvent(id: id, draft: draft, scope: scope)
+    }
     func deleteEvent(id: String, scope: RecurrenceEditScope) throws { deletes.append(.init(id: id, scope: scope)); if let deleteError { throw deleteError } }
+    func deleteEvent(id: String, occurrence: EventOccurrenceAddress?, scope: RecurrenceEditScope) throws {
+        occurrenceDeletes.append(occurrence)
+        try deleteEvent(id: id, scope: scope)
+    }
 }
 
 private extension Array { var single: Element? { count == 1 ? first : nil } }

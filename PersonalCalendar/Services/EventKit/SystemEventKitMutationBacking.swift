@@ -36,8 +36,18 @@ final class SystemEventKitMutationBacking: EventKitMutationBacking {
     }
 
     func updateEvent(id: String, request: EventUpdateRequest) throws {
+        try updateEvent(id: id, occurrence: nil, request: request)
+    }
+
+    func updateEvent(
+        id: String,
+        occurrence: EventOccurrenceAddress?,
+        request: EventUpdateRequest
+    ) throws {
         try requireEventAccess()
-        guard let handle = driver.event(id: id) else { throw EventKitMutationError.itemNotFound }
+        guard let handle = driver.event(id: id, occurrence: occurrence) else {
+            throw EventKitMutationError.itemNotFound
+        }
         guard handle.allowsModification else { throw EventKitMutationError.itemReadOnly }
         try validate(request.draft)
         try validateEventScope(handle: handle, request: request)
@@ -55,8 +65,18 @@ final class SystemEventKitMutationBacking: EventKitMutationBacking {
     }
 
     func removeEvent(id: String, span: RecurrenceEditScope) throws {
+        try removeEvent(id: id, occurrence: nil, span: span)
+    }
+
+    func removeEvent(
+        id: String,
+        occurrence: EventOccurrenceAddress?,
+        span: RecurrenceEditScope
+    ) throws {
         try requireEventAccess()
-        guard let handle = driver.event(id: id) else { throw EventKitMutationError.itemNotFound }
+        guard let handle = driver.event(id: id, occurrence: occurrence) else {
+            throw EventKitMutationError.itemNotFound
+        }
         guard handle.allowsModification else { throw EventKitMutationError.itemReadOnly }
         guard handle.hasRecurrence || span == .thisOccurrence else { throw EventKitMutationError.invalidRecurrenceScope }
         do { try handle.remove(scope: span, commit: true) }

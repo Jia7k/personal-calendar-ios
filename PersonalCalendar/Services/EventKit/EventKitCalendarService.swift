@@ -77,7 +77,8 @@ struct EventKitEventDetailResolver {
             location: eventSnapshot.location,
             url: eventSnapshot.url,
             alarms: eventSnapshot.alarms,
-            recurrence: eventSnapshot.recurrence
+            recurrence: eventSnapshot.recurrence,
+            occurrenceDate: eventSnapshot.occurrenceDate
         )
     }
 }
@@ -143,8 +144,71 @@ final class EventKitCalendarService: CalendarServicing {
         )
         return resolver.requiredEvent(id: id)
     }
+
+    func event(id: String, occurrence: EventOccurrenceAddress?) -> CalendarEventSnapshot? {
+        guard let occurrence else { return event(id: id) }
+        guard accessState == .granted, occurrence.isValid else {
+            return nil
+        }
+        let predicate = store.predicateForEvents(
+            withStart: occurrence.displayStart.addingTimeInterval(-1),
+            end: occurrence.displayStart.addingTimeInterval(1),
+            calendars: nil
+        )
+        let candidates = store.events(matching: predicate).map { event in
+            EventOccurrenceCandidate(
+                id: EventKitEventCapabilityMapper.mutationID(
+                    from: event.eventIdentifier
+                ) ?? event.calendarItemIdentifier,
+                displayStart: event.startDate,
+                occurrenceDate: event.occurrenceDate ?? event.startDate,
+                value: event
+            )
+        }
+        return EventOccurrenceSelector.exact(
+            id: id,
+            occurrence: occurrence,
+            candidates: candidates
+        ).map {
+            CalendarEventSnapshot(event: $0)
+        }
+    }
+
     func updateEvent(id: String, draft: EventDraft, scope: RecurrenceEditScope) throws {
         try mutations.updateEvent(id: id, request: .init(draft: draft, destination: draft.calendarID.map(UpdateDestination.explicit) ?? .preserveCurrent, scope: scope))
     }
-    func deleteEvent(id: String, scope: RecurrenceEditScope) throws { try mutations.removeEvent(id: id, span: scope) }
+
+    func updateEvent(
+        id: String,
+        occurrence: EventOccurrenceAddress?,
+        draft: EventDraft,
+        scope: RecurrenceEditScope
+    ) throws {
+        try mutations.updateEvent(
+            id: id,
+            occurrence: occurrence,
+            request: .init(
+                draft: draft,
+                destination: draft.calendarID.map(UpdateDestination.explicit)
+                    ?? .preserveCurrent,
+                scope: scope
+            )
+        )
+    }
+
+    func deleteEvent(id: String, scope: RecurrenceEditScope) throws {
+        try mutations.removeEvent(id: id, span: scope)
+    }
+
+    func deleteEvent(
+        id: String,
+        occurrence: EventOccurrenceAddress?,
+        scope: RecurrenceEditScope
+    ) throws {
+        try mutations.removeEvent(
+            id: id,
+            occurrence: occurrence,
+            span: scope
+        )
+    }
 }

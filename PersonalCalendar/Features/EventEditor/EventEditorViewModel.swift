@@ -43,7 +43,10 @@ enum EventEditorPhase: Equatable {
 @MainActor
 @Observable
 final class EventEditorViewModel {
-    private enum Mode { case create, edit(displayID: String) }
+    private enum Mode {
+        case create
+        case edit(displayID: String, occurrence: EventOccurrenceAddress?)
+    }
     private enum PendingAction: Equatable {
         case save(scope: RecurrenceEditScope)
         case delete(scope: RecurrenceEditScope)
@@ -336,8 +339,11 @@ final class EventEditorViewModel {
     ) -> EventEditorViewModel? {
         guard canDuplicate,
               service.accessState == .granted,
-              case let .edit(displayID) = mode,
-              let snapshot = service.event(id: displayID),
+              case let .edit(displayID, occurrence) = mode,
+              let snapshot = service.event(
+                  id: displayID,
+                  occurrence: occurrence
+              ),
               snapshot.allowsModification,
               snapshot.mutationID != nil,
               Self.supportsFaithfulDuplicate(snapshot),
@@ -456,6 +462,7 @@ final class EventEditorViewModel {
 
     static func edit(
         displayID: String,
+        occurrence: EventOccurrenceAddress? = nil,
         service: any CalendarServicing,
         categories: (any CategoryRepository)? = nil,
         duplicateDestinationCalendarIDs: Set<String>? = nil,
@@ -465,7 +472,10 @@ final class EventEditorViewModel {
     ) -> EventEditorViewModel {
         let initialStart = Date.now
         return EventEditorViewModel(
-            mode: .edit(displayID: displayID),
+            mode: .edit(
+                displayID: displayID,
+                occurrence: occurrence
+            ),
             service: service,
             initialStart: initialStart,
             initialEnd: initialStart.addingTimeInterval(3_600),
@@ -486,7 +496,11 @@ final class EventEditorViewModel {
             phase = .unavailable(reason: .accessUnavailable)
             return
         }
-        guard case let .edit(displayID) = mode, let snapshot = service.event(id: displayID) else {
+        guard case let .edit(displayID, occurrence) = mode,
+              let snapshot = service.event(
+                  id: displayID,
+                  occurrence: occurrence
+              ) else {
             becomeItemGone()
             return
         }
@@ -634,8 +648,13 @@ final class EventEditorViewModel {
             phase = .unavailable(reason: .accessUnavailable)
             return nil
         }
-        guard case let .edit(displayID) = mode else { return nil }
-        guard let snapshot = service.event(id: displayID) else {
+        guard case let .edit(displayID, occurrence) = mode else {
+            return nil
+        }
+        guard let snapshot = service.event(
+            id: displayID,
+            occurrence: occurrence
+        ) else {
             becomeItemGone()
             return nil
         }
@@ -775,7 +794,12 @@ final class EventEditorViewModel {
         }
         phase = .writing(action: .save)
         do {
-            try service.updateEvent(id: current.mutationID!, draft: materializedDraft(), scope: effectiveScope)
+            try service.updateEvent(
+                id: current.mutationID!,
+                occurrence: editOccurrence,
+                draft: materializedDraft(),
+                scope: effectiveScope
+            )
             assignCategory(to: current.mutationID!)
             phase = .updated
             commit(.updated)
@@ -791,7 +815,11 @@ final class EventEditorViewModel {
         retryAction = .delete(scope: scope)
         phase = .writing(action: .delete(scope: scope))
         do {
-            try service.deleteEvent(id: current.mutationID!, scope: scope)
+            try service.deleteEvent(
+                id: current.mutationID!,
+                occurrence: editOccurrence,
+                scope: scope
+            )
             phase = .deleted
             commit(.deleted)
         } catch {
@@ -803,6 +831,11 @@ final class EventEditorViewModel {
         confirmationGeneration += 1
         pendingConfirmation = action
         phase = .confirming(action: action.editorAction)
+    }
+
+    private var editOccurrence: EventOccurrenceAddress? {
+        guard case let .edit(_, occurrence) = mode else { return nil }
+        return occurrence
     }
 
     private func materializedDraft() -> EventDraft {

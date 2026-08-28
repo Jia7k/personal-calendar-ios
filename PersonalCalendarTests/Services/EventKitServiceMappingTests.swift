@@ -4,6 +4,65 @@ import XCTest
 
 @MainActor
 final class EventKitServiceMappingTests: XCTestCase {
+    func testOccurrenceSelectorRequiresIdentifierDisplayedStartAndStableOccurrenceDate() {
+        let displayedStart = Date(timeIntervalSince1970: 5_000)
+        let firstOccurrenceDate = Date(timeIntervalSince1970: 1_000)
+        let exactOccurrenceDate = Date(timeIntervalSince1970: 2_000)
+        let candidates = [
+            EventOccurrenceCandidate(
+                id: "series",
+                displayStart: displayedStart,
+                occurrenceDate: firstOccurrenceDate,
+                value: "wrong occurrence"
+            ),
+            EventOccurrenceCandidate(
+                id: "different",
+                displayStart: displayedStart,
+                occurrenceDate: exactOccurrenceDate,
+                value: "wrong series"
+            ),
+            EventOccurrenceCandidate(
+                id: "series",
+                displayStart: displayedStart,
+                occurrenceDate: exactOccurrenceDate,
+                value: "exact"
+            )
+        ]
+        let exactAddress = EventOccurrenceAddress(
+            displayStart: displayedStart,
+            occurrenceDate: exactOccurrenceDate
+        )
+
+        XCTAssertEqual(
+            EventOccurrenceSelector.exact(
+                id: "series",
+                occurrence: exactAddress,
+                candidates: candidates
+            ),
+            "exact"
+        )
+        XCTAssertNil(
+            EventOccurrenceSelector.exact(
+                id: "series",
+                occurrence: .init(
+                    displayStart: Date(timeIntervalSince1970: 9_000),
+                    occurrenceDate: exactOccurrenceDate
+                ),
+                candidates: candidates
+            )
+        )
+        XCTAssertNil(
+            EventOccurrenceSelector.exact(
+                id: "series",
+                occurrence: .init(
+                    displayStart: displayedStart,
+                    occurrenceDate: Date(timeIntervalSinceReferenceDate: .infinity)
+                ),
+                candidates: candidates
+            )
+        )
+    }
+
     // Break caught: accepting an empty reminder title would create an unusable task.
     func testReminderDraftRejectsBlankTitle() {
         XCTAssertThrowsError(
