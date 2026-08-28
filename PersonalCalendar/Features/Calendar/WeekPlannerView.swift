@@ -214,8 +214,9 @@ struct WeekPlannerView: View {
             case .event:
                 let end = value.end ?? value.start
                 let height = max(CalendarTheme.minimumTapSize, (minuteOffset(for: end, on: value.day) ?? y) - y)
+                let width = eventWidth(value, dayWidth: dayWidth)
                 Button {
-                    select(day: value.day, item: value.item, identifier: value.id)
+                    selectEvent(item: value.item, identifier: value.id)
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(value.item.title)
@@ -235,12 +236,15 @@ struct WeekPlannerView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .frame(width: eventWidth(value, dayWidth: dayWidth), height: height, alignment: .topLeading)
-                .offset(x: x, y: y)
-                .popover(isPresented: eventPopoverBinding(
-                    identifier: value.id,
-                    item: value.item
-                )) {
+                .frame(width: width, height: height, alignment: .topLeading)
+                .popover(
+                    isPresented: eventPopoverBinding(
+                        identifier: value.id,
+                        item: value.item
+                    ),
+                    attachmentAnchor: .rect(.bounds),
+                    arrowEdge: .top
+                ) {
                     if let event = eventDetails(for: value.item) {
                         WeekEventDetailCard(
                             event: event,
@@ -250,6 +254,12 @@ struct WeekPlannerView: View {
                         )
                         .presentationCompactAdaptation(.popover)
                     }
+                }
+                .alignmentGuide(.leading) { dimensions in
+                    dimensions[.leading] - x
+                }
+                .alignmentGuide(.top) { dimensions in
+                    dimensions[.top] - y
                 }
                 .accessibilityIdentifier("week-event-\(originIdentifier(value.item.origin) ?? value.item.id)")
                 .accessibilityLabel("Event, \(value.item.title), \(timeRange(start: value.start, end: end)), \(dayLabel(value.day))")
@@ -419,7 +429,7 @@ struct WeekPlannerView: View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
                 if eventDetails(for: item) != nil {
-                    select(day: day, item: item, identifier: identifier)
+                    selectEvent(item: item, identifier: identifier)
                 } else {
                     onOpenItem(item.origin)
                 }
@@ -530,6 +540,10 @@ struct WeekPlannerView: View {
 
     private func select(day: LocalDay, item: AgendaItem, identifier: String) {
         onSelectDay(day)
+        selectedItem = .init(id: identifier, item: item)
+    }
+
+    private func selectEvent(item: AgendaItem, identifier: String) {
         selectedItem = .init(id: identifier, item: item)
     }
 
@@ -664,10 +678,11 @@ private struct WeekEventDetailCard: View {
         }
         .padding(20)
         .frame(
-            idealWidth: isInline ? nil : 320,
-            maxWidth: isInline ? .infinity : 360,
+            width: isInline ? nil : 320,
+            height: isInline ? nil : 240,
             alignment: .leading
         )
+        .frame(maxWidth: isInline ? .infinity : nil, alignment: .leading)
         .background(CalendarTheme.surface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(containerIdentifier)
@@ -682,13 +697,17 @@ private struct WeekEventDetailCard: View {
     }
 
     private var closeButton: some View {
-        Button("Close", systemImage: "xmark", action: onClose)
-            .labelStyle(.iconOnly)
-            .frame(
-                minWidth: CalendarTheme.minimumTapSize,
-                minHeight: CalendarTheme.minimumTapSize
-            )
-            .accessibilityIdentifier("week-event-detail-close")
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .frame(
+                    width: CalendarTheme.minimumTapSize,
+                    height: CalendarTheme.minimumTapSize
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close")
+        .accessibilityIdentifier("week-event-detail-close")
     }
 
     private var timeDescription: String {
