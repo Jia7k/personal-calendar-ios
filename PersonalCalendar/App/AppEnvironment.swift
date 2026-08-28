@@ -191,7 +191,8 @@ struct AppEnvironment {
             includeRecurringItems: arguments.contains("-demo-editor-recurring"),
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
             profileFixtures: usesProfileFixtures,
-            dailyQOLFixtures: arguments.contains("-demo-daily-qol")
+            dailyQOLFixtures: arguments.contains("-demo-daily-qol"),
+            denseWeekFixtures: arguments.contains("-demo-week-overlaps")
         )
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
         let reminders = DemoRemindersService(
@@ -206,7 +207,8 @@ struct AppEnvironment {
             includeOverdueTask: arguments.contains("-demo-overdue-task"),
             profileFixtures: usesProfileFixtures,
             dailyQOLFixtures: arguments.contains("-demo-daily-qol"),
-            dailyTaskRescueFixtures: usesDailyTaskRescueFixtures
+            dailyTaskRescueFixtures: usesDailyTaskRescueFixtures,
+            denseWeekFixtures: arguments.contains("-demo-week-overlaps")
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)

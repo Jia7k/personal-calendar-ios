@@ -308,9 +308,188 @@ final class WeekPlannerBuilderTests: XCTestCase {
         XCTAssertEqual(result.timedItems.map(\.overlapColumnCount), [2, 2, 2])
     }
 
+    func testBuildGroupsOverlappingEventsIntoOneDisplayStack() {
+        let calendar = makeCalendar()
+        let first = makeEvent(
+            id: "first",
+            title: "Algorithms",
+            start: date(2026, 8, 31, 9, calendar: calendar),
+            end: date(2026, 8, 31, 11, calendar: calendar)
+        )
+        let second = makeEvent(
+            id: "second",
+            title: "Database Lab",
+            start: date(2026, 8, 31, 9, 30, calendar: calendar),
+            end: date(2026, 8, 31, 10, 30, calendar: calendar)
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [monday: agenda(scheduled: [AgendaItem(event: second), AgendaItem(event: first)])],
+            events: [second, first],
+            reminders: [],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.eventStacks.count, 1)
+        XCTAssertEqual(result.eventStacks[0].events.map(\.item.title), ["Algorithms", "Database Lab"])
+        XCTAssertEqual(result.eventStacks[0].start, first.start)
+        XCTAssertEqual(result.eventStacks[0].end, first.end)
+    }
+
+    func testBuildGroupsBackToBackShortEventsWhenMinimumTapTargetsWouldOverlap() {
+        let calendar = makeCalendar()
+        let first = makeEvent(
+            id: "first-short",
+            title: "Quiz",
+            start: date(2026, 8, 31, 9, calendar: calendar),
+            end: date(2026, 8, 31, 9, 15, calendar: calendar)
+        )
+        let second = makeEvent(
+            id: "second-short",
+            title: "Stand-up",
+            start: date(2026, 8, 31, 9, 15, calendar: calendar),
+            end: date(2026, 8, 31, 9, 30, calendar: calendar)
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [monday: agenda(scheduled: [AgendaItem(event: first), AgendaItem(event: second)])],
+            events: [first, second],
+            reminders: [],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.eventStacks.count, 1)
+        XCTAssertEqual(result.eventStacks[0].events.map(\.item.title), ["Quiz", "Stand-up"])
+    }
+
+    func testBuildGroupsEventAndTaskWhenMinimumTapTargetsWouldOverlap() {
+        let calendar = makeCalendar()
+        let event = makeEvent(
+            id: "short-class",
+            title: "Quiz",
+            start: date(2026, 8, 31, 9, calendar: calendar),
+            end: date(2026, 8, 31, 9, 15, calendar: calendar)
+        )
+        let reminder = makeReminder(
+            id: "due-after-class",
+            title: "Submit quiz",
+            due: date(2026, 8, 31, 9, 15, calendar: calendar),
+            dueHasTime: true
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [monday: agenda(scheduled: [AgendaItem(event: event), AgendaItem(reminder: reminder)])],
+            events: [event],
+            reminders: [reminder],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.collisionStacks.count, 1)
+        XCTAssertEqual(
+            result.collisionStacks[0].items.map(\.item.origin),
+            [.event(id: "short-class"), .reminder(id: "due-after-class")]
+        )
+    }
+
+    func testBuildGroupsNearbyTasksIntoOneSelectableCollisionStack() {
+        let calendar = makeCalendar()
+        let first = makeReminder(
+            id: "first-task",
+            title: "First",
+            due: date(2026, 8, 31, 9, calendar: calendar),
+            dueHasTime: true
+        )
+        let second = makeReminder(
+            id: "second-task",
+            title: "Second",
+            due: date(2026, 8, 31, 9, 15, calendar: calendar),
+            dueHasTime: true
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [monday: agenda(scheduled: [AgendaItem(reminder: second), AgendaItem(reminder: first)])],
+            events: [],
+            reminders: [first, second],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.collisionStacks.count, 1)
+        XCTAssertEqual(
+            result.collisionStacks[0].items.map(\.item.origin),
+            [.reminder(id: "first-task"), .reminder(id: "second-task")]
+        )
+    }
+
+    func testBuildKeepsGroupedTaskStackAndFollowingEventAsSeparateNonOverlappingTargets() {
+        let calendar = makeCalendar()
+        let due = date(2026, 8, 31, 9, calendar: calendar)
+        let first = makeReminder(id: "first-task", title: "First", due: due, dueHasTime: true)
+        let second = makeReminder(id: "second-task", title: "Second", due: due, dueHasTime: true)
+        let event = makeEvent(
+            id: "following-class",
+            title: "Lecture",
+            start: date(2026, 8, 31, 9, 30, calendar: calendar),
+            end: date(2026, 8, 31, 10, 30, calendar: calendar)
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [
+                monday: agenda(scheduled: [
+                    AgendaItem(reminder: first),
+                    AgendaItem(reminder: second),
+                    AgendaItem(event: event)
+                ])
+            ],
+            events: [event],
+            reminders: [first, second],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.collisionStacks.count, 2)
+        XCTAssertEqual(result.collisionStacks[0].items.count, 2)
+        XCTAssertEqual(result.collisionStacks[1].items.map(\.item.origin), [.event(id: "following-class")])
+        XCTAssertLessThanOrEqual(
+            result.collisionStacks[0].renderedEnd,
+            result.collisionStacks[1].renderedStart
+        )
+    }
+
+    func testBuildGroupsStartHourTaskWithEventInsideItsClampedRenderedTarget() {
+        let calendar = makeCalendar()
+        let reminder = makeReminder(
+            id: "start-task",
+            title: "Morning checklist",
+            due: date(2026, 8, 31, 8, calendar: calendar),
+            dueHasTime: true
+        )
+        let event = makeEvent(
+            id: "early-class",
+            title: "Seminar",
+            start: date(2026, 8, 31, 8, 30, calendar: calendar),
+            end: date(2026, 8, 31, 9, 30, calendar: calendar)
+        )
+
+        let result = WeekPlannerBuilder(calendar: calendar).build(
+            days: [monday],
+            agendas: [monday: agenda(scheduled: [AgendaItem(reminder: reminder), AgendaItem(event: event)])],
+            events: [event],
+            reminders: [reminder],
+            selectedDay: monday
+        )
+
+        XCTAssertEqual(result.startHour, 8)
+        XCTAssertEqual(result.collisionStacks.count, 1)
+        XCTAssertEqual(result.collisionStacks[0].items.count, 2)
+    }
+
     func testTimelineMetricsKeepDenseEventAndTaskControlsAtLeastFortyFourPoints() {
         let dayWidth = WeekPlannerTimelineMetrics.dayWidth(
-            availableWidth: 402,
+            availableWidth: 375,
             timeGutterWidth: 40,
             dayCount: 7,
             maximumOverlapCount: 3
@@ -323,6 +502,50 @@ final class WeekPlannerBuilderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(
             WeekPlannerTimelineMetrics.taskWidth(dayWidth: dayWidth),
             44
+        )
+        XCTAssertGreaterThanOrEqual(
+            WeekPlannerTimelineMetrics.stackedEventWidth(dayWidth: dayWidth),
+            44
+        )
+    }
+
+    func testTimelineMetricsKeepSevenDayTimelineWithinAvailableWidthWhenEventsOverlap() {
+        let availableWidth: CGFloat = 375
+        let timeGutterWidth: CGFloat = 40
+        let dayWidth = WeekPlannerTimelineMetrics.dayWidth(
+            availableWidth: availableWidth,
+            timeGutterWidth: timeGutterWidth,
+            dayCount: 7,
+            maximumOverlapCount: 3
+        )
+
+        XCTAssertEqual(
+            timeGutterWidth + dayWidth * 7,
+            availableWidth,
+            accuracy: 0.001
+        )
+    }
+
+    func testTimelineContentHeightKeepsLateMinimumTapTargetInsideScrollableCanvas() {
+        let baseHeight = CGFloat(16) * WeekPlannerTimelineMetrics.pointsPerHour
+
+        XCTAssertEqual(
+            WeekPlannerTimelineMetrics.contentHeight(baseHeight: baseHeight),
+            baseHeight + WeekPlannerTimelineMetrics.minimumControlSize,
+            accuracy: 0.001
+        )
+    }
+
+    func testTaskTopOffsetKeepsEarlyMinimumTapTargetInsideScrollableCanvas() {
+        XCTAssertEqual(
+            WeekPlannerTimelineMetrics.taskTopOffset(minuteOffset: 0),
+            0,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            WeekPlannerTimelineMetrics.taskTopOffset(minuteOffset: 80),
+            58,
+            accuracy: 0.001
         )
     }
 

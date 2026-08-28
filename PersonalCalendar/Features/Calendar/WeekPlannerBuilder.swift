@@ -96,6 +96,7 @@ struct WeekPlannerBuilder {
             .sorted(by: AgendaItem.stableSort)
 
         return WeekPlannerSnapshot(
+            calendar: calendar,
             days: days,
             allDayItems: allDayItems,
             timedItems: timedItems,

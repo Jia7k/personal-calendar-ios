@@ -26,6 +26,54 @@ final class DemoEnvironmentTests: XCTestCase {
         XCTAssertTrue(environment.settings.didSeedCategories)
     }
 
+    func testWeekOverlapDemoSeedsDenseSchoolEventsTasksAndAnAllDayRow() async throws {
+        let environment = AppEnvironment.demo(
+            container: makeContainer(),
+            arguments: ["-demo-profiles", "-demo-week-overlaps"]
+        )
+        let now = Date()
+        let interval = DateInterval(
+            start: now.addingTimeInterval(-7 * 86_400),
+            end: now.addingTimeInterval(7 * 86_400)
+        )
+
+        let events = try environment.calendar.fetchEvents(
+            in: interval,
+            calendarIDs: [DemoProfileFixture.schoolCalendarID]
+        )
+
+        XCTAssertEqual(
+            Set(events.map(\.id)),
+            [
+                "demo-school-event",
+                "demo-week-overlap-a",
+                "demo-week-overlap-b",
+                "demo-week-late-event",
+                "demo-week-boundary-event",
+                "demo-week-all-day-event",
+                "demo-week-all-day-event-2",
+                "demo-week-all-day-event-3",
+                "demo-week-all-day-late"
+            ]
+        )
+        XCTAssertEqual(
+            events.filter(\.isAllDay).map(\.id),
+            [
+                "demo-week-all-day-event",
+                "demo-week-all-day-event-2",
+                "demo-week-all-day-event-3",
+                "demo-week-all-day-late"
+            ]
+        )
+        let reminders = try await environment.reminders.fetchReminders(
+            listIDs: [DemoProfileFixture.assignmentsListID]
+        )
+        XCTAssertEqual(
+            Set(reminders.map(\.id)),
+            ["demo-school-task", "demo-week-overlap-task", "demo-week-boundary-task"]
+        )
+    }
+
     func testNormalDemoMigratesWritableDefaultsIntoActivePersonalProfile() throws {
         let container = makeContainer()
         let environment = AppEnvironment.demo(container: container, arguments: [])

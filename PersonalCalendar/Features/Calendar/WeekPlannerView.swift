@@ -8,6 +8,8 @@ struct WeekPlannerView: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedItem: SelectedItem?
+    @State private var selectedEventStackID: String?
+    @State private var selectedStackEventID: String?
 
     let snapshot: WeekPlannerSnapshot
     let selectedDay: LocalDay
@@ -42,65 +44,95 @@ struct WeekPlannerView: View {
     }
 
     var body: some View {
-        if dynamicTypeSize.isAccessibilitySize {
-            ScrollView {
-                accessibleAgenda
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-            }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("week-planner")
-        } else {
-            sevenDayTimeline
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                ScrollView {
+                    accessibleAgenda
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("week-planner")
+            } else {
+                sevenDayTimeline
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("week-planner")
+            }
+        }
+        .onChange(of: snapshot) { _, updatedSnapshot in
+            reconcileSelection(in: updatedSnapshot)
         }
     }
 
     private var sevenDayTimeline: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            allDayStrip
-            dayHeaders
-            timeline
-            selectedDetail
-            laterStrip
+        VStack(spacing: 0) {
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    allDayStrip
+                    dayHeaders
+                    timeline
+                    selectedDetail
+                    laterStrip
+                }
+                .padding(.bottom, 12)
+            }
+            .accessibilityElement(children: .contain)
         }
     }
 
     @ViewBuilder
     private var allDayStrip: some View {
         if !snapshot.allDayItems.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("All day")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(snapshot.days, id: \.self) { day in
                         let items = snapshot.allDayItems.filter { $0.day == day }
                         if !items.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
+                            HStack(alignment: .top, spacing: 8) {
                                 Text(day.startDate(in: calendar), format: .dateTime.weekday(.narrow))
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(day == selectedDay ? CalendarTheme.accent : .secondary)
-                                ForEach(items) { value in
-                                    Button {
-                                        select(day: day, item: value.item, identifier: value.id)
-                                    } label: {
-                                        Text(value.item.title)
-                                            .font(.caption)
-                                            .lineLimit(1)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 6)
-                                            .background(itemColor(value.item).opacity(0.14), in: Capsule())
+                                    .frame(
+                                        width: timeGutterWidth,
+                                        height: CalendarTheme.minimumTapSize
+                                    )
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(items) { value in
+                                        Button {
+                                            select(day: day, item: value.item, identifier: value.id)
+                                        } label: {
+                                            Text(value.item.title)
+                                                .font(.caption)
+                                                .lineLimit(2)
+                                                .frame(
+                                                    maxWidth: .infinity,
+                                                    minHeight: CalendarTheme.minimumTapSize,
+                                                    alignment: .leading
+                                                )
+                                                .padding(.horizontal, 10)
+                                                .background(
+                                                    itemColor(value.item).opacity(0.14),
+                                                    in: RoundedRectangle(cornerRadius: 9)
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier(
+                                            "week-all-day-\(originIdentifier(value.item.origin) ?? value.item.id)"
+                                        )
+                                        .accessibilityLabel("All day, \(value.item.title), \(dayLabel(day))")
                                     }
-                                    .buttonStyle(.plain)
-                                    .frame(minHeight: CalendarTheme.minimumTapSize)
-                                    .accessibilityLabel("All day, \(value.item.title), \(dayLabel(day))")
                                 }
                             }
-                            .frame(minWidth: 82, alignment: .leading)
                         }
                     }
                 }
-                .padding(.vertical, 2)
+                .accessibilityIdentifier("week-all-day-list")
             }
+            .padding(.horizontal, 4)
+            .accessibilityElement(children: .contain)
         }
     }
 
@@ -138,19 +170,23 @@ struct WeekPlannerView: View {
                 maximumOverlapCount: maximumOverlapCount
             )
             let contentWidth = timeGutterWidth + dayWidth * CGFloat(snapshot.days.count)
-            ScrollView([.horizontal, .vertical], showsIndicators: true) {
-                ZStack(alignment: .topLeading) {
-                    hourRules(width: contentWidth)
-                    dayDividers(dayWidth: dayWidth)
-                    currentTimeLine(dayWidth: dayWidth)
-                    ForEach(snapshot.timedItems) { value in
-                        timedItem(value, dayWidth: dayWidth)
+            ZStack(alignment: .topLeading) {
+                hourRules(width: contentWidth)
+                dayDividers(dayWidth: dayWidth)
+                currentTimeLine(dayWidth: dayWidth)
+                ForEach(snapshot.collisionStacks) { stack in
+                    if stack.items.count == 1,
+                       let item = stack.items.first,
+                       item.kind == .taskDue {
+                        timedTask(item, dayWidth: dayWidth)
+                    } else {
+                        timedCollisionStack(stack, dayWidth: dayWidth)
                     }
                 }
-                .frame(width: contentWidth, height: timelineHeight, alignment: .topLeading)
             }
+            .frame(width: contentWidth, height: timelineContentHeight, alignment: .topLeading)
         }
-        .frame(height: min(timelineHeight, 440))
+        .frame(height: timelineContentHeight)
         .background(CalendarTheme.surface, in: RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius))
         .overlay {
             RoundedRectangle(cornerRadius: CalendarTheme.cornerRadius)
@@ -184,7 +220,7 @@ struct WeekPlannerView: View {
             ForEach(0...snapshot.days.count, id: \.self) { index in
                 Rectangle()
                     .fill(.secondary.opacity(0.12))
-                    .frame(width: 1, height: timelineHeight)
+                    .frame(width: 1, height: timelineContentHeight)
                     .offset(x: timeGutterWidth + CGFloat(index) * dayWidth)
             }
         }
@@ -205,88 +241,109 @@ struct WeekPlannerView: View {
     }
 
     @ViewBuilder
-    private func timedItem(_ value: WeekPlannerTimedItem, dayWidth: CGFloat) -> some View {
-        if let dayIndex = snapshot.days.firstIndex(of: value.day),
-           let y = minuteOffset(for: value.start, on: value.day) {
-            let x = itemX(value, dayIndex: dayIndex, dayWidth: dayWidth)
-
-            switch value.kind {
-            case .event:
-                let end = value.end ?? value.start
-                let height = max(CalendarTheme.minimumTapSize, (minuteOffset(for: end, on: value.day) ?? y) - y)
-                let width = eventWidth(value, dayWidth: dayWidth)
-                Button {
-                    selectEvent(item: value.item, identifier: value.id)
-                } label: {
+    private func timedCollisionStack(
+        _ stack: WeekPlannerTimedCollisionStack,
+        dayWidth: CGFloat
+    ) -> some View {
+        if let dayIndex = snapshot.days.firstIndex(of: stack.day),
+           let y = minuteOffset(for: stack.renderedStart, on: stack.day),
+           let first = stack.items.first {
+            let x = timeGutterWidth + CGFloat(dayIndex) * dayWidth + 1
+            let height = max(
+                CalendarTheme.minimumTapSize,
+                (minuteOffset(for: stack.renderedEnd, on: stack.day) ?? y) - y
+            )
+            let width = WeekPlannerTimelineMetrics.stackedEventWidth(dayWidth: dayWidth)
+            Button {
+                selectCollisionStack(stack)
+            } label: {
+                ZStack(alignment: .topTrailing) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(value.item.title)
+                        Text(first.item.title)
                             .font(.caption2.weight(.semibold))
                             .lineLimit(2)
-                        Text(timeRange(start: value.start, end: end))
+                        Text(timeRange(start: stack.start, end: stack.end))
                             .font(.caption2)
                             .lineLimit(1)
                     }
                     .foregroundStyle(.primary)
                     .padding(5)
                     .frame(maxWidth: .infinity, minHeight: height, alignment: .topLeading)
-                    .background(itemColor(value.item).opacity(0.22), in: RoundedRectangle(cornerRadius: 7))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 7)
-                            .stroke(itemColor(value.item).opacity(0.7), lineWidth: 1)
+
+                    if stack.items.count > 1 {
+                        Text("+\(stack.items.count - 1)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(CalendarTheme.accent, in: Capsule())
+                            .padding(3)
                     }
                 }
-                .buttonStyle(.plain)
-                .frame(width: width, height: height, alignment: .topLeading)
-                .popover(
-                    isPresented: eventPopoverBinding(
-                        identifier: value.id,
-                        item: value.item
-                    ),
-                    attachmentAnchor: .rect(.bounds),
-                    arrowEdge: .top
-                ) {
-                    if let event = eventDetails(for: value.item) {
-                        WeekEventDetailCard(
-                            event: event,
-                            calendar: calendar,
-                            onClose: { selectedItem = nil },
-                            onOpen: { openEvent(event) }
-                        )
-                        .presentationCompactAdaptation(.popover)
-                    }
+                .background(itemColor(first.item).opacity(0.22), in: RoundedRectangle(cornerRadius: 7))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(itemColor(first.item).opacity(0.7), lineWidth: 1)
                 }
-                .alignmentGuide(.leading) { dimensions in
-                    dimensions[.leading] - x
-                }
-                .alignmentGuide(.top) { dimensions in
-                    dimensions[.top] - y
-                }
-                .accessibilityIdentifier("week-event-\(originIdentifier(value.item.origin) ?? value.item.id)")
-                .accessibilityLabel("Event, \(value.item.title), \(timeRange(start: value.start, end: end)), \(dayLabel(value.day))")
-                .accessibilityValue(selectedItem?.id == value.id ? "Expanded" : "Collapsed")
-                .accessibilityHint("Shows full event details before opening the event.")
-            case .taskDue:
-                Button {
-                    select(day: value.day, item: value.item, identifier: value.id)
-                } label: {
-                    HStack(spacing: 5) {
-                        Diamond()
-                            .fill(itemColor(value.item))
-                            .frame(width: 11, height: 11)
-                        Text(value.item.title)
-                            .font(.caption2.weight(.medium))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 5)
-                    .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
-                    .background(CalendarTheme.surface.opacity(0.94), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .frame(width: WeekPlannerTimelineMetrics.taskWidth(dayWidth: dayWidth), height: CalendarTheme.minimumTapSize, alignment: .leading)
-                .offset(x: timeGutterWidth + CGFloat(dayIndex) * dayWidth + 3, y: y - CalendarTheme.minimumTapSize / 2)
-                .accessibilityIdentifier("week-task-\(originIdentifier(value.item.origin) ?? value.item.id)")
-                .accessibilityLabel("Task due, \(value.item.title), \(value.start.formatted(date: .omitted, time: .shortened)), \(dayLabel(value.day))")
             }
+            .buttonStyle(.plain)
+            .frame(width: width, height: height, alignment: .topLeading)
+            .popover(
+                isPresented: collisionStackPopoverBinding(identifier: stack.id),
+                attachmentAnchor: .rect(.bounds),
+                arrowEdge: .top
+            ) {
+                collisionStackPopover(stack)
+                    .presentationCompactAdaptation(.popover)
+            }
+            .alignmentGuide(.leading) { dimensions in
+                dimensions[.leading] - x
+            }
+            .alignmentGuide(.top) { dimensions in
+                dimensions[.top] - y
+            }
+            .accessibilityIdentifier(collisionStackIdentifier(stack))
+            .accessibilityLabel(collisionStackAccessibilityLabel(stack))
+            .accessibilityValue(selectedEventStackID == stack.id ? "Expanded" : "Collapsed")
+            .accessibilityHint(
+                stack.items.count > 1
+                    ? "Shows the overlapping items to choose from."
+                    : "Shows full event details before opening the event."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func timedTask(_ value: WeekPlannerTimedItem, dayWidth: CGFloat) -> some View {
+        if let dayIndex = snapshot.days.firstIndex(of: value.day),
+           let y = minuteOffset(for: value.start, on: value.day) {
+            Button {
+                select(day: value.day, item: value.item, identifier: value.id)
+            } label: {
+                HStack(spacing: 5) {
+                    Diamond()
+                        .fill(itemColor(value.item))
+                        .frame(width: 11, height: 11)
+                    Text(value.item.title)
+                        .font(.caption2.weight(.medium))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 5)
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
+                .background(CalendarTheme.surface.opacity(0.94), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .frame(
+                width: WeekPlannerTimelineMetrics.taskWidth(dayWidth: dayWidth),
+                height: CalendarTheme.minimumTapSize,
+                alignment: .leading
+            )
+            .offset(
+                x: timeGutterWidth + CGFloat(dayIndex) * dayWidth + 3,
+                y: WeekPlannerTimelineMetrics.taskTopOffset(minuteOffset: y)
+            )
+            .accessibilityIdentifier("week-task-\(originIdentifier(value.item.origin) ?? value.item.id)")
+            .accessibilityLabel("Task due, \(value.item.title), \(value.start.formatted(date: .omitted, time: .shortened)), \(dayLabel(value.day))")
         }
     }
 
@@ -505,10 +562,14 @@ struct WeekPlannerView: View {
     }
 
     private let timeGutterWidth: CGFloat = 40
-    private let pointsPerHour: CGFloat = 52
+    private let pointsPerHour = WeekPlannerTimelineMetrics.pointsPerHour
 
     private var timelineHeight: CGFloat {
         CGFloat(max(1, snapshot.endHour - snapshot.startHour)) * pointsPerHour
+    }
+
+    private var timelineContentHeight: CGFloat {
+        WeekPlannerTimelineMetrics.contentHeight(baseHeight: timelineHeight)
     }
 
     private func minuteOffset(for date: Date, on day: LocalDay) -> CGFloat? {
@@ -519,18 +580,6 @@ struct WeekPlannerView: View {
         return CGFloat(minutes - snapshot.startHour * 60) / 60 * pointsPerHour
     }
 
-    private func itemX(_ value: WeekPlannerTimedItem, dayIndex: Int, dayWidth: CGFloat) -> CGFloat {
-        let columnWidth = eventWidth(value, dayWidth: dayWidth)
-        return timeGutterWidth + CGFloat(dayIndex) * dayWidth + 3 + CGFloat(value.overlapColumn) * columnWidth
-    }
-
-    private func eventWidth(_ value: WeekPlannerTimedItem, dayWidth: CGFloat) -> CGFloat {
-        WeekPlannerTimelineMetrics.eventWidth(
-            dayWidth: dayWidth,
-            overlapCount: value.overlapColumnCount
-        )
-    }
-
     private var maximumOverlapCount: Int {
         snapshot.timedItems
             .filter { $0.kind == .event }
@@ -539,28 +588,264 @@ struct WeekPlannerView: View {
     }
 
     private func select(day: LocalDay, item: AgendaItem, identifier: String) {
+        selectedEventStackID = nil
+        selectedStackEventID = nil
         onSelectDay(day)
         selectedItem = .init(id: identifier, item: item)
     }
 
     private func selectEvent(item: AgendaItem, identifier: String) {
+        selectedEventStackID = nil
+        selectedStackEventID = nil
         selectedItem = .init(id: identifier, item: item)
     }
 
-    private func eventPopoverBinding(
-        identifier: String,
-        item: AgendaItem
-    ) -> Binding<Bool> {
+    private func selectCollisionStack(_ stack: WeekPlannerTimedCollisionStack) {
+        selectedItem = nil
+        selectedEventStackID = stack.id
+        selectedStackEventID = stack.items.count == 1 ? stack.items.first?.id : nil
+    }
+
+    private func reconcileSelection(in updatedSnapshot: WeekPlannerSnapshot) {
+        if let selectedItem {
+            if let currentItem = currentSelectedItem(in: updatedSnapshot, matching: selectedItem) {
+                self.selectedItem = .init(id: selectedItem.id, item: currentItem)
+            } else {
+                self.selectedItem = nil
+            }
+        }
+
+        guard let selectedEventStackID else { return }
+        guard let currentStack = updatedSnapshot.collisionStacks.first(where: { $0.id == selectedEventStackID }) else {
+            self.selectedEventStackID = nil
+            selectedStackEventID = nil
+            return
+        }
+        if let selectedStackEventID,
+           !currentStack.items.contains(where: { $0.id == selectedStackEventID }) {
+            self.selectedStackEventID = nil
+        }
+    }
+
+    private func currentSelectedItem(
+        in updatedSnapshot: WeekPlannerSnapshot,
+        matching selection: SelectedItem
+    ) -> AgendaItem? {
+        if let match = updatedSnapshot.allDayItems.first(where: {
+            $0.id == selection.id && $0.item.origin == selection.item.origin
+        }) {
+            return match.item
+        }
+        if let match = updatedSnapshot.timedItems.first(where: {
+            $0.id == selection.id && $0.item.origin == selection.item.origin
+        }) {
+            return match.item
+        }
+        return updatedSnapshot.laterItems.first(where: {
+            $0.id == selection.id && $0.origin == selection.item.origin
+        })
+    }
+
+    private func collisionStackPopoverBinding(identifier: String) -> Binding<Bool> {
         Binding(
-            get: {
-                selectedItem?.id == identifier && eventDetails(for: item) != nil
-            },
+            get: { selectedEventStackID == identifier },
             set: { isPresented in
-                if !isPresented, selectedItem?.id == identifier {
-                    selectedItem = nil
+                if !isPresented, selectedEventStackID == identifier {
+                    selectedEventStackID = nil
+                    selectedStackEventID = nil
                 }
             }
         )
+    }
+
+    @ViewBuilder
+    private func collisionStackPopover(_ stack: WeekPlannerTimedCollisionStack) -> some View {
+        if let selectedStackEventID,
+           let item = stack.items.first(where: { $0.id == selectedStackEventID }) {
+            if let event = eventDetails(for: item.item) {
+                WeekEventDetailCard(
+                    event: event,
+                    calendar: calendar,
+                    onClose: closeCollisionStack,
+                    onOpen: { openEvent(event) }
+                )
+            } else {
+                collisionTaskDetail(item)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Overlapping items")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Choose an event or task to see its actions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 6) {
+                        ForEach(stack.items) { value in
+                            Button {
+                                selectedStackEventID = value.id
+                            } label: {
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    Image(systemName: symbol(for: value.item.source))
+                                        .foregroundStyle(itemColor(value.item))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(value.item.title)
+                                            .font(.subheadline.weight(.semibold))
+                                            .lineLimit(2)
+                                        Text(timeRange(start: value.start, end: value.end ?? value.start))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 4)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(
+                                    maxWidth: .infinity,
+                                    minHeight: CalendarTheme.minimumTapSize,
+                                    alignment: .leading
+                                )
+                                .padding(.horizontal, 10)
+                                .background(
+                                    itemColor(value.item).opacity(0.14),
+                                    in: RoundedRectangle(cornerRadius: 9)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier(
+                                collisionChoiceIdentifier(value)
+                            )
+                            .accessibilityLabel(
+                                "\(value.item.title), \(timeRange(start: value.start, end: value.end ?? value.start))"
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(width: 320, height: 200, alignment: .leading)
+            .background(CalendarTheme.surface)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("week-event-stack-picker")
+        }
+    }
+
+    private func collisionTaskDetail(_ value: WeekPlannerTimedItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(value.item.title)
+                        .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Due \(value.start.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button(action: closeCollisionStack) {
+                    Image(systemName: "xmark")
+                        .frame(
+                            width: CalendarTheme.minimumTapSize,
+                            height: CalendarTheme.minimumTapSize
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("week-task-stack-close")
+            }
+
+            ScrollView(.vertical) {
+                VStack(spacing: 8) {
+                    if let reminderID = reminderID(for: value.item),
+                       value.item.allowsModification,
+                       !value.item.isCompleted {
+                        if let onScheduleTaskTime {
+                            Button("Schedule Time") {
+                                performAfterClosingCollision {
+                                    onScheduleTaskTime(reminderID)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                            .accessibilityIdentifier("week-task-schedule-\(reminderID)")
+                        }
+                        Button("Complete") {
+                            closeCollisionStack()
+                            onSetTaskCompleted(reminderID, true)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier("week-task-complete-\(reminderID)")
+                    }
+                    if canOpen(value.item.origin) {
+                        Button("Open Task") {
+                            performAfterClosingCollision {
+                                onOpenItem(value.item.origin)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(CalendarTheme.accent)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier("week-open-selected-item")
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 320, height: 200, alignment: .leading)
+        .background(CalendarTheme.surface)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("week-task-stack-detail")
+    }
+
+    private func closeCollisionStack() {
+        selectedEventStackID = nil
+        selectedStackEventID = nil
+    }
+
+    private func performAfterClosingCollision(_ action: @escaping @MainActor () -> Void) {
+        closeCollisionStack()
+        Task { @MainActor in
+            await Task.yield()
+            action()
+        }
+    }
+
+    private func collisionChoiceIdentifier(_ value: WeekPlannerTimedItem) -> String {
+        let identifier = originIdentifier(value.item.origin) ?? value.item.id
+        return value.kind == .event
+            ? "week-event-choice-\(identifier)"
+            : "week-task-choice-\(identifier)"
+    }
+
+    private func collisionStackIdentifier(_ stack: WeekPlannerTimedCollisionStack) -> String {
+        let firstEvent = stack.items.first(where: { $0.kind == .event })
+        let first = firstEvent ?? stack.items.first
+        let firstIdentifier = first.flatMap { originIdentifier($0.item.origin) }
+            ?? first?.item.id
+            ?? stack.id
+        if stack.items.count == 1 {
+            return first?.kind == .taskDue
+                ? "week-task-\(firstIdentifier)"
+                : "week-event-\(firstIdentifier)"
+        }
+        return firstEvent == nil
+            ? "week-task-stack-\(firstIdentifier)"
+            : "week-event-stack-\(firstIdentifier)"
+    }
+
+    private func collisionStackAccessibilityLabel(_ stack: WeekPlannerTimedCollisionStack) -> String {
+        guard let first = stack.items.first else { return "Scheduled item" }
+        if stack.items.count == 1 {
+            return "Event, \(first.item.title), \(timeRange(start: stack.start, end: stack.end)), \(dayLabel(stack.day))"
+        }
+        return "\(stack.items.count) overlapping items, \(timeRange(start: stack.start, end: stack.end)), \(dayLabel(stack.day))"
     }
 
     private func accessibilityIdentifier(for item: AgendaItem) -> String {
@@ -579,6 +864,8 @@ struct WeekPlannerView: View {
 
     private func openEvent(_ event: CalendarEventSnapshot) {
         selectedItem = nil
+        selectedEventStackID = nil
+        selectedStackEventID = nil
         Task { @MainActor in
             await Task.yield()
             if let onOpenEvent {
@@ -679,7 +966,7 @@ private struct WeekEventDetailCard: View {
         .padding(20)
         .frame(
             width: isInline ? nil : 320,
-            height: isInline ? nil : 240,
+            height: isInline ? nil : 200,
             alignment: .leading
         )
         .frame(maxWidth: isInline ? .infinity : nil, alignment: .leading)

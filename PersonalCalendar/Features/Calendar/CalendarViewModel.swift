@@ -642,6 +642,7 @@ final class CalendarViewModel {
         agenda = empty
         weekPlanner = displayMode == .week
             ? WeekPlannerSnapshot(
+                calendar: systemCalendar,
                 days: days,
                 allDayItems: [],
                 timedItems: [],

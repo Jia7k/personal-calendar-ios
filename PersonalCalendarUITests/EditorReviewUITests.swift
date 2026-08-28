@@ -110,7 +110,7 @@ final class EditorReviewUITests: XCTestCase {
         waitForDisappearance(endDate)
         tapSwitch(endToggle)
         waitForSwitch(endToggle, isOn: true)
-        XCTAssertTrue(endDate.waitForExistence(timeout: 3))
+        scrollToHittable(endDate, in: app)
         let expectedDate = Date.now.formatted(date: .abbreviated, time: .omitted)
         XCTAssertEqual(endDate.value as? String, expectedDate)
     }

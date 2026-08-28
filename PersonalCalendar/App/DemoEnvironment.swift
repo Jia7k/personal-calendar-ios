@@ -73,7 +73,7 @@ final class DemoCalendarService: CalendarServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false, denseWeekFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -95,6 +95,27 @@ final class DemoCalendarService: CalendarServicing {
                 .init(id: "demo-work-event", mutationID: "demo-work-event", title: "Planning", start: start.addingTimeInterval(10_800), end: start.addingTimeInterval(14_400), isAllDay: false, calendarID: DemoProfileFixture.workCalendarID, calendarTitle: "Work", allowsModification: true, hasRecurrence: false),
                 .init(id: "demo-birthday-event", mutationID: nil, title: "Birthday", start: startOfDay, end: Calendar.current.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.birthdaysCalendarID, calendarTitle: "Birthdays", allowsModification: false, hasRecurrence: true)
             ]
+            if denseWeekFixtures {
+                let calendar = Calendar.current
+                let algorithmsStart = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: start)!
+                let algorithmsEnd = calendar.date(bySettingHour: 11, minute: 0, second: 0, of: start)!
+                let databaseStart = calendar.date(bySettingHour: 9, minute: 30, second: 0, of: start)!
+                let databaseEnd = calendar.date(bySettingHour: 10, minute: 30, second: 0, of: start)!
+                let lateStart = calendar.date(bySettingHour: 22, minute: 30, second: 0, of: start)!
+                let lateEnd = calendar.date(bySettingHour: 23, minute: 30, second: 0, of: start)!
+                let boundaryStart = calendar.date(bySettingHour: 23, minute: 50, second: 0, of: start)!
+                let boundaryEnd = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: start)!
+                events.append(contentsOf: [
+                    .init(id: "demo-week-overlap-a", mutationID: "demo-week-overlap-a", title: "Algorithms", start: algorithmsStart, end: algorithmsEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false, location: "Room 201"),
+                    .init(id: "demo-week-overlap-b", mutationID: "demo-week-overlap-b", title: "Database Lab", start: databaseStart, end: databaseEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false, location: "Lab 4"),
+                    .init(id: "demo-week-late-event", mutationID: "demo-week-late-event", title: "Night Study", start: lateStart, end: lateEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
+                    .init(id: "demo-week-boundary-event", mutationID: "demo-week-boundary-event", title: "Midnight Check-in", start: boundaryStart, end: boundaryEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
+                    .init(id: "demo-week-all-day-event", mutationID: "demo-week-all-day-event", title: "Study Week", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
+                    .init(id: "demo-week-all-day-event-2", mutationID: "demo-week-all-day-event-2", title: "Campus Fair", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
+                    .init(id: "demo-week-all-day-event-3", mutationID: "demo-week-all-day-event-3", title: "Project Showcase", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
+                    .init(id: "demo-week-all-day-late", mutationID: "demo-week-all-day-late", title: "Student Expo", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false)
+                ])
+            }
         } else {
             events = [
                 .init(
@@ -345,7 +366,7 @@ final class DemoRemindersService: RemindersServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false, dailyTaskRescueFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, includeOverdueTask: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false, dailyTaskRescueFixtures: Bool = false, denseWeekFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -366,6 +387,46 @@ final class DemoRemindersService: RemindersServicing {
                 .init(id: "demo-school-task", title: "Assignment 1", notes: nil, dueDate: due.addingTimeInterval(3_600), dueHasTime: true, priority: 7, listID: DemoProfileFixture.assignmentsListID, listTitle: "Assignments", isCompleted: false, allowsModification: true, hasRecurrence: false),
                 .init(id: "demo-work-task", title: "Send report", notes: nil, dueDate: due.addingTimeInterval(7_200), dueHasTime: true, priority: 3, listID: DemoProfileFixture.workListID, listTitle: "Work", isCompleted: false, allowsModification: true, hasRecurrence: false)
             ]
+            if denseWeekFixtures {
+                values.append(contentsOf: [
+                    .init(
+                        id: "demo-week-overlap-task",
+                        title: "Submit lab notes",
+                        notes: nil,
+                        dueDate: calendar.date(
+                            bySettingHour: 9,
+                            minute: 45,
+                            second: 0,
+                            of: capturedToday
+                        )!,
+                        dueHasTime: true,
+                        priority: 6,
+                        listID: DemoProfileFixture.assignmentsListID,
+                        listTitle: "Assignments",
+                        isCompleted: false,
+                        allowsModification: true,
+                        hasRecurrence: false
+                    ),
+                    .init(
+                        id: "demo-week-boundary-task",
+                        title: "Morning checklist",
+                        notes: nil,
+                        dueDate: calendar.date(
+                            bySettingHour: 8,
+                            minute: 0,
+                            second: 0,
+                            of: capturedToday
+                        )!,
+                        dueHasTime: true,
+                        priority: 4,
+                        listID: DemoProfileFixture.assignmentsListID,
+                        listTitle: "Assignments",
+                        isCompleted: false,
+                        allowsModification: true,
+                        hasRecurrence: false
+                    )
+                ])
+            }
         } else {
             values = [
                 .init(id: "demo-task", title: "Buy milk", notes: nil, dueDate: due, dueHasTime: true, priority: 5, listID: "demo-list", listTitle: "Tasks", isCompleted: false, allowsModification: true, hasRecurrence: false)

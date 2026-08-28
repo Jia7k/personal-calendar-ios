@@ -30,6 +30,11 @@ struct CalendarHeaderIdentityText {
     }
 }
 
+private struct WeekPlannerSelectionContext: Hashable {
+    let profileScopeRevision: Int
+    let weekStart: LocalDay?
+}
+
 struct CalendarHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -457,6 +462,12 @@ struct CalendarHomeView: View {
                     presentTimeBlock(reminderID: reminderID)
                 },
                 onOpenEvent: openWeekEvent
+            )
+            .id(
+                WeekPlannerSelectionContext(
+                    profileScopeRevision: revision.profileScope,
+                    weekStart: viewModel.visibleDays.first
+                )
             )
         }
         .padding(.vertical, 12)
