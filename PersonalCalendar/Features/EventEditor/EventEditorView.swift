@@ -65,7 +65,7 @@ struct EventEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(action: requestDismiss) {
-                        EventEditorToolbarActionLabel(title: "Cancel")
+                        CalendarToolbarActionLabel(title: "Cancel")
                     }
                         .accessibilityIdentifier("event-editor-cancel")
                 }
@@ -73,7 +73,7 @@ struct EventEditorView: View {
                     Button {
                         Task { await model.requestSave(scope: selectedSaveScope) }
                     } label: {
-                        EventEditorToolbarActionLabel(
+                        CalendarToolbarActionLabel(
                             title: isWriting ? "Saving…" : "Save",
                             isProminent: true
                         )
@@ -753,7 +753,7 @@ private struct EventDuplicateFlowView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(action: onDismiss) {
-                            EventEditorToolbarActionLabel(title: "Cancel")
+                            CalendarToolbarActionLabel(title: "Cancel")
                         }
                     }
                     ToolbarItem(placement: .confirmationAction) {
@@ -767,7 +767,7 @@ private struct EventDuplicateFlowView: View {
                             }
                             duplicateModel = model
                         } label: {
-                            EventEditorToolbarActionLabel(
+                            CalendarToolbarActionLabel(
                                 title: "Review",
                                 isProminent: true
                             )
@@ -777,23 +777,6 @@ private struct EventDuplicateFlowView: View {
                 }
             }
         }
-    }
-}
-
-struct EventEditorToolbarActionLabel: View {
-    let title: String
-    var isProminent = false
-
-    var body: some View {
-        Text(title)
-            .font(.callout.weight(isProminent ? .semibold : .regular))
-            .lineLimit(1)
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .frame(
-                minWidth: CalendarTheme.minimumTapSize,
-                minHeight: CalendarTheme.minimumTapSize
-            )
-            .contentShape(Rectangle())
     }
 }
 

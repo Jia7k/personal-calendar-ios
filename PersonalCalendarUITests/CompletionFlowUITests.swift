@@ -359,6 +359,49 @@ final class CompletionFlowUITests: XCTestCase {
         XCTAssertTrue(save.isEnabled)
     }
 
+    func testAccessibilityXXXLToolbarActionsRemainBoundedAcrossQuickEntryAndEventEditor() {
+        let app = launch([
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+
+        openQuickEntry(in: app)
+        assertToolbarActions(
+            [("quick-entry-cancel", "Cancel")],
+            in: app.navigationBars["Quick Entry"],
+            app: app
+        )
+        app.buttons["quick-entry-cancel"].tap()
+        waitForDisappearance(app.textFields["quick-entry-input"])
+
+        parse("Dentist today at 3pm", in: app)
+        assertToolbarActions(
+            [
+                ("quick-entry-back", "Back"),
+                ("quick-entry-save", "Save")
+            ],
+            in: app.navigationBars["Review"],
+            app: app
+        )
+        app.buttons["quick-entry-back"].tap()
+        app.buttons["quick-entry-cancel"].tap()
+        XCTAssertTrue(app.buttons["Discard"].waitForExistence(timeout: 3))
+        app.buttons["Discard"].tap()
+
+        let event = app.buttons["agenda-open-event-demo-event"]
+        XCTAssertTrue(event.waitForExistence(timeout: 3))
+        scrollToHittable(event, in: app)
+        event.tap()
+        assertToolbarActions(
+            [
+                ("event-editor-cancel", "Cancel"),
+                ("event-editor-save", "Save")
+            ],
+            in: app.navigationBars["Event"],
+            app: app
+        )
+    }
+
     private func assertSoleUniversalAdd(
         on tab: String,
         file: StaticString = #filePath,
@@ -381,6 +424,50 @@ final class CompletionFlowUITests: XCTestCase {
         XCTAssertTrue(app.textFields["quick-entry-input"].waitForExistence(timeout: 3), file: file, line: line)
         XCTAssertEqual(app.textFields["quick-entry-input"].placeholderValue, "Describe what you want to add", file: file, line: line)
         app.buttons["quick-entry-cancel"].tap()
+    }
+
+    private func assertToolbarActions(
+        _ actions: [(identifier: String, label: String)],
+        in navigationBar: XCUIElement,
+        app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 3), file: file, line: line)
+        let windowBounds = app.windows.firstMatch.frame.insetBy(dx: -2, dy: -2)
+        let navigationBounds = navigationBar.frame.insetBy(dx: -2, dy: -2)
+        let elements = actions.map { action in
+            let element = app.buttons[action.identifier]
+            XCTAssertTrue(element.waitForExistence(timeout: 3), file: file, line: line)
+            XCTAssertEqual(element.label, action.label, file: file, line: line)
+            XCTAssertTrue(element.isHittable, file: file, line: line)
+            XCTAssertTrue(windowBounds.contains(element.frame), file: file, line: line)
+            XCTAssertTrue(navigationBounds.contains(element.frame), file: file, line: line)
+            XCTAssertLessThanOrEqual(element.frame.width, 96, file: file, line: line)
+            XCTAssertLessThanOrEqual(element.frame.height, 64, file: file, line: line)
+            return element
+        }
+
+        if let expectedHeight = elements.first?.frame.height {
+            for element in elements.dropFirst() {
+                XCTAssertEqual(
+                    element.frame.height,
+                    expectedHeight,
+                    accuracy: 1,
+                    file: file,
+                    line: line
+                )
+            }
+        }
+        for leftIndex in elements.indices {
+            for rightIndex in elements.indices where rightIndex > leftIndex {
+                XCTAssertFalse(
+                    elements[leftIndex].frame.intersects(elements[rightIndex].frame),
+                    file: file,
+                    line: line
+                )
+            }
+        }
     }
 
     private func launch(_ arguments: [String] = []) -> XCUIApplication {

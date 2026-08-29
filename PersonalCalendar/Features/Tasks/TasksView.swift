@@ -118,10 +118,15 @@ struct TasksView: View {
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { pickedTask = nil }
+                            Button {
+                                pickedTask = nil
+                            } label: {
+                                CalendarToolbarActionLabel(title: "Cancel")
+                            }
+                            .accessibilityIdentifier("tasks-reschedule-cancel")
                         }
                         ToolbarItem(placement: .confirmationAction) {
-                            Button("Save") {
+                            Button {
                                 let date = pickedDate
                                 let hasTime = pickedDateHasTime
                                 pickedTask = nil
@@ -131,7 +136,10 @@ struct TasksView: View {
                                         command: .pick(date, hasTime: hasTime)
                                     )
                                 }
+                            } label: {
+                                CalendarToolbarActionLabel(title: "Save", isProminent: true)
                             }
+                            .accessibilityIdentifier("tasks-reschedule-save")
                         }
                     }
                 }

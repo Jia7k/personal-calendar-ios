@@ -67,36 +67,35 @@ struct QuickEntrySheet: View {
     private var navigationToolbar: some ToolbarContent {
         if case .entry = model.phase {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: requestDismissal)
-                    .frame(
-                        minWidth: CalendarTheme.minimumTapSize,
-                        minHeight: CalendarTheme.minimumTapSize
-                    )
+                Button(action: requestDismissal) {
+                    CalendarToolbarActionLabel(title: "Cancel")
+                }
                     .accessibilityIdentifier("quick-entry-cancel")
             }
         }
 
         if case .confirmation = model.phase {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Back") { model.returnToEntry() }
-                    .frame(
-                        minWidth: CalendarTheme.minimumTapSize,
-                        minHeight: CalendarTheme.minimumTapSize
-                    )
+                Button {
+                    model.returnToEntry()
+                } label: {
+                    CalendarToolbarActionLabel(title: "Back")
+                }
                     .accessibilityIdentifier("quick-entry-back")
             }
         }
 
         if case let .confirmation(state) = model.phase {
             ToolbarItem(placement: .confirmationAction) {
-                Button(state.isFailure ? "Retry" : "Save") {
+                Button {
                     model.confirmSave()
+                } label: {
+                    CalendarToolbarActionLabel(
+                        title: state.isFailure ? "Retry" : "Save",
+                        isProminent: true
+                    )
                 }
                 .disabled(!canSubmitConfirmation)
-                .frame(
-                    minWidth: CalendarTheme.minimumTapSize,
-                    minHeight: CalendarTheme.minimumTapSize
-                )
                 .accessibilityIdentifier(state.isFailure ? "quick-entry-retry" : "quick-entry-save")
             }
         }

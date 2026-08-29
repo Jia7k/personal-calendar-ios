@@ -62,31 +62,46 @@ final class CalendarThemeTests: XCTestCase {
 }
 
 @MainActor
-final class EventEditorToolbarActionLabelTests: XCTestCase {
-    func testAccessibilityXXXLLabelsStayInsideACompactToolbarBubble() {
-        let actions: [(title: String, isProminent: Bool)] = [
-            ("Cancel", false),
-            ("Save", true),
-            ("Saving…", true),
-            ("Review", true)
+final class CalendarToolbarActionLabelTests: XCTestCase {
+    func testAccessibility5ActionsUseUniformBoundedLayout() {
+        let actions: [(title: String, isProminent: Bool, isCompact: Bool)] = [
+            ("Cancel", false, true),
+            ("Back", false, true),
+            ("Save", true, true),
+            ("Saving…", true, true),
+            ("Retry", true, true),
+            ("Review", true, true),
+            ("Done", true, true),
+            ("Jump", true, true),
+            ("Save Anyway", true, false),
+            ("Cancel Delete", false, false),
+            ("Confirm Delete", true, false)
         ]
 
-        for action in actions {
+        let sizes = actions.map { action in
             let size = measuredSize(
                 title: action.title,
                 isProminent: action.isProminent
             )
             XCTAssertGreaterThanOrEqual(size.width, CalendarTheme.minimumTapSize)
             XCTAssertGreaterThanOrEqual(size.height, CalendarTheme.minimumTapSize)
-            XCTAssertLessThanOrEqual(size.width, 96, action.title)
             XCTAssertLessThanOrEqual(size.height, 64, action.title)
+            if action.isCompact {
+                XCTAssertLessThanOrEqual(size.width, 96, action.title)
+            }
+            return size
+        }
+
+        let expectedHeight = sizes[0].height
+        for (action, size) in zip(actions, sizes) {
+            XCTAssertEqual(size.height, expectedHeight, accuracy: 0.5, action.title)
         }
     }
 
     private func measuredSize(title: String, isProminent: Bool) -> CGSize {
         let controller = UIHostingController(
-            rootView: EventEditorToolbarActionLabel(
-                title: title,
+            rootView: CalendarToolbarActionLabel(
+                title: LocalizedStringKey(title),
                 isProminent: isProminent
             )
             .environment(\.dynamicTypeSize, .accessibility5)

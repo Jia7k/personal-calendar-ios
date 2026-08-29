@@ -179,19 +179,16 @@ struct ProfileEditorView: View {
             .navigationTitle(editor.profileID == nil ? "New Profile" : "Edit Profile")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .frame(
-                            minWidth: CalendarTheme.minimumTapSize,
-                            minHeight: CalendarTheme.minimumTapSize
-                        )
+                    Button { dismiss() } label: {
+                        CalendarToolbarActionLabel(title: "Cancel")
+                    }
+                    .accessibilityIdentifier("profile-editor-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button { save() } label: {
+                        CalendarToolbarActionLabel(title: "Save", isProminent: true)
+                    }
                         .disabled(editor.draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .frame(
-                            minWidth: CalendarTheme.minimumTapSize,
-                            minHeight: CalendarTheme.minimumTapSize
-                        )
                         .accessibilityIdentifier("profile-save")
                 }
             }

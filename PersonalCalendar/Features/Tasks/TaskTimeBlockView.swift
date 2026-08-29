@@ -87,26 +87,25 @@ struct TaskTimeBlockView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onDismiss)
-                        .frame(
-                            minWidth: CalendarTheme.minimumTapSize,
-                            minHeight: CalendarTheme.minimumTapSize
-                        )
+                    Button(action: onDismiss) {
+                        CalendarToolbarActionLabel(title: "Cancel")
+                    }
                         .accessibilityIdentifier("time-block-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(saveTitle) {
+                    Button {
                         Task {
                             await model.save(
                                 confirmingConflicts: model.requiresConflictConfirmation
                             )
                         }
+                    } label: {
+                        CalendarToolbarActionLabel(
+                            title: LocalizedStringKey(saveTitle),
+                            isProminent: true
+                        )
                     }
                     .disabled(saveIsDisabled)
-                    .frame(
-                        minWidth: CalendarTheme.minimumTapSize,
-                        minHeight: CalendarTheme.minimumTapSize
-                    )
                     .accessibilityIdentifier(saveIdentifier)
                 }
             }

@@ -426,13 +426,15 @@ struct CalendarHomeView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showingJumpToDate = false }
-                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    Button { showingJumpToDate = false } label: {
+                        CalendarToolbarActionLabel(title: "Cancel")
+                    }
                         .accessibilityIdentifier("calendar-jump-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Jump", action: jumpToChosenDate)
-                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    Button(action: jumpToChosenDate) {
+                        CalendarToolbarActionLabel(title: "Jump", isProminent: true)
+                    }
                         .accessibilityIdentifier("calendar-jump-confirm")
                 }
             }

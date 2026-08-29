@@ -233,12 +233,17 @@ private struct CategoryEditorSheet: View {
             .navigationTitle(name.isEmpty ? "New Category" : "Edit Category")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button { dismiss() } label: {
+                        CalendarToolbarActionLabel(title: "Cancel")
+                    }
+                    .accessibilityIdentifier("category-editor-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button {
                         onSave(name, colorHex)
                         dismiss()
+                    } label: {
+                        CalendarToolbarActionLabel(title: "Save", isProminent: true)
                     }
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("category-save")

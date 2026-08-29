@@ -84,7 +84,18 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(CalendarTheme.background)
-        .navigationTitle("Settings").toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.frame(minWidth: 44, minHeight: 44) } }.task { await environment.permissions.refresh(); if !profilesReady { environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()) }; await environment.rescheduleNotifications(); loading = false }.onDisappear { guard !profilesReady, sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.refreshCoordinator.refreshNow(reason: .localMutation) } } }
+        .navigationTitle("Settings")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button { dismiss() } label: {
+                    CalendarToolbarActionLabel(title: "Done", isProminent: true)
+                }
+                .accessibilityIdentifier("settings-done")
+            }
+        }
+        .task { await environment.permissions.refresh(); if !profilesReady { environment.settings.validateDefaults(calendarAccess: environment.calendar.accessState, calendars: environment.calendar.calendars(), remindersAccess: environment.reminders.accessState, lists: environment.reminders.lists()) }; await environment.rescheduleNotifications(); loading = false }
+        .onDisappear { guard !profilesReady, sourceSelectionChanged else { return }; sourceSelectionChanged = false; Task { await environment.refreshCoordinator.refreshNow(reason: .localMutation) } }
+        }
     }
     private var profilesReady: Bool {
         ProfileMigrationPart.allCases.allSatisfy {

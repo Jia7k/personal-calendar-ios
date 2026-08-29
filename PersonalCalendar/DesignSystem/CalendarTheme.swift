@@ -29,3 +29,24 @@ enum CalendarTheme {
         )
     }
 }
+
+/// A label for short textual actions hosted by a native navigation toolbar.
+///
+/// The label keeps the system's button and glass treatment while bounding
+/// visual text growth so accessibility sizes cannot spill outside that host.
+struct CalendarToolbarActionLabel: View {
+    let title: LocalizedStringKey
+    var isProminent = false
+
+    var body: some View {
+        Text(title)
+            .font(.callout.weight(isProminent ? .semibold : .regular))
+            .lineLimit(1)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .frame(
+                minWidth: CalendarTheme.minimumTapSize,
+                minHeight: CalendarTheme.minimumTapSize
+            )
+            .contentShape(Rectangle())
+    }
+}

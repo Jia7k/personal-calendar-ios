@@ -82,16 +82,21 @@ struct TaskEditorView: View {
             .navigationTitle(showsDelete ? "Task" : "New Task")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: requestDismiss)
-                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    Button(action: requestDismiss) {
+                        CalendarToolbarActionLabel(title: "Cancel")
+                    }
                         .accessibilityIdentifier("task-editor-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isWriting ? "Saving…" : "Save") {
+                    Button {
                         Task { await model.requestSave() }
+                    } label: {
+                        CalendarToolbarActionLabel(
+                            title: isWriting ? "Saving…" : "Save",
+                            isProminent: true
+                        )
                     }
                     .disabled(!canSave)
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                     .accessibilityIdentifier("task-editor-save")
                 }
             }

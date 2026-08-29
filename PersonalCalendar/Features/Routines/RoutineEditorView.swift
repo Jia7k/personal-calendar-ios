@@ -166,19 +166,16 @@ struct RoutineEditorView: View {
             .navigationTitle(navigationTitle)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .frame(
-                            minWidth: CalendarTheme.minimumTapSize,
-                            minHeight: CalendarTheme.minimumTapSize
-                        )
+                    Button { dismiss() } label: {
+                        CalendarToolbarActionLabel(title: "Cancel")
+                    }
+                    .accessibilityIdentifier("routine-editor-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button { save() } label: {
+                        CalendarToolbarActionLabel(title: "Save", isProminent: true)
+                    }
                         .disabled(!isValid)
-                        .frame(
-                            minWidth: CalendarTheme.minimumTapSize,
-                            minHeight: CalendarTheme.minimumTapSize
-                        )
                         .accessibilityIdentifier("routine-save")
                 }
             }

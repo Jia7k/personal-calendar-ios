@@ -124,7 +124,37 @@ struct RoutinesView: View {
         if dynamicTypeSize.isAccessibilitySize { VStack(alignment: .leading) { routineActions(row) } } else { HStack { routineActions(row) } }
     }.buttonStyle(.borderless).padding(.vertical, 4) }
     @ViewBuilder private func routineActions(_ row: RoutineRowState) -> some View { Button(row.routine.isPaused ? "Resume" : "Pause") { model.setPaused(id: row.id, paused: !row.routine.isPaused) }.frame(minWidth: 44, minHeight: 44).accessibilityIdentifier("routine-pause-\(row.id.uuidString)"); Button(row.routine.isArchived ? "Unarchive" : "Archive") { model.setArchived(id: row.id, archived: !row.routine.isArchived) }.frame(minWidth: 44, minHeight: 44).accessibilityIdentifier("routine-archive-\(row.id.uuidString)"); Button("Delete", role: .destructive) { requestDelete(row) }.frame(minWidth: 44, minHeight: 44).accessibilityIdentifier("routine-delete-\(row.id.uuidString)") }
-    private func deleteConfirmation(_ request: DeleteRequest) -> some View { NavigationStack { ScrollView { VStack(alignment: .leading, spacing: 16) { Text("Delete \(request.title)?").font(.headline); Text("This routine and its completion history will be permanently removed from this iPhone.").foregroundStyle(.secondary); if let error = model.deleteErrorMessage(for: request.id) { Text(error).foregroundStyle(.red) } }.frame(maxWidth: .infinity, alignment: .leading).padding() }.navigationTitle("Confirm delete").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel Delete") { deleteRequest = nil }.frame(minWidth: 44, minHeight: 44) }; ToolbarItem(placement: .confirmationAction) { Button("Confirm Delete", role: .destructive) { confirmDelete(request) }.frame(minWidth: 44, minHeight: 44) } } } }
+    private func deleteConfirmation(_ request: DeleteRequest) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Delete \(request.title)?").font(.headline)
+                    Text("This routine and its completion history will be permanently removed from this iPhone.")
+                        .foregroundStyle(.secondary)
+                    if let error = model.deleteErrorMessage(for: request.id) {
+                        Text(error).foregroundStyle(.red)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+            }
+            .navigationTitle("Confirm delete")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { deleteRequest = nil } label: {
+                        CalendarToolbarActionLabel(title: "Cancel Delete")
+                    }
+                    .accessibilityIdentifier("routine-delete-cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(role: .destructive) { confirmDelete(request) } label: {
+                        CalendarToolbarActionLabel(title: "Confirm Delete", isProminent: true)
+                    }
+                    .accessibilityIdentifier("routine-delete-confirm")
+                }
+            }
+        }
+    }
     private func requestDelete(_ row: RoutineRowState) {
         deleteRequest = .init(id: row.id, title: row.routine.title)
         onPresentationChanged(true)

@@ -170,10 +170,15 @@ struct TodayView: View {
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                Button("Cancel") { taskActionPresentation = nil }
+                                Button {
+                                    taskActionPresentation = nil
+                                } label: {
+                                    CalendarToolbarActionLabel(title: "Cancel")
+                                }
+                                .accessibilityIdentifier("today-reschedule-cancel")
                             }
                             ToolbarItem(placement: .confirmationAction) {
-                                Button("Save") {
+                                Button {
                                     let date = pickedDate
                                     let hasTime = pickedDateHasTime
                                     taskActionPresentation = nil
@@ -183,7 +188,10 @@ struct TodayView: View {
                                             command: .pick(date, hasTime: hasTime)
                                         )
                                     }
+                                } label: {
+                                    CalendarToolbarActionLabel(title: "Save", isProminent: true)
                                 }
+                                .accessibilityIdentifier("today-reschedule-save")
                             }
                         }
                     }
