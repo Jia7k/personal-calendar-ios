@@ -254,32 +254,40 @@ struct WeekPlannerView: View {
                 (minuteOffset(for: stack.renderedEnd, on: stack.day) ?? y) - y
             )
             let width = WeekPlannerTimelineMetrics.stackedEventWidth(dayWidth: dayWidth)
+            let presentation = WeekPlannerCompactCardPresentation.resolve(
+                height: height,
+                itemCount: stack.items.count
+            )
             Button {
                 selectCollisionStack(stack)
             } label: {
-                ZStack(alignment: .topTrailing) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(first.item.title)
-                            .font(.caption2.weight(.semibold))
-                            .lineLimit(2)
-                        Text(timeRange(start: stack.start, end: stack.end))
-                            .font(.caption2)
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(5)
-                    .frame(maxWidth: .infinity, minHeight: height, alignment: .topLeading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(first.item.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(presentation.titleLineLimit)
 
-                    if stack.items.count > 1 {
-                        Text("+\(stack.items.count - 1)")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(CalendarTheme.accent, in: Capsule())
-                            .padding(3)
+                    if presentation.showsTime || stack.items.count > 1 {
+                        HStack(alignment: .center, spacing: 2) {
+                            if presentation.showsTime {
+                                Text(stack.start.formatted(date: .omitted, time: .shortened))
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            if stack.items.count > 1 {
+                                Text("+\(stack.items.count - 1)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(CalendarTheme.accent, in: Capsule())
+                            }
+                        }
                     }
                 }
+                .foregroundStyle(.primary)
+                .padding(5)
+                .frame(maxWidth: .infinity, minHeight: height, alignment: .topLeading)
                 .background(itemColor(first.item).opacity(0.22), in: RoundedRectangle(cornerRadius: 7))
                 .overlay {
                     RoundedRectangle(cornerRadius: 7)
@@ -290,7 +298,7 @@ struct WeekPlannerView: View {
             .frame(width: width, height: height, alignment: .topLeading)
             .popover(
                 isPresented: collisionStackPopoverBinding(identifier: stack.id),
-                attachmentAnchor: .rect(.bounds),
+                attachmentAnchor: .point(.top),
                 arrowEdge: .top
             ) {
                 collisionStackPopover(stack)
@@ -725,7 +733,11 @@ struct WeekPlannerView: View {
                 }
             }
             .padding(16)
-            .frame(width: 320, height: 200, alignment: .leading)
+            .frame(
+                width: WeekPlannerPopupMetrics.width,
+                height: WeekPlannerPopupMetrics.height,
+                alignment: .topLeading
+            )
             .background(CalendarTheme.surface)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("week-event-stack-picker")
@@ -798,7 +810,11 @@ struct WeekPlannerView: View {
             }
         }
         .padding(16)
-        .frame(width: 320, height: 200, alignment: .leading)
+        .frame(
+            width: WeekPlannerPopupMetrics.width,
+            height: WeekPlannerPopupMetrics.height,
+            alignment: .topLeading
+        )
         .background(CalendarTheme.surface)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("week-task-stack-detail")
@@ -923,6 +939,11 @@ struct WeekPlannerView: View {
     }
 }
 
+private enum WeekPlannerPopupMetrics {
+    static let width: CGFloat = 340
+    static let height: CGFloat = 260
+}
+
 private struct WeekEventDetailCard: View {
     let event: CalendarEventSnapshot
     let calendar: Calendar
@@ -953,7 +974,7 @@ private struct WeekEventDetailCard: View {
                     closeButton
                         .accessibilitySortPriority(1)
                 }
-                .frame(maxHeight: 360)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
 
             Button("Open Event", action: onOpen)
@@ -965,9 +986,9 @@ private struct WeekEventDetailCard: View {
         }
         .padding(20)
         .frame(
-            width: isInline ? nil : 320,
-            height: isInline ? nil : 200,
-            alignment: .leading
+            width: isInline ? nil : WeekPlannerPopupMetrics.width,
+            height: isInline ? nil : WeekPlannerPopupMetrics.height,
+            alignment: .topLeading
         )
         .frame(maxWidth: isInline ? .infinity : nil, alignment: .leading)
         .background(CalendarTheme.surface)

@@ -106,7 +106,20 @@ final class DemoCalendarService: CalendarServicing {
                 let boundaryStart = calendar.date(bySettingHour: 23, minute: 50, second: 0, of: start)!
                 let boundaryEnd = calendar.date(bySettingHour: 23, minute: 59, second: 0, of: start)!
                 events.append(contentsOf: [
-                    .init(id: "demo-week-overlap-a", mutationID: "demo-week-overlap-a", title: "Algorithms", start: algorithmsStart, end: algorithmsEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false, location: "Room 201"),
+                    .init(
+                        id: "demo-week-overlap-a",
+                        mutationID: "demo-week-overlap-a",
+                        title: "Flight to Singapore (ZG 53) – Check-in and Boarding",
+                        start: algorithmsStart,
+                        end: algorithmsEnd,
+                        isAllDay: false,
+                        calendarID: DemoProfileFixture.schoolCalendarID,
+                        calendarTitle: "Google School",
+                        allowsModification: true,
+                        hasRecurrence: false,
+                        notes: "Bring passport and arrive before boarding closes.",
+                        location: "Terminal 1, Gate C12"
+                    ),
                     .init(id: "demo-week-overlap-b", mutationID: "demo-week-overlap-b", title: "Database Lab", start: databaseStart, end: databaseEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false, location: "Lab 4"),
                     .init(id: "demo-week-late-event", mutationID: "demo-week-late-event", title: "Night Study", start: lateStart, end: lateEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
                     .init(id: "demo-week-boundary-event", mutationID: "demo-week-boundary-event", title: "Midnight Check-in", start: boundaryStart, end: boundaryEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),

@@ -220,3 +220,15 @@ struct WeekPlannerTimelineMetrics {
         max(0, minuteOffset - minimumControlSize / 2)
     }
 }
+
+struct WeekPlannerCompactCardPresentation: Equatable, Sendable {
+    let showsTime: Bool
+    let titleLineLimit: Int
+
+    static func resolve(height: CGFloat, itemCount: Int) -> Self {
+        Self(
+            showsTime: itemCount == 1 && height >= 72,
+            titleLineLimit: height >= 60 ? 2 : 1
+        )
+    }
+}

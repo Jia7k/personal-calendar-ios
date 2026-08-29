@@ -88,10 +88,11 @@ final class WeekPlannerFlowUITests: XCTestCase {
         XCTAssertEqual(event.value as? String, "Expanded")
         let popover = app.popovers.firstMatch
         XCTAssertTrue(popover.waitForExistence(timeout: 3))
-        XCTAssertGreaterThanOrEqual(
+        XCTAssertEqual(
             popover.frame.minY,
-            event.frame.maxY - 2,
-            "Popover \(popover.frame) should open below event \(event.frame)"
+            event.frame.minY,
+            accuracy: 2,
+            "Popover \(popover.frame) should anchor at the event’s top edge \(event.frame)"
         )
         XCTAssertGreaterThanOrEqual(popover.frame.height, 200)
         let visibleWindow = app.windows.firstMatch.frame.insetBy(dx: -2, dy: -2)
@@ -212,6 +213,103 @@ final class WeekPlannerFlowUITests: XCTestCase {
         XCTAssertTrue(
             planner.frame.insetBy(dx: -1, dy: -1).contains(boundaryEvent.frame),
             "Boundary event \(boundaryEvent.frame) should fit inside planner \(planner.frame)"
+        )
+    }
+
+    func testLongCollisionEventPopupAndEditorKeepInformationReadable() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-profiles", "-demo-week-overlaps"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["profile-selector"].waitForExistence(timeout: 3))
+        app.buttons["profile-selector"].tap()
+        let school = app.buttons["profile-option-C0A10000-0000-4000-8000-000000000002"]
+        XCTAssertTrue(school.waitForExistence(timeout: 3))
+        school.tap()
+
+        let weekMode = app.buttons["calendar-mode-week"]
+        XCTAssertTrue(weekMode.waitForExistence(timeout: 3))
+        weekMode.tap()
+
+        let planner = app.scrollViews["week-planner"]
+        XCTAssertTrue(planner.waitForExistence(timeout: 3))
+        let stack = app.buttons["week-event-stack-demo-week-overlap-a"]
+        XCTAssertTrue(stack.waitForExistence(timeout: 3))
+        for _ in 0..<4 where !stack.isHittable {
+            planner.swipeUp()
+        }
+        XCTAssertTrue(stack.isHittable)
+        stack.tap()
+
+        let picker = app.otherElements["week-event-stack-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 3))
+        let choice = app.buttons["week-event-choice-demo-week-overlap-a"]
+        XCTAssertTrue(choice.isHittable)
+        choice.tap()
+
+        let titleText = "Flight to Singapore (ZG 53) – Check-in and Boarding"
+        let detail = app.otherElements["week-event-detail-card"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 3))
+        let title = app.staticTexts["week-event-detail-title"]
+        let time = app.staticTexts["week-event-detail-time"]
+        let notes = app.staticTexts["week-event-detail-notes"]
+        let location = app.staticTexts["week-event-detail-location"]
+        let calendarTitle = app.staticTexts["week-event-detail-calendar"]
+        let close = app.buttons["week-event-detail-close"]
+        let open = app.buttons["week-open-selected-item"]
+
+        XCTAssertEqual(title.label, titleText)
+        XCTAssertEqual(location.label, "Terminal 1, Gate C12")
+        XCTAssertEqual(calendarTitle.label, "Google School")
+        XCTAssertEqual(notes.label, "Bring passport and arrive before boarding closes.")
+        XCTAssertTrue(title.isHittable)
+        XCTAssertTrue(time.isHittable)
+        XCTAssertTrue(location.isHittable)
+        XCTAssertTrue(calendarTitle.isHittable)
+        XCTAssertTrue(close.isHittable)
+        XCTAssertTrue(open.isHittable)
+        let visibleDetail = detail.frame.insetBy(dx: -2, dy: -2)
+        XCTAssertGreaterThanOrEqual(detail.frame.width, 338)
+        XCTAssertGreaterThanOrEqual(detail.frame.height, 258)
+        XCTAssertTrue(visibleDetail.contains(title.frame))
+        XCTAssertTrue(visibleDetail.contains(time.frame))
+        XCTAssertTrue(visibleDetail.contains(location.frame))
+        XCTAssertTrue(visibleDetail.contains(calendarTitle.frame))
+        XCTAssertTrue(visibleDetail.contains(close.frame))
+        XCTAssertTrue(visibleDetail.contains(open.frame))
+        XCTAssertTrue(
+            app.windows.firstMatch.frame.insetBy(dx: -2, dy: -2).contains(detail.frame),
+            "Detail \(detail.frame) should stay inside window \(app.windows.firstMatch.frame)"
+        )
+        let detailScroll = detail.descendants(matching: .scrollView).firstMatch
+        XCTAssertTrue(detailScroll.exists)
+        for _ in 0..<2 where !notes.isHittable {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(notes.isHittable)
+        XCTAssertTrue(visibleDetail.contains(notes.frame))
+        XCTAssertTrue(open.isHittable)
+
+        close.tap()
+        XCTAssertTrue(detail.waitForNonExistence(timeout: 3))
+        stack.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 3))
+        choice.tap()
+        XCTAssertTrue(detail.waitForExistence(timeout: 3))
+        XCTAssertTrue(open.isHittable)
+        open.tap()
+
+        XCTAssertTrue(app.navigationBars["Event"].waitForExistence(timeout: 3))
+        let editorTitle = app.textFields["event-editor-title"]
+        let editorLocation = app.textFields["event-editor-location"]
+        XCTAssertTrue(editorTitle.waitForExistence(timeout: 3))
+        XCTAssertTrue(editorLocation.waitForExistence(timeout: 3))
+        XCTAssertEqual(editorTitle.value as? String, titleText)
+        XCTAssertGreaterThanOrEqual(
+            editorTitle.frame.height,
+            editorLocation.frame.height + 10,
+            "Long title should wrap taller than the single-line location field"
         )
     }
 

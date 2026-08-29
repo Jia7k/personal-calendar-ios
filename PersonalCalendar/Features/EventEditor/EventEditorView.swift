@@ -119,7 +119,8 @@ struct EventEditorView: View {
 
     private var detailsSection: some View {
         Section("Details") {
-            TextField("Title", text: binding(\.title))
+            TextField("Title", text: binding(\.title), axis: .vertical)
+                .lineLimit(1...3)
                 .accessibilityIdentifier("event-editor-title")
             Toggle("All-day", isOn: binding(\.isAllDay))
                 .accessibilityIdentifier("event-editor-all-day")

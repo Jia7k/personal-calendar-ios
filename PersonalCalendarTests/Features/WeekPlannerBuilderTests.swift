@@ -536,6 +536,20 @@ final class WeekPlannerBuilderTests: XCTestCase {
         )
     }
 
+    func testCompactCardPresentationReservesCollisionBadgeInsteadOfCompressingTime() {
+        let collision = WeekPlannerCompactCardPresentation.resolve(height: 96, itemCount: 3)
+        XCTAssertFalse(collision.showsTime)
+        XCTAssertEqual(collision.titleLineLimit, 2)
+
+        let singleEvent = WeekPlannerCompactCardPresentation.resolve(height: 96, itemCount: 1)
+        XCTAssertTrue(singleEvent.showsTime)
+        XCTAssertEqual(singleEvent.titleLineLimit, 2)
+
+        let shortEvent = WeekPlannerCompactCardPresentation.resolve(height: 44, itemCount: 1)
+        XCTAssertFalse(shortEvent.showsTime)
+        XCTAssertEqual(shortEvent.titleLineLimit, 1)
+    }
+
     func testTaskTopOffsetKeepsEarlyMinimumTapTargetInsideScrollableCanvas() {
         XCTAssertEqual(
             WeekPlannerTimelineMetrics.taskTopOffset(minuteOffset: 0),

@@ -667,8 +667,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["agenda-open-event-demo-event"].tap()
         let eventTitle = app.textFields["event-editor-title"]
         XCTAssertTrue(eventTitle.waitForExistence(timeout: 3))
-        replaceText(eventTitle, with: "Coffee updated")
-        dismissKeyboard(in: app)
+        replaceMultilineText(eventTitle, with: "Coffee updated")
         app.buttons["event-editor-save"].tap()
         XCTAssertEqual(eventTitle.value as? String, "Coffee updated")
         let eventRetry = app.buttons["event-save-retry"]
@@ -836,6 +835,11 @@ final class FoundationFlowUITests: XCTestCase {
         field.tap()
         let current = field.value as? String ?? ""
         for _ in current { field.typeText(XCUIKeyboardKey.delete.rawValue) }
+        field.typeText(text)
+    }
+
+    private func replaceMultilineText(_ field: XCUIElement, with text: String) {
+        field.tap(withNumberOfTaps: 3, numberOfTouches: 1)
         field.typeText(text)
     }
 
