@@ -64,16 +64,21 @@ struct EventEditorView: View {
             .navigationTitle(showsDelete ? "Event" : "New Event")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: requestDismiss)
-                        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
+                    Button(action: requestDismiss) {
+                        EventEditorToolbarActionLabel(title: "Cancel")
+                    }
                         .accessibilityIdentifier("event-editor-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isWriting ? "Saving…" : "Save") {
+                    Button {
                         Task { await model.requestSave(scope: selectedSaveScope) }
+                    } label: {
+                        EventEditorToolbarActionLabel(
+                            title: isWriting ? "Saving…" : "Save",
+                            isProminent: true
+                        )
                     }
                     .disabled(!canSave)
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
                     .accessibilityIdentifier("event-editor-save")
                 }
             }
@@ -747,14 +752,12 @@ private struct EventDuplicateFlowView: View {
                 .navigationTitle("Duplicate Event")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", action: onDismiss)
-                            .frame(
-                                minWidth: CalendarTheme.minimumTapSize,
-                                minHeight: CalendarTheme.minimumTapSize
-                            )
+                        Button(action: onDismiss) {
+                            EventEditorToolbarActionLabel(title: "Cancel")
+                        }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Review") {
+                        Button {
                             guard let model = sourceModel.makeDuplicate(
                                 confirmedStart: confirmedStart,
                                 onCommitted: onCommitted
@@ -763,16 +766,34 @@ private struct EventDuplicateFlowView: View {
                                 return
                             }
                             duplicateModel = model
+                        } label: {
+                            EventEditorToolbarActionLabel(
+                                title: "Review",
+                                isProminent: true
+                            )
                         }
-                        .frame(
-                            minWidth: CalendarTheme.minimumTapSize,
-                            minHeight: CalendarTheme.minimumTapSize
-                        )
                         .accessibilityIdentifier("event-duplicate-review")
                     }
                 }
             }
         }
+    }
+}
+
+struct EventEditorToolbarActionLabel: View {
+    let title: String
+    var isProminent = false
+
+    var body: some View {
+        Text(title)
+            .font(.callout.weight(isProminent ? .semibold : .regular))
+            .lineLimit(1)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .frame(
+                minWidth: CalendarTheme.minimumTapSize,
+                minHeight: CalendarTheme.minimumTapSize
+            )
+            .contentShape(Rectangle())
     }
 }
 

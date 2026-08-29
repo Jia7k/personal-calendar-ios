@@ -302,7 +302,10 @@ struct WeekPlannerView: View {
                 arrowEdge: .top
             ) {
                 collisionStackPopover(stack)
-                    .presentationCompactAdaptation(.popover)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                    .presentationContentInteraction(.scrolls)
+                    .presentationCompactAdaptation(.sheet)
             }
             .alignmentGuide(.leading) { dimensions in
                 dimensions[.leading] - x
@@ -732,13 +735,7 @@ struct WeekPlannerView: View {
                     }
                 }
             }
-            .padding(16)
-            .frame(
-                width: WeekPlannerPopupMetrics.width,
-                height: WeekPlannerPopupMetrics.height,
-                alignment: .topLeading
-            )
-            .background(CalendarTheme.surface)
+            .modifier(WeekPlannerPopupSurface(padding: 16))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("week-event-stack-picker")
         }
@@ -809,13 +806,7 @@ struct WeekPlannerView: View {
                 }
             }
         }
-        .padding(16)
-        .frame(
-            width: WeekPlannerPopupMetrics.width,
-            height: WeekPlannerPopupMetrics.height,
-            alignment: .topLeading
-        )
-        .background(CalendarTheme.surface)
+        .modifier(WeekPlannerPopupSurface(padding: 16))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("week-task-stack-detail")
     }
@@ -944,6 +935,39 @@ private enum WeekPlannerPopupMetrics {
     static let height: CGFloat = 260
 }
 
+private struct WeekPlannerPopupSurface: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    let padding: CGFloat
+    var isInline = false
+
+    private var fillsPresentation: Bool {
+        !isInline && horizontalSizeClass == .compact
+    }
+
+    private var usesFlexibleWidth: Bool {
+        isInline || fillsPresentation
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .frame(
+                width: usesFlexibleWidth ? nil : WeekPlannerPopupMetrics.width,
+                height: fillsPresentation
+                    ? nil
+                    : (isInline ? nil : WeekPlannerPopupMetrics.height),
+                alignment: .topLeading
+            )
+            .frame(
+                maxWidth: usesFlexibleWidth ? .infinity : nil,
+                maxHeight: fillsPresentation ? .infinity : nil,
+                alignment: .topLeading
+            )
+            .background(CalendarTheme.surface)
+    }
+}
+
 private struct WeekEventDetailCard: View {
     let event: CalendarEventSnapshot
     let calendar: Calendar
@@ -962,17 +986,16 @@ private struct WeekEventDetailCard: View {
                 }
                 detailRows
             } else {
-                ZStack(alignment: .topTrailing) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            title
-                            detailRows
-                        }
-                        .padding(.trailing, CalendarTheme.minimumTapSize + 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                HStack(alignment: .top, spacing: 12) {
+                    title
+                    Spacer(minLength: 8)
                     closeButton
                         .accessibilitySortPriority(1)
+                }
+
+                ScrollView(.vertical) {
+                    detailRows
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
             }
@@ -984,14 +1007,7 @@ private struct WeekEventDetailCard: View {
                 .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
                 .accessibilityIdentifier("week-open-selected-item")
         }
-        .padding(20)
-        .frame(
-            width: isInline ? nil : WeekPlannerPopupMetrics.width,
-            height: isInline ? nil : WeekPlannerPopupMetrics.height,
-            alignment: .topLeading
-        )
-        .frame(maxWidth: isInline ? .infinity : nil, alignment: .leading)
-        .background(CalendarTheme.surface)
+        .modifier(WeekPlannerPopupSurface(padding: 20, isInline: isInline))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(containerIdentifier)
     }

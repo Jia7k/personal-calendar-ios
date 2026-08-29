@@ -86,19 +86,13 @@ final class WeekPlannerFlowUITests: XCTestCase {
         XCTAssertTrue(detail.waitForExistence(timeout: 3))
         XCTAssertTrue(selectedDay.evaluate(with: otherDay))
         XCTAssertEqual(event.value as? String, "Expanded")
-        let popover = app.popovers.firstMatch
-        XCTAssertTrue(popover.waitForExistence(timeout: 3))
-        XCTAssertEqual(
-            popover.frame.minY,
-            event.frame.minY,
-            accuracy: 2,
-            "Popover \(popover.frame) should anchor at the event’s top edge \(event.frame)"
-        )
-        XCTAssertGreaterThanOrEqual(popover.frame.height, 200)
+        let sheetGrabber = app.buttons["Sheet Grabber"]
+        XCTAssertTrue(sheetGrabber.waitForExistence(timeout: 3))
+        XCTAssertFalse(app.popovers.firstMatch.exists)
         let visibleWindow = app.windows.firstMatch.frame.insetBy(dx: -2, dy: -2)
         XCTAssertTrue(
-            visibleWindow.contains(popover.frame),
-            "Popover \(popover.frame) should remain inside app window \(visibleWindow)"
+            visibleWindow.contains(detail.frame),
+            "Sheet content \(detail.frame) should remain inside app window \(visibleWindow)"
         )
         XCTAssertEqual(app.staticTexts["week-event-detail-title"].label, "Coffee")
         XCTAssertTrue(app.staticTexts["week-event-detail-time"].isHittable)
@@ -311,6 +305,122 @@ final class WeekPlannerFlowUITests: XCTestCase {
             editorLocation.frame.height + 10,
             "Long title should wrap taller than the single-line location field"
         )
+    }
+
+    func testCompactLateEventPopupKeepsLongContentAboveBottomControls() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-profiles", "-demo-week-overlaps"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["profile-selector"].waitForExistence(timeout: 3))
+        app.buttons["profile-selector"].tap()
+        let school = app.buttons["profile-option-C0A10000-0000-4000-8000-000000000002"]
+        XCTAssertTrue(school.waitForExistence(timeout: 3))
+        school.tap()
+
+        let weekMode = app.buttons["calendar-mode-week"]
+        XCTAssertTrue(weekMode.waitForExistence(timeout: 3))
+        weekMode.tap()
+
+        let window = app.windows.firstMatch
+        XCTAssertLessThan(window.frame.width, 500, "This regression requires compact iPhone presentation")
+        let planner = app.scrollViews["week-planner"]
+        let lateEvent = app.buttons["week-event-demo-week-late-event"]
+        XCTAssertTrue(planner.waitForExistence(timeout: 3))
+        XCTAssertTrue(lateEvent.waitForExistence(timeout: 3))
+        for _ in 0..<12 where !lateEvent.isHittable {
+            planner.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.76))
+                .press(
+                    forDuration: 0.05,
+                    thenDragTo: planner.coordinate(
+                        withNormalizedOffset: CGVector(dx: 0.5, dy: 0.56)
+                    )
+                )
+        }
+        XCTAssertTrue(lateEvent.isHittable)
+        XCTAssertGreaterThan(
+            lateEvent.frame.midY,
+            planner.frame.midY,
+            "The late fixture must pressure the lower compact-presentation boundary"
+        )
+        lateEvent.tap()
+
+        let detail = app.otherElements["week-event-detail-card"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 3))
+        let title = app.staticTexts["week-event-detail-title"]
+        let location = app.staticTexts["week-event-detail-location"]
+        let notes = app.staticTexts["week-event-detail-notes"]
+        let calendarTitle = app.staticTexts["week-event-detail-calendar"]
+        let close = app.buttons["week-event-detail-close"]
+        let open = app.buttons["week-open-selected-item"]
+        let tabBar = app.tabBars.firstMatch
+        let add = app.buttons["universal-add"]
+        let sheetGrabber = app.buttons["Sheet Grabber"]
+
+        XCTAssertTrue(
+            sheetGrabber.waitForExistence(timeout: 3),
+            "Compact-width event details should use a safe-area-aware sheet"
+        )
+        XCTAssertFalse(
+            app.popovers.firstMatch.exists,
+            "Compact-width event details must not force an anchored popover"
+        )
+
+        XCTAssertEqual(
+            title.label,
+            "BAC 2005 - Fintech Investment and Risk Management (S2 Seminar)"
+        )
+        XCTAssertEqual(
+            location.label,
+            "E2-02-07-SR204\n1 Punggol Coast Rd,\nSingapore 828608"
+        )
+        XCTAssertEqual(
+            notes.label,
+            "Class Nbr: 1090\nInstructor(s): HO KAI LING KATHERINE, LAM HAW JU ERIC"
+        )
+        XCTAssertGreaterThan(
+            title.frame.height,
+            calendarTitle.frame.height + 10,
+            "The full event title should occupy multiple readable lines"
+        )
+        XCTAssertGreaterThan(
+            location.frame.height,
+            calendarTitle.frame.height + 10,
+            "The full address should occupy multiple readable lines"
+        )
+        XCTAssertTrue(detail.frame.insetBy(dx: -2, dy: -2).contains(title.frame))
+        XCTAssertTrue(close.isHittable)
+        XCTAssertTrue(open.isHittable)
+        XCTAssertTrue(tabBar.exists)
+        XCTAssertTrue(add.exists)
+        let visibleDetail = detail.frame.insetBy(dx: -2, dy: -2)
+        XCTAssertTrue(visibleDetail.contains(open.frame))
+        XCTAssertTrue(visibleDetail.contains(close.frame))
+        XCTAssertTrue(
+            window.frame.insetBy(dx: -2, dy: -2).contains(detail.frame),
+            "Compact sheet content \(detail.frame) must remain inside window \(window.frame)"
+        )
+        XCTAssertFalse(tabBar.isHittable, "The modal sheet must block the underlying Tab Bar")
+        XCTAssertFalse(add.isHittable, "The modal sheet must block the underlying Add button")
+
+        let detailScroll = detail.descendants(matching: .scrollView).firstMatch
+        XCTAssertTrue(detailScroll.exists)
+        for _ in 0..<4 where !detailScroll.frame.insetBy(dx: -2, dy: -2).contains(location.frame) {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(
+            detailScroll.frame.insetBy(dx: -2, dy: -2).contains(location.frame),
+            "The complete multi-line address must be reachable inside the detail scroller"
+        )
+        for _ in 0..<4 where !detailScroll.frame.insetBy(dx: -2, dy: -2).contains(notes.frame) {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(
+            detailScroll.frame.insetBy(dx: -2, dy: -2).contains(notes.frame),
+            "The complete multi-line notes must be reachable inside the detail scroller"
+        )
+        XCTAssertTrue(open.isHittable)
+        XCTAssertTrue(visibleDetail.contains(open.frame))
     }
 
     func testWeekAllDayRowsStayFixedDuringHorizontalDrag() {

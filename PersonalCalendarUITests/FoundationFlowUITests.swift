@@ -740,6 +740,55 @@ final class FoundationFlowUITests: XCTestCase {
         scrollToHittable(delete, in: app)
     }
 
+    func testEventEditorToolbarLabelsStayBoundedAndReachableAtAccessibilityXXXL() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ui-testing",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+
+        let event = app.buttons["agenda-open-event-demo-event"]
+        XCTAssertTrue(event.waitForExistence(timeout: 3))
+        scrollToHittable(event, in: app)
+        event.tap()
+
+        let navigationBar = app.navigationBars["Event"]
+        let cancel = app.buttons["event-editor-cancel"]
+        let save = app.buttons["event-editor-save"]
+        XCTAssertTrue(navigationBar.waitForExistence(timeout: 3))
+        XCTAssertTrue(cancel.waitForExistence(timeout: 3))
+        XCTAssertTrue(save.waitForExistence(timeout: 3))
+        XCTAssertEqual(cancel.label, "Cancel")
+        XCTAssertEqual(save.label, "Save")
+
+        let window = app.windows.firstMatch.frame.insetBy(dx: -2, dy: -2)
+        let toolbarBounds = navigationBar.frame.insetBy(dx: -2, dy: -2)
+        for action in [cancel, save] {
+            XCTAssertTrue(action.isHittable)
+            XCTAssertTrue(
+                window.contains(action.frame),
+                "Toolbar action \(action.label) \(action.frame) should fit inside window \(window)"
+            )
+            XCTAssertTrue(
+                toolbarBounds.contains(action.frame),
+                "Toolbar action \(action.label) \(action.frame) should fit inside navigation bar \(toolbarBounds)"
+            )
+            XCTAssertLessThanOrEqual(
+                action.frame.width,
+                96,
+                "Toolbar action \(action.label) should cap visual text growth instead of overflowing"
+            )
+            XCTAssertLessThanOrEqual(
+                action.frame.height,
+                64,
+                "Toolbar action \(action.label) should remain a bounded single toolbar row"
+            )
+        }
+        XCTAssertFalse(cancel.frame.intersects(save.frame))
+    }
+
     func testTaskEditorActionsAndRecurringDeletionCopyRemainAccessibleAtAccessibilityXXXL() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-demo-editor-recurring", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]

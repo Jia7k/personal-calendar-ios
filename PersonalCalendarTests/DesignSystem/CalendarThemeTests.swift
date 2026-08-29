@@ -60,3 +60,37 @@ final class CalendarThemeTests: XCTestCase {
         return 0.2126 * linearized(red) + 0.7152 * linearized(green) + 0.0722 * linearized(blue)
     }
 }
+
+@MainActor
+final class EventEditorToolbarActionLabelTests: XCTestCase {
+    func testAccessibilityXXXLLabelsStayInsideACompactToolbarBubble() {
+        let actions: [(title: String, isProminent: Bool)] = [
+            ("Cancel", false),
+            ("Save", true),
+            ("Saving…", true),
+            ("Review", true)
+        ]
+
+        for action in actions {
+            let size = measuredSize(
+                title: action.title,
+                isProminent: action.isProminent
+            )
+            XCTAssertGreaterThanOrEqual(size.width, CalendarTheme.minimumTapSize)
+            XCTAssertGreaterThanOrEqual(size.height, CalendarTheme.minimumTapSize)
+            XCTAssertLessThanOrEqual(size.width, 96, action.title)
+            XCTAssertLessThanOrEqual(size.height, 64, action.title)
+        }
+    }
+
+    private func measuredSize(title: String, isProminent: Bool) -> CGSize {
+        let controller = UIHostingController(
+            rootView: EventEditorToolbarActionLabel(
+                title: title,
+                isProminent: isProminent
+            )
+            .environment(\.dynamicTypeSize, .accessibility5)
+        )
+        return controller.sizeThatFits(in: CGSize(width: 400, height: 400))
+    }
+}

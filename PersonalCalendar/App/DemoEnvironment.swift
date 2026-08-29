@@ -121,7 +121,20 @@ final class DemoCalendarService: CalendarServicing {
                         location: "Terminal 1, Gate C12"
                     ),
                     .init(id: "demo-week-overlap-b", mutationID: "demo-week-overlap-b", title: "Database Lab", start: databaseStart, end: databaseEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false, location: "Lab 4"),
-                    .init(id: "demo-week-late-event", mutationID: "demo-week-late-event", title: "Night Study", start: lateStart, end: lateEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
+                    .init(
+                        id: "demo-week-late-event",
+                        mutationID: "demo-week-late-event",
+                        title: "BAC 2005 - Fintech Investment and Risk Management (S2 Seminar)",
+                        start: lateStart,
+                        end: lateEnd,
+                        isAllDay: false,
+                        calendarID: DemoProfileFixture.schoolCalendarID,
+                        calendarTitle: "Google School",
+                        allowsModification: true,
+                        hasRecurrence: false,
+                        notes: "Class Nbr: 1090\nInstructor(s): HO KAI LING KATHERINE, LAM HAW JU ERIC",
+                        location: "E2-02-07-SR204\n1 Punggol Coast Rd,\nSingapore 828608"
+                    ),
                     .init(id: "demo-week-boundary-event", mutationID: "demo-week-boundary-event", title: "Midnight Check-in", start: boundaryStart, end: boundaryEnd, isAllDay: false, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
                     .init(id: "demo-week-all-day-event", mutationID: "demo-week-all-day-event", title: "Study Week", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
                     .init(id: "demo-week-all-day-event-2", mutationID: "demo-week-all-day-event-2", title: "Campus Fair", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),

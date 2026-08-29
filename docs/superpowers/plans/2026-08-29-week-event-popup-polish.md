@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Week Planner event information and long editor titles readable without abandoning the approved anchored popup.
+**Goal:** Make Week Planner event information and long editor titles readable with an anchored regular-width popover and a safe compact-width sheet.
 
-**Architecture:** Keep the existing selection and occurrence-authority model. Refine only the SwiftUI presentation: a larger top-anchored popover container, progressive disclosure in narrow timeline cells, and a multiline Event editor title. Add a deterministic dense-week event so UI automation exercises the real popup and editor.
+**Architecture:** Keep the existing selection and occurrence-authority model. Use a bounded top-anchored popover at regular width, adapt that presentation to a medium/large sheet at compact width, retain progressive disclosure in narrow timeline cells, and keep the multiline Event editor title. Add deterministic dense-week fixtures so UI automation exercises the real popup and editor.
 
 **Tech Stack:** SwiftUI, XCTest/XCUITest, XcodeGen, iOS 17+
 
@@ -104,3 +104,29 @@ git diff --check
 - [x] **Step 4: Request an independent code review and address validated findings**
 
 Review popup geometry, Dynamic Type, safe-area containment, occurrence routing, collision selection, and presentation dismissal before completion.
+
+### Task 4: Real-device compact presentation and toolbar remediation
+
+**Files:**
+- Modify: `PersonalCalendar/Features/Calendar/WeekPlannerView.swift`
+- Modify: `PersonalCalendar/Features/EventEditor/EventEditorView.swift`
+- Modify: `PersonalCalendar/App/DemoEnvironment.swift`
+- Modify: `PersonalCalendarUITests/WeekPlannerFlowUITests.swift`
+- Modify: `PersonalCalendarUITests/FoundationFlowUITests.swift`
+- Modify: `PersonalCalendarTests/DesignSystem/CalendarThemeTests.swift`
+
+- [x] **Step 1: Bind the physical-phone popup failure with a long late-event regression**
+
+Require a native compact sheet, fixed Close/Open actions, scroll-reachable location and notes, blocked background controls, and full window containment.
+
+- [x] **Step 2: Adapt compact presentations without changing regular-width behavior**
+
+Use medium/large sheet detents on compact width and keep the 340-by-260-point popover on regular width. Share the adaptive surface across event, overlap, and task-detail states.
+
+- [x] **Step 3: Bound Event editor toolbar labels**
+
+Use semantic callout labels capped at Dynamic Type `xxxLarge` for Cancel, Save, Saving, and Review while retaining a minimum 44-point SwiftUI frame.
+
+- [x] **Step 4: Verify the targeted regressions and complete UI class**
+
+Run the focused long-event and toolbar tests, then the complete Week Planner UI class and relevant editor accessibility regressions before device installation.
