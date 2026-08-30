@@ -68,7 +68,7 @@ struct NotificationSettingsView: View {
                 || settings.lastSuccessfulNotificationRefresh != nil {
                 VStack(alignment: .leading, spacing: 4) {
                     if settings.notificationsPausedForStaleInput {
-                        Text("Notification scheduling is paused because current calendar data could not be refreshed. Check permissions and try again.")
+                        Text("Notification scheduling is paused because current notification inputs could not be refreshed. Check permissions and try again.")
                     }
                     if let refreshed = settings.lastSuccessfulNotificationRefresh {
                         Text("Last successful refresh: \(refreshed.formatted(date: .abbreviated, time: .shortened)).")

@@ -85,6 +85,21 @@ final class NotificationActionHandlerTests: XCTestCase {
         XCTAssertTrue(didReturn)
     }
 
+    func testHookGateRemembersAnOpenThatArrivesBeforeWait() async {
+        let gate = NotificationActionHookGate()
+        await gate.open()
+        let waitReturned = expectation(description: "early-open gate returned")
+        let waiter = Task {
+            await gate.wait()
+            waitReturned.fulfill()
+        }
+
+        await fulfillment(of: [waitReturned], timeout: 0.5)
+
+        await gate.open()
+        await waiter.value
+    }
+
     func testFailedCompletionWriteDoesNotRunRefreshHook() async {
         let routine = makeRoutine()
         let routines = FakeRoutineRepository(routines: [routine])
@@ -399,12 +414,21 @@ private enum NotificationActionTestError: Error {
 
 private actor NotificationActionHookGate {
     private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
 
     func wait() async {
-        await withCheckedContinuation { continuation = $0 }
+        guard !isOpen else { return }
+        await withCheckedContinuation { pending in
+            if isOpen {
+                pending.resume()
+            } else {
+                continuation = pending
+            }
+        }
     }
 
     func open() {
+        isOpen = true
         continuation?.resume()
         continuation = nil
     }

@@ -60,6 +60,10 @@ final class NotificationRescheduler {
         guard authorizationState == .granted else {
             return await failClosed(generation: generation)
         }
+        guard calendarService.accessState == .granted,
+              reminders.accessState == .granted else {
+            return await failClosed(generation: generation)
+        }
         guard !Task.isCancelled else { return .failure }
 
         let localCalendar = calendarProvider()

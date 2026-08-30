@@ -15,6 +15,19 @@ final class NotificationRenewalSchedulerTests: XCTestCase {
         )
     }
 
+    func testPersonalCalendarAppLaunchRegistersNotificationRenewal() {
+        let fixture = makeFixture(outcome: .success)
+
+        PersonalCalendarApp.registerNotificationRenewalForLaunch(
+            fixture.subject
+        )
+
+        XCTAssertEqual(
+            fixture.driver.registeredIdentifiers,
+            ["local.personalcalendar.notification-renewal"]
+        )
+    }
+
     func testSuccessfulForegroundRefreshReplacesOneRequestTwelveHoursLater() async {
         let fixture = makeFixture(outcome: .success)
 
@@ -71,6 +84,24 @@ final class NotificationRenewalSchedulerTests: XCTestCase {
 
         XCTAssertEqual(fixture.driver.submissions.count, 1)
         XCTAssertEqual(fixture.driver.pendingRequests.count, 1)
+        XCTAssertEqual(task.completionResults, [false])
+    }
+
+    func testThrowingBackgroundSuccessorSubmissionStillRenewsAndCompletesFailed() async {
+        let fixture = makeFixture(outcome: .success)
+        fixture.driver.submissionError = RenewalTestError.submissionFailed
+        fixture.subject.register()
+
+        let task = RenewalTaskSpy(events: fixture.events)
+        fixture.driver.launch(task)
+        await waitUntil { task.completionResults == [false] }
+
+        XCTAssertEqual(
+            fixture.events.values,
+            ["submit", "renew", "complete:false"]
+        )
+        XCTAssertEqual(fixture.driver.submissions.count, 1)
+        XCTAssertTrue(fixture.driver.pendingRequests.isEmpty)
         XCTAssertEqual(task.completionResults, [false])
     }
 
@@ -148,6 +179,7 @@ private final class NotificationRenewalDriverSpy: NotificationRenewalDriving {
     private(set) var registeredIdentifiers: [String] = []
     private(set) var submissions: [NotificationRenewalRequest] = []
     private(set) var pendingRequests: [NotificationRenewalRequest] = []
+    var submissionError: Error?
     private var handler: (@MainActor @Sendable (any NotificationRenewalTask) -> Void)?
     private let events: RenewalEventLog
 
@@ -168,6 +200,7 @@ private final class NotificationRenewalDriverSpy: NotificationRenewalDriving {
     func submitReplacement(_ request: NotificationRenewalRequest) throws {
         events.values.append("submit")
         submissions.append(request)
+        if let submissionError { throw submissionError }
         pendingRequests.removeAll { $0.identifier == request.identifier }
         pendingRequests.append(request)
     }
@@ -179,6 +212,10 @@ private final class NotificationRenewalDriverSpy: NotificationRenewalDriving {
         }
         handler(task)
     }
+}
+
+private enum RenewalTestError: Error {
+    case submissionFailed
 }
 
 @MainActor

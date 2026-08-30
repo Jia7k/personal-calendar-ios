@@ -41,7 +41,9 @@ struct PersonalCalendarApp: App {
         environment = isUITesting
             ? .demo(container: container, arguments: arguments)
             : .live(container: container)
-        environment.notificationRenewalScheduler.register()
+        Self.registerNotificationRenewalForLaunch(
+            environment.notificationRenewalScheduler
+        )
         notificationDelegate.configure(
             routeController: routeController,
             actionHandler: environment.notificationActionHandler
@@ -60,6 +62,13 @@ struct PersonalCalendarApp: App {
             )
                 .modelContainer(container)
         }
+    }
+
+    @MainActor
+    static func registerNotificationRenewalForLaunch(
+        _ scheduler: NotificationRenewalScheduler
+    ) {
+        scheduler.register()
     }
 
     private static func makeModelContainer(isStoredInMemoryOnly: Bool) -> ModelContainer {

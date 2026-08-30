@@ -362,15 +362,15 @@ struct RootTabView: View {
     }
 
     private func processPendingRouteIfPossible() {
-        guard environment.settings.didCompleteOnboarding,
-              routePresentationState.isIdle,
-              calendarDeepLink == nil,
-              taskDeepLink == nil,
-              routineDeepLink == nil,
-              let envelope = routeController.pending else { return }
-
-        routeController.consume(id: envelope.id)
-        dispatch(envelope)
+        RootPendingRouteProcessor.processNext(
+            from: routeController,
+            isReady: environment.settings.didCompleteOnboarding
+                && routePresentationState.isIdle
+                && calendarDeepLink == nil
+                && taskDeepLink == nil
+                && routineDeepLink == nil,
+            dispatch: { dispatch($0) }
+        )
     }
 
     private func processPendingHandoffIfPossible() {
@@ -592,6 +592,23 @@ struct RootTabView: View {
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+}
+
+@MainActor
+struct RootPendingRouteProcessor {
+    @discardableResult
+    static func processNext(
+        from routeController: AppRouteController,
+        isReady: Bool,
+        dispatch: (AppRouteEnvelope) -> Void
+    ) -> Bool {
+        guard isReady, let envelope = routeController.pending else {
+            return false
+        }
+        routeController.consume(id: envelope.id)
+        dispatch(envelope)
+        return true
     }
 }
 

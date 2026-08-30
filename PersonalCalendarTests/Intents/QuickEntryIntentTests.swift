@@ -133,6 +133,89 @@ final class QuickEntryIntentTests: XCTestCase {
         XCTAssertEqual(Set(consumedTexts), Set((0..<captureCount).map { "capture-\($0)" }))
     }
 
+    func testInterleavedDurableWritersAndConsumersDoNotLoseOrDuplicateAcceptedCaptures() async throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        let writerCount = 4
+        let capturesPerWriter = 12
+        let retryDeadline = ContinuousClock.now + .seconds(5)
+        let recorder = DurableQueueInterleavingRecorder(writerCount: writerCount)
+
+        for text in ["seed-0", "seed-1"] {
+            try fixture.store.write(.quickEntry(text: text, profile: nil))
+            await recorder.recordAccepted(text)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for writerIndex in 0..<writerCount {
+                let store = AppRouteHandoffStore(fileURL: fixture.store.fileURL)
+                group.addTask {
+                    for captureIndex in 0..<capturesPerWriter {
+                        let text = "writer-\(writerIndex)-capture-\(captureIndex)"
+                        while true {
+                            do {
+                                try store.write(.quickEntry(text: text, profile: nil))
+                                await recorder.recordAccepted(text)
+                                break
+                            } catch AppRouteHandoffStoreError.queueFull {
+                                guard ContinuousClock.now < retryDeadline else {
+                                    await recorder.recordFailure("Timed out waiting for queue capacity")
+                                    break
+                                }
+                                await Task.yield()
+                            } catch {
+                                await recorder.recordFailure(String(describing: error))
+                                break
+                            }
+                        }
+                        await Task.yield()
+                    }
+                    await recorder.writerFinished()
+                }
+            }
+
+            for _ in 0..<2 {
+                let store = AppRouteHandoffStore(fileURL: fixture.store.fileURL)
+                group.addTask {
+                    while true {
+                        do {
+                            if let route = try store.consume() {
+                                guard case let .quickEntry(text, profile) = route,
+                                      profile == nil else {
+                                    await recorder.recordFailure("Unexpected handoff route")
+                                    return
+                                }
+                                await recorder.recordConsumed(text)
+                                await Task.yield()
+                                continue
+                            }
+                            if await recorder.writersAreFinished() {
+                                return
+                            }
+                        } catch {
+                            await recorder.recordFailure(String(describing: error))
+                            return
+                        }
+                        await Task.yield()
+                    }
+                }
+            }
+        }
+
+        let snapshot = await recorder.snapshot()
+        let expectedCount = 2 + (writerCount * capturesPerWriter)
+        XCTAssertTrue(snapshot.failures.isEmpty, snapshot.failures.joined(separator: ", "))
+        XCTAssertEqual(snapshot.accepted.count, expectedCount)
+        XCTAssertEqual(snapshot.consumed.count, snapshot.accepted.count)
+        XCTAssertEqual(Set(snapshot.consumed), Set(snapshot.accepted))
+        XCTAssertEqual(Set(snapshot.consumed).count, snapshot.consumed.count)
+        XCTAssertTrue(
+            snapshot.didConsumeBeforeFinalAcceptance,
+            "At least one durable consumer must run while writers are still accepting captures."
+        )
+        XCTAssertNil(try fixture.store.consume())
+    }
+
     func testVersionOnePayloadMigratesAheadOfTheNextWrite() throws {
         let fixture = try makeHandoffFixture()
         defer { fixture.remove() }
@@ -590,4 +673,63 @@ private struct CatalogFixture {
     func remove() {
         try? FileManager.default.removeItem(at: directory)
     }
+}
+
+private actor DurableQueueInterleavingRecorder {
+    private var remainingWriters: Int
+    private var accepted: [String] = []
+    private var consumed: [String] = []
+    private var failures: [String] = []
+    private var operationKinds: [OperationKind] = []
+
+    init(writerCount: Int) {
+        remainingWriters = writerCount
+    }
+
+    func recordAccepted(_ text: String) {
+        accepted.append(text)
+        operationKinds.append(.accepted)
+    }
+
+    func recordConsumed(_ text: String) {
+        consumed.append(text)
+        operationKinds.append(.consumed)
+    }
+
+    func recordFailure(_ failure: String) {
+        failures.append(failure)
+    }
+
+    func writerFinished() {
+        remainingWriters -= 1
+    }
+
+    func writersAreFinished() -> Bool {
+        remainingWriters == 0
+    }
+
+    func snapshot() -> DurableQueueInterleavingSnapshot {
+        let firstConsumedIndex = operationKinds.firstIndex(of: .consumed)
+        let lastAcceptedIndex = operationKinds.lastIndex(of: .accepted)
+        return DurableQueueInterleavingSnapshot(
+            accepted: accepted,
+            consumed: consumed,
+            failures: failures,
+            didConsumeBeforeFinalAcceptance: firstConsumedIndex.map { firstConsumed in
+                lastAcceptedIndex.map { firstConsumed < $0 } ?? false
+            } ?? false
+        )
+    }
+
+    private enum OperationKind: Equatable {
+        case accepted
+        case consumed
+    }
+}
+
+private struct DurableQueueInterleavingSnapshot: Sendable {
+    let accepted: [String]
+    let consumed: [String]
+    let failures: [String]
+    let didConsumeBeforeFinalAcceptance: Bool
 }

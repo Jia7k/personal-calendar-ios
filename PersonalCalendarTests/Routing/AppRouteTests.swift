@@ -174,6 +174,40 @@ final class AppRouteTests: XCTestCase {
         XCTAssertNil(controller.pending)
     }
 
+    func testRootProcessorDispatchesTwoAcceptedRoutesSequentially() throws {
+        let controller = AppRouteController()
+        let firstRoute = AppRoute.today
+        let secondRoute = AppRoute.task(id: "root-second", profile: nil)
+        XCTAssertTrue(controller.submit(firstRoute))
+        XCTAssertTrue(controller.submit(secondRoute))
+        var dispatchedRoutes: [AppRoute] = []
+        var pendingDuringDispatch: [AppRoute?] = []
+
+        XCTAssertTrue(RootPendingRouteProcessor.processNext(
+            from: controller,
+            isReady: true,
+            dispatch: { envelope in
+                dispatchedRoutes.append(envelope.route)
+                pendingDuringDispatch.append(controller.pending?.route)
+            }
+        ))
+        XCTAssertEqual(dispatchedRoutes, [firstRoute])
+        XCTAssertEqual(pendingDuringDispatch, [secondRoute])
+
+        XCTAssertTrue(RootPendingRouteProcessor.processNext(
+            from: controller,
+            isReady: true,
+            dispatch: { envelope in
+                dispatchedRoutes.append(envelope.route)
+                pendingDuringDispatch.append(controller.pending?.route)
+            }
+        ))
+
+        XCTAssertEqual(dispatchedRoutes, [firstRoute, secondRoute])
+        XCTAssertEqual(pendingDuringDispatch, [secondRoute, nil])
+        XCTAssertNil(controller.pending)
+    }
+
     func testNotificationRouteSubmissionRejectsOverflowWithoutEvictingQueuedAction() throws {
         let controller = AppRouteController()
         XCTAssertTrue(AppNotificationRouteSubmission.submit(.today, to: controller))

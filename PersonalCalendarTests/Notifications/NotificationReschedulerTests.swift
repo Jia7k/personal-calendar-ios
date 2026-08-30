@@ -58,6 +58,48 @@ final class NotificationReschedulerTests: XCTestCase {
         XCTAssertNil(fixture.settings.lastSuccessfulNotificationRefresh)
     }
 
+    func testCalendarNotDeterminedFailsClosedAndRecoversAfterAccessIsGranted() async {
+        await assertNonGrantedAccessFailsClosedAndRecovers(
+            service: .calendar,
+            state: .notDetermined
+        )
+    }
+
+    func testCalendarDeniedFailsClosedAndRecoversAfterAccessIsGranted() async {
+        await assertNonGrantedAccessFailsClosedAndRecovers(
+            service: .calendar,
+            state: .denied
+        )
+    }
+
+    func testCalendarRestrictedFailsClosedAndRecoversAfterAccessIsGranted() async {
+        await assertNonGrantedAccessFailsClosedAndRecovers(
+            service: .calendar,
+            state: .restricted
+        )
+    }
+
+    func testRemindersNotDeterminedFailsClosedAndRecoversAfterAccessIsGranted() async {
+        await assertNonGrantedAccessFailsClosedAndRecovers(
+            service: .reminders,
+            state: .notDetermined
+        )
+    }
+
+    func testRemindersDeniedFailsClosedAndRecoversAfterAccessIsGranted() async {
+        await assertNonGrantedAccessFailsClosedAndRecovers(
+            service: .reminders,
+            state: .denied
+        )
+    }
+
+    func testRemindersRestrictedFailsClosedAndRecoversAfterAccessIsGranted() async {
+        await assertNonGrantedAccessFailsClosedAndRecovers(
+            service: .reminders,
+            state: .restricted
+        )
+    }
+
     func testOlderFailedGenerationCannotClearNewerSuccessfulReplacement() async {
         let fixture = makeFixture()
         fixture.scheduler.pending = staleRequests()
@@ -125,6 +167,77 @@ final class NotificationReschedulerTests: XCTestCase {
         XCTAssertEqual(replacementOutcome, .failure)
         XCTAssertTrue(fixture.settings.notificationsPausedForStaleInput)
         XCTAssertNil(fixture.settings.lastSuccessfulNotificationRefresh)
+    }
+
+    private func assertNonGrantedAccessFailsClosedAndRecovers(
+        service: ReschedulerAccessService,
+        state: AccessState,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let fixture = makeFixture()
+        let previousSuccess = fixture.now.addingTimeInterval(-6 * 60 * 60)
+        fixture.settings.markNotificationRefreshSuccessful(at: previousSuccess)
+        fixture.scheduler.pending = staleRequests()
+
+        switch service {
+        case .calendar:
+            fixture.calendar.accessState = state
+        case .reminders:
+            fixture.reminders.accessState = state
+        }
+
+        let failedOutcome = await fixture.subject.reschedule()
+
+        XCTAssertEqual(failedOutcome, .failure, file: file, line: line)
+        XCTAssertEqual(fixture.scheduler.replacements, [[]], file: file, line: line)
+        XCTAssertTrue(fixture.scheduler.pending.isEmpty, file: file, line: line)
+        XCTAssertTrue(
+            fixture.settings.notificationsPausedForStaleInput,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            fixture.settings.lastSuccessfulNotificationRefresh,
+            previousSuccess,
+            file: file,
+            line: line
+        )
+        let pausedReload = AppSettingsStore(defaults: fixture.defaults)
+        XCTAssertTrue(
+            pausedReload.notificationsPausedForStaleInput,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            pausedReload.lastSuccessfulNotificationRefresh,
+            previousSuccess,
+            file: file,
+            line: line
+        )
+
+        switch service {
+        case .calendar:
+            fixture.calendar.accessState = .granted
+        case .reminders:
+            fixture.reminders.accessState = .granted
+        }
+
+        let recoveryOutcome = await fixture.subject.reschedule()
+
+        XCTAssertEqual(recoveryOutcome, .success, file: file, line: line)
+        XCTAssertFalse(fixture.scheduler.pending.isEmpty, file: file, line: line)
+        XCTAssertFalse(
+            fixture.settings.notificationsPausedForStaleInput,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            fixture.settings.lastSuccessfulNotificationRefresh,
+            fixture.now,
+            file: file,
+            line: line
+        )
     }
 
     private func makeFixture() -> ReschedulerFixture {
@@ -267,6 +380,11 @@ private struct ReschedulerFixture {
     let settings: AppSettingsStore
     let defaults: UserDefaults
     let now: Date
+}
+
+private enum ReschedulerAccessService {
+    case calendar
+    case reminders
 }
 
 private enum AuthoritativeFailure: String, CaseIterable, CustomStringConvertible {

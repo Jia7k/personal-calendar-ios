@@ -105,6 +105,12 @@ final class FoundationFlowUITests: XCTestCase {
             "Notification scheduling is paused"
         )).firstMatch
         XCTAssertTrue(paused.waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            paused.label.contains(
+                "current notification inputs could not be refreshed"
+            )
+        )
+        XCTAssertFalse(paused.label.contains("calendar data"))
         XCTAssertTrue(paused.label.contains("Check permissions and try again"))
 
         let noSuccess = statuses.matching(NSPredicate(
