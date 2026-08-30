@@ -34,6 +34,30 @@ final class NotificationReschedulerTests: XCTestCase {
         }
     }
 
+    func testCancelledLatestDeniedAuthorizationReadStillFailsClosed() async {
+        let fixture = makeFixture()
+        fixture.scheduler.pending = staleRequests()
+        fixture.authorization.suspendNextRead = true
+
+        let refresh = Task { @MainActor in
+            await fixture.subject.reschedule()
+        }
+        while !fixture.authorization.isReadSuspended {
+            await Task.yield()
+        }
+
+        fixture.authorization.setAccessState(.denied)
+        refresh.cancel()
+        fixture.authorization.resumeRead()
+        let outcome = await refresh.value
+
+        XCTAssertEqual(outcome, .failure)
+        XCTAssertEqual(fixture.scheduler.replacements, [[]])
+        XCTAssertTrue(fixture.scheduler.pending.isEmpty)
+        XCTAssertTrue(fixture.settings.notificationsPausedForStaleInput)
+        XCTAssertNil(fixture.settings.lastSuccessfulNotificationRefresh)
+    }
+
     func testOlderFailedGenerationCannotClearNewerSuccessfulReplacement() async {
         let fixture = makeFixture()
         fixture.scheduler.pending = staleRequests()

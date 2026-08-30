@@ -57,10 +57,10 @@ final class NotificationRescheduler {
 
         let authorizationState = await authorization.accessState
         guard isLatest(generation) else { return .superseded }
-        guard !Task.isCancelled else { return .failure }
         guard authorizationState == .granted else {
             return await failClosed(generation: generation)
         }
+        guard !Task.isCancelled else { return .failure }
 
         let localCalendar = calendarProvider()
         let refreshDate = now()
