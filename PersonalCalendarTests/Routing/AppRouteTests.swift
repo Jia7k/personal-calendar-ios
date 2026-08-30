@@ -174,32 +174,6 @@ final class AppRouteTests: XCTestCase {
         XCTAssertNil(controller.pending)
     }
 
-    func testRootOverflowFeedbackDefersNeutralAlertUntilRootPresentationIsIdle() throws {
-        let controller = AppRouteController()
-        XCTAssertTrue(controller.submit(.today))
-        let first = try XCTUnwrap(controller.pending)
-        for index in 2 ... 16 {
-            XCTAssertTrue(controller.submit(.task(id: "root-route-\(index)", profile: nil)))
-        }
-
-        var feedback = RootRouteOverflowFeedback()
-
-        XCTAssertNil(
-            feedback.submit(
-                .task(id: "root-route-rejected", profile: nil),
-                to: controller,
-                rootPresentationIsIdle: false
-            )
-        )
-        XCTAssertEqual(controller.pending, first)
-        XCTAssertTrue(feedback.isPending)
-
-        let alert = try XCTUnwrap(feedback.consumeAlertIfRootPresentationIsIdle(true))
-        XCTAssertEqual(alert.title, "Can’t Open This Item")
-        XCTAssertEqual(alert.message, "Too many items are waiting to open. Please try again.")
-        XCTAssertFalse(feedback.isPending)
-    }
-
     func testNotificationRouteSubmissionRejectsOverflowWithoutEvictingQueuedAction() throws {
         let controller = AppRouteController()
         XCTAssertTrue(AppNotificationRouteSubmission.submit(.today, to: controller))

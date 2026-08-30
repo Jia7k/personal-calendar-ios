@@ -19,10 +19,23 @@ struct SettingsView: View {
     let environment: AppEnvironment
     let openSystemSettings: @MainActor () -> Void
     let onContentChanged: @MainActor () -> Void
+    let onRequestDismissal: (@MainActor () -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var loading = true
     @State private var sourceSelectionChanged = false
-    init(environment: AppEnvironment, onContentChanged: @escaping @MainActor () -> Void = {}, openSystemSettings: @escaping @MainActor () -> Void = { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }) { self.environment = environment; self.onContentChanged = onContentChanged; self.openSystemSettings = openSystemSettings }
+    init(
+        environment: AppEnvironment,
+        onContentChanged: @escaping @MainActor () -> Void = {},
+        openSystemSettings: @escaping @MainActor () -> Void = {
+            UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+        },
+        onRequestDismissal: (@MainActor () -> Void)? = nil
+    ) {
+        self.environment = environment
+        self.onContentChanged = onContentChanged
+        self.openSystemSettings = openSystemSettings
+        self.onRequestDismissal = onRequestDismissal
+    }
     var body: some View {
         NavigationStack { List {
             Section("Permissions") {
@@ -87,7 +100,13 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button { dismiss() } label: {
+                Button {
+                    if let onRequestDismissal {
+                        onRequestDismissal()
+                    } else {
+                        dismiss()
+                    }
+                } label: {
                     CalendarToolbarActionLabel(title: "Done", isProminent: true)
                 }
                 .accessibilityIdentifier("settings-done")

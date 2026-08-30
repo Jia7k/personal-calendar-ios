@@ -10,6 +10,7 @@ struct RootTabView: View {
     let quickEntryHandoffMonitor: AppRouteHandoffMonitor
     @State private var selection: RootTab = .calendar
     @State private var presentation: RootPresentation?
+    @State private var isRootSheetPresented = false
     @State private var creationProfileChoice: CreationProfileChoice?
     @State private var refreshSignal: QuickEntryRefreshSignal?
     @State private var routineDeepLink: RoutineDeepLinkSignal?
@@ -17,6 +18,7 @@ struct RootTabView: View {
     @State private var taskDeepLink: TaskDeepLinkSignal?
     @State private var routeAlert: RootRouteAlert?
     @State private var routeOverflowFeedback = RootRouteOverflowFeedback()
+    @State private var hasRunRouteOverflowUITest = false
     @State private var calendarHostBusy = false
     @State private var todayHostBusy = false
     @State private var tasksHostBusy = false
@@ -129,10 +131,22 @@ struct RootTabView: View {
                         .tabItem { Label("Routines", systemImage: "repeat") }
                         .tag(RootTab.routines)
                 }
-                .sheet(item: $presentation) { presentation in
+                .sheet(item: $presentation, onDismiss: handleRootSheetDismissal) { presentation in
                     switch presentation {
                     case .settings:
-                        SettingsView(environment: environment, onContentChanged: { lifecycle.advanceRevision() })
+                        SettingsView(
+                            environment: environment,
+                            onContentChanged: { lifecycle.advanceRevision() },
+                            onRequestDismissal: { self.presentation = nil }
+                        )
+                            .overlay(alignment: .bottom) {
+                                if isRouteOverflowUITestEnabled {
+                                    Button("Trigger route queue overflow") {
+                                        runRouteOverflowUITestIfNeeded()
+                                    }
+                                    .accessibilityIdentifier("route-overflow-ui-test-trigger")
+                                }
+                            }
                     case let .quickEntry(session):
                         QuickEntrySheet(
                             model: session.model,
@@ -203,6 +217,7 @@ struct RootTabView: View {
 
     private func presentSettings() {
         guard presentation == nil else { return }
+        isRootSheetPresented = true
         presentation = .settings(id: UUID())
     }
 
@@ -325,16 +340,24 @@ struct RootTabView: View {
 
     private func receiveRouteURL(_ url: URL) {
         do {
-            if let alert = routeOverflowFeedback.submit(
-                try AppRouteCodec().route(from: url),
-                to: routeController,
-                rootPresentationIsIdle: !routePresentationState.root
-            ) {
-                routeAlert = alert
+            guard routeController.submit(try AppRouteCodec().route(from: url)) else {
+                routeOverflowFeedback.recordOverflow()
+                presentDeferredRouteOverflowIfPossible()
+                return
             }
         } catch {
             showRouteUnavailable()
         }
+    }
+
+    private func runRouteOverflowUITestIfNeeded() {
+        guard isRouteOverflowUITestEnabled,
+              isRootSheetPresented,
+              !hasRunRouteOverflowUITest else { return }
+        hasRunRouteOverflowUITest = true
+
+        while routeController.submit(.today) {}
+        receiveRouteURL(URL(string: "personalcalendar://v1/today")!)
     }
 
     private func processPendingRouteIfPossible() {
@@ -408,6 +431,7 @@ struct RootTabView: View {
     private var routePresentationState: AppRoutePresentationState {
         .init(
             root: presentation != nil
+                || isRootSheetPresented
                 || creationProfileChoice != nil
                 || routeAlert != nil,
             calendar: calendarHostBusy,
@@ -499,6 +523,18 @@ struct RootTabView: View {
             !routePresentationState.root
         ) else { return }
         routeAlert = alert
+    }
+
+    private var isRouteOverflowUITestEnabled: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("-ui-testing")
+            && arguments.contains("-demo-route-queue-overflow")
+    }
+
+    private func handleRootSheetDismissal() {
+        isRootSheetPresented = false
+        presentation = nil
+        presentDeferredRouteOverflowIfPossible()
     }
 
     private func requestAccess(
@@ -596,17 +632,11 @@ private struct RootRouteProcessingKey: Hashable {
 }
 
 @MainActor
-struct RootRouteOverflowFeedback {
+private struct RootRouteOverflowFeedback {
     private(set) var isPending = false
 
-    mutating func submit(
-        _ route: AppRoute,
-        to routeController: AppRouteController,
-        rootPresentationIsIdle: Bool
-    ) -> RootRouteAlert? {
-        guard !routeController.submit(route) else { return nil }
+    mutating func recordOverflow() {
         isPending = true
-        return consumeAlertIfRootPresentationIsIdle(rootPresentationIsIdle)
     }
 
     mutating func consumeAlertIfRootPresentationIsIdle(_ isIdle: Bool) -> RootRouteAlert? {
@@ -616,7 +646,7 @@ struct RootRouteOverflowFeedback {
     }
 }
 
-struct RootRouteAlert: Identifiable {
+private struct RootRouteAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String

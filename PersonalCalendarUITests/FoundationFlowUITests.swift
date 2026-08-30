@@ -85,6 +85,35 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Routines"].exists)
     }
 
+    func testRouteQueueOverflowDefersNeutralAlertUntilRootSheetDismisses() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-route-queue-overflow"]
+        app.launch()
+
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 3))
+        settings.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+
+        let trigger = app.buttons["route-overflow-ui-test-trigger"]
+        XCTAssertTrue(trigger.waitForExistence(timeout: 2))
+        trigger.tap()
+        XCTAssertTrue(app.navigationBars["Settings"].exists)
+        XCTAssertFalse(app.alerts["Can’t Open This Item"].exists)
+
+        app.buttons["settings-done"].tap()
+        XCTAssertFalse(app.navigationBars["Settings"].waitForExistence(timeout: 2))
+
+        let alert = app.alerts["Can’t Open This Item"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 3))
+        XCTAssertTrue(
+            alert.staticTexts[
+                "Too many items are waiting to open. Please try again."
+            ].exists
+        )
+    }
+
     func testLaunchShowsFourPrimaryTabs() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing"]
