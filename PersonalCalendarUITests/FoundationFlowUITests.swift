@@ -425,6 +425,26 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.otherElements["14-day history"].exists)
     }
 
+    func testNotificationCompletionRefreshesVisibleRoutinesThroughRegistry() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ui-testing",
+            "-demo-routine-notification-completion"
+        ]
+        app.launch()
+        app.tabBars.buttons["Routines"].tap()
+        let complete = app.buttons["Mark Read complete"]
+        XCTAssertTrue(complete.waitForExistence(timeout: 3))
+
+        let trigger = app.buttons["routine-notification-completion-ui-test-trigger"]
+        XCTAssertTrue(trigger.waitForExistence(timeout: 3))
+        trigger.tap()
+
+        let completed = app.buttons["Mark Read incomplete"]
+        XCTAssertTrue(completed.waitForExistence(timeout: 3))
+        XCTAssertEqual(completed.value as? String, "Completed")
+    }
+
     func testUniversalQuickEntryTaskRetryAfterDemoFailOnceCreatesOnlyEditedTask() {
         let app = XCUIApplication(); app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context", "-task-save-fails-once"]; app.launch()
         app.tabBars.buttons["Tasks"].tap(); openAndParseQuickEntry("First", in: app)

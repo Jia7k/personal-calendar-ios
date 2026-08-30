@@ -143,10 +143,10 @@ struct AppEnvironment {
             isRoutineInNotificationScope: { routineID in
                 (try? profileScopes.resolve(.everything).routineIDs.contains(routineID)) == true
             },
-            onRoutineCompletionCommitted: {
-                await agendaRefreshRegistry.refreshAll()
-                await rescheduleNotifications()
-            }
+            onRoutineCompletionCommitted: makeRoutineCompletionCommittedHook(
+                agendaRefreshRegistry: agendaRefreshRegistry,
+                rescheduleNotifications: rescheduleNotifications
+            )
         )
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
@@ -249,6 +249,18 @@ struct AppEnvironment {
             ))
         }
         let routines = DemoRoutineRepository(failFirstDelete: arguments.contains("-routine-delete-fails-once"), failFirstCreate: arguments.contains("-routine-create-fails-once"), failFirstUpdate: arguments.contains("-routine-update-fails-once"), longTitle: arguments.contains("-routine-long-title"), profileFixtures: usesProfileFixtures)
+        if arguments.contains("-demo-routine-notification-completion") {
+            try? routines.update(
+                id: DemoProfileFixture.personalRoutineID,
+                draft: .init(
+                    title: "Read",
+                    weekdays: [1, 2, 3, 4, 5, 6, 7],
+                    window: .evening,
+                    reminderHour: 18,
+                    reminderMinute: 0
+                )
+            )
+        }
         let profiles = SwiftDataProfileRepository(context: container.mainContext)
         let routineProfileMutations = DemoRoutineProfileMutationAdapter(
             routines: routines,
@@ -360,10 +372,10 @@ struct AppEnvironment {
             isRoutineInNotificationScope: { routineID in
                 (try? profileScopes.resolve(.everything).routineIDs.contains(routineID)) == true
             },
-            onRoutineCompletionCommitted: {
-                await agendaRefreshRegistry.refreshAll()
-                await rescheduleNotifications()
-            }
+            onRoutineCompletionCommitted: makeRoutineCompletionCommittedHook(
+                agendaRefreshRegistry: agendaRefreshRegistry,
+                rescheduleNotifications: rescheduleNotifications
+            )
         )
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
@@ -423,6 +435,16 @@ struct AppEnvironment {
 
     func stopRefreshMonitoring() {
         refreshRuntime.stop()
+    }
+
+    static func makeRoutineCompletionCommittedHook(
+        agendaRefreshRegistry: AgendaRefreshRegistry,
+        rescheduleNotifications: @escaping @MainActor @Sendable () async -> Void
+    ) -> @MainActor @Sendable () async -> Void {
+        {
+            await agendaRefreshRegistry.refreshAll()
+            await rescheduleNotifications()
+        }
     }
 
     private static func currentQuickEntryContext() -> QuickEntryParseContext {

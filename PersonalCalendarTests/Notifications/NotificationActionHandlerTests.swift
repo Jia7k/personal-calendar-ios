@@ -172,6 +172,34 @@ final class NotificationActionHandlerTests: XCTestCase {
         XCTAssertEqual(refreshCount, 0)
     }
 
+    func testMalformedPayloadAndUnsupportedActionDoNotRunRefreshHook() async {
+        let routine = makeRoutine()
+        let routines = FakeRoutineRepository(routines: [routine])
+        let scheduler = NotificationActionSchedulerSpy()
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: scheduler,
+            onRoutineCompletionCommitted: { refreshCount += 1 }
+        )
+
+        await subject.handle(
+            actionIdentifier: NotificationActionIdentifier.routineComplete,
+            userInfo: [NotificationPayloadKey.routineID: "not-a-uuid"]
+        )
+        await subject.handle(
+            actionIdentifier: "unsupported-action",
+            userInfo: payload(
+                routineID: routine.id,
+                day: LocalDay(date: now, calendar: calendar)
+            )
+        )
+
+        XCTAssertEqual(refreshCount, 0)
+        XCTAssertTrue(routines.completionCalls.isEmpty)
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+    }
+
     func testSnoozeSchedulesOneActionableRequestFifteenMinutesAfterResponseWithoutReplacingPendingRequests() async {
         let day = LocalDay(date: now, calendar: calendar)
         let routine = makeRoutine(title: "Morning review")
@@ -247,7 +275,12 @@ final class NotificationActionHandlerTests: XCTestCase {
         for (routineID, snapshots) in scenarios {
             let routines = FakeRoutineRepository(routines: snapshots)
             let scheduler = NotificationActionSchedulerSpy()
-            let subject = makeSubject(routines: routines, scheduler: scheduler)
+            var refreshCount = 0
+            let subject = makeSubject(
+                routines: routines,
+                scheduler: scheduler,
+                onRoutineCompletionCommitted: { refreshCount += 1 }
+            )
             let userInfo = payload(routineID: routineID, day: day)
 
             await subject.handle(
@@ -262,7 +295,27 @@ final class NotificationActionHandlerTests: XCTestCase {
             XCTAssertTrue(routines.completionCalls.isEmpty)
             XCTAssertTrue(scheduler.scheduled.isEmpty)
             XCTAssertTrue(scheduler.replacements.isEmpty)
+            XCTAssertEqual(refreshCount, 0)
         }
+    }
+
+    func testAppEnvironmentCompletionHookRefreshesRegistryBeforeRescheduling() async {
+        let registry = AgendaRefreshRegistry()
+        let registrationID = UUID()
+        var operations: [String] = []
+        registry.register(id: registrationID) {
+            operations.append("routines")
+        }
+        let hook = AppEnvironment.makeRoutineCompletionCommittedHook(
+            agendaRefreshRegistry: registry,
+            rescheduleNotifications: {
+                operations.append("notifications")
+            }
+        )
+
+        await hook()
+
+        XCTAssertEqual(operations, ["routines", "notifications"])
     }
 
     func testRoutineRemovedFromEveryProfileRejectsCompletionAndSnooze() async {

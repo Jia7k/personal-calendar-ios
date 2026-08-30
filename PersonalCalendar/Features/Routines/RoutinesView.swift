@@ -72,6 +72,14 @@ struct RoutinesView: View {
         if model.isProfileEmpty { ContentUnavailableView("No routines in this profile", systemImage: "repeat", description: Text("Add routines to this profile in Settings.")) }
         Section("Active") { if model.active.isEmpty && !model.isProfileEmpty { ContentUnavailableView(model.archived.isEmpty ? "No routines" : "No active routines", systemImage: "repeat", description: Text("Use Add to create a routine for the habits you want to keep.")) }; ForEach(model.active) { row($0) } }
         if !model.archived.isEmpty { Section { DisclosureGroup("Archived") { ForEach(model.archived) { row($0) } } } }
+        if isNotificationCompletionUITestEnabled {
+            Section {
+                Button("Trigger routine notification completion") {
+                    triggerNotificationCompletionUITest()
+                }
+                .accessibilityIdentifier("routine-notification-completion-ui-test-trigger")
+            }
+        }
     }
     .scrollContentBackground(.hidden)
     .background(CalendarTheme.background)
@@ -173,6 +181,33 @@ struct RoutinesView: View {
     private func presentEditor(_ row: RoutineRowState) {
         editing = row
         onPresentationChanged(true)
+    }
+
+    private var isNotificationCompletionUITestEnabled: Bool {
+        let arguments = ProcessInfo.processInfo.arguments
+        return arguments.contains("-ui-testing")
+            && arguments.contains("-demo-routine-notification-completion")
+    }
+
+    private func triggerNotificationCompletionUITest() {
+        let calendar = Calendar.current
+        let day = LocalDay(date: Date(), calendar: calendar)
+        let encodedDay = String(
+            format: "%04d-%02d-%02d",
+            day.year,
+            day.month,
+            day.day
+        )
+        Task {
+            await environment.notificationActionHandler.handle(
+                actionIdentifier: NotificationActionIdentifier.routineComplete,
+                userInfo: [
+                    NotificationPayloadKey.routineID:
+                        DemoProfileFixture.personalRoutineID.uuidString,
+                    NotificationPayloadKey.localDay: encodedDay
+                ]
+            )
+        }
     }
 
     private func handleRoutineDeepLink() {
