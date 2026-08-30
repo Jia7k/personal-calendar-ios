@@ -22,6 +22,7 @@ struct AppEnvironment {
     let notificationCoordinator: NotificationCoordinator
     let notificationActionHandler: AppNotificationActionHandler
     let notificationRescheduler: NotificationRescheduler
+    let notificationRenewalScheduler: NotificationRenewalScheduler
     let rescheduleNotifications: @MainActor @Sendable () async -> Void
     let refreshCoordinator: AppRefreshCoordinator
     let agendaRefreshRegistry: AgendaRefreshRegistry
@@ -136,8 +137,12 @@ struct AppEnvironment {
             authorization: notifications,
             coordinator: notificationCoordinator
         )
+        let notificationRenewalScheduler = NotificationRenewalScheduler(
+            driver: SystemNotificationRenewalDriver(),
+            reschedule: { await notificationRescheduler.reschedule() }
+        )
         let rescheduleNotifications: @MainActor @Sendable () async -> Void = {
-            _ = await notificationRescheduler.reschedule()
+            _ = await notificationRenewalScheduler.rescheduleNotifications()
         }
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
@@ -180,6 +185,7 @@ struct AppEnvironment {
             notificationCoordinator: notificationCoordinator,
             notificationActionHandler: notificationActionHandler,
             notificationRescheduler: notificationRescheduler,
+            notificationRenewalScheduler: notificationRenewalScheduler,
             rescheduleNotifications: rescheduleNotifications,
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
@@ -344,8 +350,12 @@ struct AppEnvironment {
             authorization: notifications,
             coordinator: notificationCoordinator
         )
+        let notificationRenewalScheduler = NotificationRenewalScheduler(
+            driver: NoopNotificationRenewalDriver(),
+            reschedule: { await notificationRescheduler.reschedule() }
+        )
         let rescheduleNotifications: @MainActor @Sendable () async -> Void = {
-            _ = await notificationRescheduler.reschedule()
+            _ = await notificationRenewalScheduler.rescheduleNotifications()
         }
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
@@ -387,6 +397,7 @@ struct AppEnvironment {
             notificationCoordinator: notificationCoordinator,
             notificationActionHandler: notificationActionHandler,
             notificationRescheduler: notificationRescheduler,
+            notificationRenewalScheduler: notificationRenewalScheduler,
             rescheduleNotifications: rescheduleNotifications,
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,

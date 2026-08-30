@@ -61,6 +61,9 @@ struct NotificationSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            Text("Background notification renewal is best-effort. iOS chooses whether and when it runs, so opening the app is the most reliable way to refresh alerts.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             if settings.notificationsPausedForStaleInput
                 || settings.lastSuccessfulNotificationRefresh != nil {
                 VStack(alignment: .leading, spacing: 4) {

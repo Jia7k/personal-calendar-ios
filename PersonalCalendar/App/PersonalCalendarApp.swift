@@ -32,6 +32,7 @@ struct PersonalCalendarApp: App {
         environment = isUITesting
             ? .demo(container: container, arguments: arguments)
             : .live(container: container)
+        environment.notificationRenewalScheduler.register()
         notificationDelegate.configure(
             routeController: routeController,
             actionHandler: environment.notificationActionHandler

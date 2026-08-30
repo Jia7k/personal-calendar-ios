@@ -20,6 +20,8 @@ targets:
       path: PersonalCalendar/Resources/Info.plist
       properties:
         CFBundleDisplayName: "My Calendar"
+        BGTaskSchedulerPermittedIdentifiers:
+          - local.personalcalendar.notification-renewal
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLName: local.personalcalendar.routes
@@ -28,6 +30,8 @@ targets:
         NSCalendarsFullAccessUsageDescription: "Show and manage your calendar events in one personal schedule."
         NSRemindersFullAccessUsageDescription: "Show and manage your reminders alongside your schedule."
         NSSupportsLiveActivities: true
+        UIBackgroundModes:
+          - fetch
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen: {}
         UIUserInterfaceStyle: Light
