@@ -41,7 +41,7 @@ final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
                       let url = URL(string: encodedRoute),
                       let route = try? AppRouteCodec().route(from: url)
                 else { return }
-                _ = routeController?.submit(route)
+                _ = AppNotificationRouteSubmission.submit(route, to: routeController)
 
             case NotificationActionIdentifier.routineComplete,
                  NotificationActionIdentifier.routineSnooze15:
@@ -62,6 +62,15 @@ final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
                   let value = pair.value as? String else { return }
             payload[key] = value
         }
+    }
+}
+
+@MainActor
+enum AppNotificationRouteSubmission {
+    @discardableResult
+    static func submit(_ route: AppRoute, to routeController: AppRouteController?) -> Bool {
+        guard let routeController else { return false }
+        return routeController.submit(route)
     }
 }
 

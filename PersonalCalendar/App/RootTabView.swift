@@ -16,6 +16,7 @@ struct RootTabView: View {
     @State private var calendarDeepLink: CalendarDeepLinkSignal?
     @State private var taskDeepLink: TaskDeepLinkSignal?
     @State private var routeAlert: RootRouteAlert?
+    @State private var routeOverflowFeedback = RootRouteOverflowFeedback()
     @State private var calendarHostBusy = false
     @State private var todayHostBusy = false
     @State private var tasksHostBusy = false
@@ -75,6 +76,7 @@ struct RootTabView: View {
             taskSignalID: taskDeepLink?.id,
             routineSignalID: routineDeepLink?.id,
             presentationState: routePresentationState,
+            routeOverflowFeedbackIsPending: routeOverflowFeedback.isPending,
             handoffRevision: quickEntryHandoffMonitor.revision
         )
         Group {
@@ -173,6 +175,7 @@ struct RootTabView: View {
         .tint(CalendarTheme.accent)
         .onOpenURL(perform: receiveRouteURL)
         .task(id: routeProcessingKey) {
+            presentDeferredRouteOverflowIfPossible()
             processPendingRouteIfPossible()
             processPendingHandoffIfPossible()
         }
@@ -322,9 +325,12 @@ struct RootTabView: View {
 
     private func receiveRouteURL(_ url: URL) {
         do {
-            guard routeController.submit(try AppRouteCodec().route(from: url)) else {
-                showRouteQueueFull()
-                return
+            if let alert = routeOverflowFeedback.submit(
+                try AppRouteCodec().route(from: url),
+                to: routeController,
+                rootPresentationIsIdle: !routePresentationState.root
+            ) {
+                routeAlert = alert
             }
         } catch {
             showRouteUnavailable()
@@ -488,11 +494,11 @@ struct RootTabView: View {
         routeAlert = .unavailable
     }
 
-    private func showRouteQueueFull() {
-        guard presentation == nil,
-              creationProfileChoice == nil,
-              routeAlert == nil else { return }
-        routeAlert = .queueFull
+    private func presentDeferredRouteOverflowIfPossible() {
+        guard let alert = routeOverflowFeedback.consumeAlertIfRootPresentationIsIdle(
+            !routePresentationState.root
+        ) else { return }
+        routeAlert = alert
     }
 
     private func requestAccess(
@@ -585,10 +591,32 @@ private struct RootRouteProcessingKey: Hashable {
     let taskSignalID: UUID?
     let routineSignalID: UUID?
     let presentationState: AppRoutePresentationState
+    let routeOverflowFeedbackIsPending: Bool
     let handoffRevision: Int
 }
 
-private struct RootRouteAlert: Identifiable {
+@MainActor
+struct RootRouteOverflowFeedback {
+    private(set) var isPending = false
+
+    mutating func submit(
+        _ route: AppRoute,
+        to routeController: AppRouteController,
+        rootPresentationIsIdle: Bool
+    ) -> RootRouteAlert? {
+        guard !routeController.submit(route) else { return nil }
+        isPending = true
+        return consumeAlertIfRootPresentationIsIdle(rootPresentationIsIdle)
+    }
+
+    mutating func consumeAlertIfRootPresentationIsIdle(_ isIdle: Bool) -> RootRouteAlert? {
+        guard isPending, isIdle else { return nil }
+        isPending = false
+        return .queueFull
+    }
+}
+
+struct RootRouteAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String
