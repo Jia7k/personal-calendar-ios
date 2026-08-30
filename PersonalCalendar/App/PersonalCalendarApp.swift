@@ -19,12 +19,21 @@ struct PersonalCalendarApp: App {
         let isUITesting = arguments.contains("-ui-testing")
         let handoffStore = try? AppRouteHandoffStore.appGroup()
         quickEntryHandoffStore = handoffStore
-        if isUITesting {
-            _ = try? handoffStore?.consume()
+        if isUITesting, let handoffStore {
+            while (try? handoffStore.consume()) != nil {}
             if arguments.contains("-demo-shortcut-quick-entry") {
-                try? handoffStore?.write(.quickEntry(
+                try? handoffStore.write(.quickEntry(
                     text: "Shortcut study session today at 3pm",
                     profile: .saved(SeedProfile.schoolID)
+                ))
+            } else if arguments.contains("-demo-queued-shortcut-quick-entry") {
+                try? handoffStore.write(.quickEntry(
+                    text: "First queued class review today at 3pm",
+                    profile: .saved(SeedProfile.schoolID)
+                ))
+                try? handoffStore.write(.quickEntry(
+                    text: "Second queued errand tomorrow at 4pm",
+                    profile: .saved(SeedProfile.personalID)
                 ))
             }
         }

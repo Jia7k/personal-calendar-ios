@@ -235,7 +235,7 @@ struct AppEnvironment {
             dailyTaskRescueFixtures: usesDailyTaskRescueFixtures,
             denseWeekFixtures: arguments.contains("-demo-week-overlaps")
         )
-        let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") ? .denied : .granted
+        let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") || arguments.contains("-demo-notification-scheduling-paused") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
         let settings = AppSettingsStore(defaults: .ephemeral)
         if !usesProfileFixtures {

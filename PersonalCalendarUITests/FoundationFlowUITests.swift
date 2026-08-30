@@ -85,6 +85,35 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Routines"].exists)
     }
 
+    func testSettingsShowsPausedNotificationHealth() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ui-testing",
+            "-demo-notification-scheduling-paused"
+        ]
+        app.launch()
+
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 3))
+
+        let statuses = app.staticTexts.matching(
+            identifier: "notification-schedule-status"
+        )
+        let paused = statuses.matching(NSPredicate(
+            format: "label CONTAINS %@",
+            "Notification scheduling is paused"
+        )).firstMatch
+        XCTAssertTrue(paused.waitForExistence(timeout: 3))
+        XCTAssertTrue(paused.label.contains("Check permissions and try again"))
+
+        let noSuccess = statuses.matching(NSPredicate(
+            format: "label CONTAINS %@",
+            "No successful notification refresh has been recorded"
+        )).firstMatch
+        XCTAssertTrue(noSuccess.exists)
+    }
+
     func testRouteQueueOverflowDefersNeutralAlertUntilRootSheetDismisses() {
         continueAfterFailure = false
         let app = XCUIApplication()

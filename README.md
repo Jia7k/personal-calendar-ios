@@ -63,7 +63,7 @@ Saving creates a separate Calendar event; the original Reminder remains unchange
 
 Quick Entry parses a short phrase into an event, task, or routine and always shows an in-app confirmation before writing. Successful entries are kept in a bounded recent list, and safe choices such as duration, category, and destination are remembered separately for each saved profile and item kind.
 
-The **Quick Add** action is available in Shortcuts, Siri, Spotlight, and the Action Button where supported. Its suggested Siri phrases are “Add to My Calendar” and “Plan with My Calendar.” The shortcut can target a saved profile, writes only a one-time handoff, opens the app, and never silently saves provider data.
+The **Quick Add** action is available in Shortcuts, Siri, Spotlight, and the Action Button where supported. Its suggested Siri phrases are “Add to My Calendar” and “Plan with My Calendar.” The shortcut can target a saved profile, adds each accepted capture to a small on-device queue, opens the app, and never silently saves provider data. If several captures arrive before review, the app presents them one at a time in arrival order; when the queue is full, the newest capture asks you to open the app and try again instead of replacing earlier captures.
 
 ### See what is next
 
@@ -76,6 +76,8 @@ Calendar includes profile-scoped search, Month and Week views, and **Jump to Dat
 In **Settings → Notifications**, configure the morning summary and per-saved-profile class alerts. Class alerts are opt-in and can fire 5, 10, 15, 20, or 30 minutes before a timed event; tapping one opens the exact profile and class when it is still available.
 
 Routine reminder notifications support **Complete** and **Snooze 15 min**. Notification actions revalidate the current routine and day before changing anything. Tapping a morning summary opens Today.
+
+The app also asks iOS for best-effort background time to renew its bounded set of one-shot alerts. iOS decides whether and when that work runs, so opening the app remains the most reliable way to refresh notifications. If current calendar, reminder, routine, profile, or permission input cannot be refreshed authoritatively, the app removes its pending alerts—including snoozes—rather than leaving stale notifications active. **Settings → Notifications** then shows that scheduling is paused, explains how to retry, and includes the last successful refresh when one has been recorded. A complete later refresh clears the paused state.
 
 ## Timetable widgets and Live Activity
 

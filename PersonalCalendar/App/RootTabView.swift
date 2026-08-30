@@ -335,6 +335,7 @@ struct RootTabView: View {
             model.text = initialText
             model.parse()
         }
+        isRootSheetPresented = true
         presentation = .quickEntry(.init(profileID: creationProfile.profileID, model: model))
     }
 
@@ -535,6 +536,8 @@ struct RootTabView: View {
         isRootSheetPresented = false
         presentation = nil
         presentDeferredRouteOverflowIfPossible()
+        processPendingRouteIfPossible()
+        processPendingHandoffIfPossible()
     }
 
     private func requestAccess(
