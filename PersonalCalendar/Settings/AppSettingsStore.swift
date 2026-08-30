@@ -52,6 +52,10 @@ final class AppSettingsStore {
             "automaticallyStartsLiveActivityOnForeground"
         static let activeProfile = "activeProfileIdentity"
         static let lastActiveSavedProfile = "lastActiveSavedProfileID"
+        static let notificationsPausedForStaleInput =
+            "notificationsPausedForStaleInput"
+        static let lastSuccessfulNotificationRefresh =
+            "lastSuccessfulNotificationRefresh"
 
         static func profileMigration(_ part: ProfileMigrationPart) -> String {
             "profileMigration.\(part.rawValue)"
@@ -79,6 +83,8 @@ final class AppSettingsStore {
     private(set) var activeProfileIdentity: ProfileIdentity
     private(set) var lastActiveSavedProfileID: UUID?
     private(set) var completedProfileMigrationParts: Set<ProfileMigrationPart>
+    private(set) var notificationsPausedForStaleInput: Bool
+    private(set) var lastSuccessfulNotificationRefresh: Date?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -131,6 +137,12 @@ final class AppSettingsStore {
         completedProfileMigrationParts = Set(ProfileMigrationPart.allCases.filter {
             defaults.bool(forKey: Key.profileMigration($0))
         })
+        notificationsPausedForStaleInput = defaults.bool(
+            forKey: Key.notificationsPausedForStaleInput
+        )
+        lastSuccessfulNotificationRefresh = defaults.object(
+            forKey: Key.lastSuccessfulNotificationRefresh
+        ) as? Date
         persistSelectionMarkers()
         persistProfileSelection()
         persistLiveActivityPreference()
@@ -212,6 +224,18 @@ final class AppSettingsStore {
 
     func didMigrateProfilePart(_ part: ProfileMigrationPart) -> Bool {
         completedProfileMigrationParts.contains(part)
+    }
+
+    func markNotificationsPausedForStaleInput() {
+        notificationsPausedForStaleInput = true
+        defaults.set(true, forKey: Key.notificationsPausedForStaleInput)
+    }
+
+    func markNotificationRefreshSuccessful(at date: Date) {
+        notificationsPausedForStaleInput = false
+        lastSuccessfulNotificationRefresh = date
+        defaults.set(false, forKey: Key.notificationsPausedForStaleInput)
+        defaults.set(date, forKey: Key.lastSuccessfulNotificationRefresh)
     }
 
     func resetProfileMigration(legacy: LegacyProfileSelectionSnapshot) {

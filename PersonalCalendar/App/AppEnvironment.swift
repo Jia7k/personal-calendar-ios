@@ -21,6 +21,7 @@ struct AppEnvironment {
     let backup: BackupService
     let notificationCoordinator: NotificationCoordinator
     let notificationActionHandler: AppNotificationActionHandler
+    let notificationRescheduler: NotificationRescheduler
     let rescheduleNotifications: @MainActor @Sendable () async -> Void
     let refreshCoordinator: AppRefreshCoordinator
     let agendaRefreshRegistry: AgendaRefreshRegistry
@@ -124,7 +125,20 @@ struct AppEnvironment {
                 }
             }
         )
-        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, profiles: profiles, composer: AgendaComposer(categories: categories), settings: settings, profileScopes: profileScopes, authorization: notifications, coordinator: notificationCoordinator)
+        let notificationRescheduler = NotificationRescheduler(
+            calendarService: calendar,
+            reminders: reminders,
+            routines: routines,
+            profiles: profiles,
+            composer: AgendaComposer(categories: categories),
+            settings: settings,
+            profileScopes: profileScopes,
+            authorization: notifications,
+            coordinator: notificationCoordinator
+        )
+        let rescheduleNotifications: @MainActor @Sendable () async -> Void = {
+            _ = await notificationRescheduler.reschedule()
+        }
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
             migrateProfiles: { try? profileMigration.run() },
@@ -165,6 +179,7 @@ struct AppEnvironment {
             backup: backup,
             notificationCoordinator: notificationCoordinator,
             notificationActionHandler: notificationActionHandler,
+            notificationRescheduler: notificationRescheduler,
             rescheduleNotifications: rescheduleNotifications,
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
@@ -318,7 +333,20 @@ struct AppEnvironment {
                 }
             }
         )
-        let rescheduleNotifications = makeNotificationRescheduler(calendar: calendar, reminders: reminders, routines: routines, profiles: profiles, composer: AgendaComposer(categories: categories), settings: settings, profileScopes: profileScopes, authorization: notifications, coordinator: notificationCoordinator)
+        let notificationRescheduler = NotificationRescheduler(
+            calendarService: calendar,
+            reminders: reminders,
+            routines: routines,
+            profiles: profiles,
+            composer: AgendaComposer(categories: categories),
+            settings: settings,
+            profileScopes: profileScopes,
+            authorization: notifications,
+            coordinator: notificationCoordinator
+        )
+        let rescheduleNotifications: @MainActor @Sendable () async -> Void = {
+            _ = await notificationRescheduler.reschedule()
+        }
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
             migrateProfiles: { try? profileMigration.run() },
@@ -358,6 +386,7 @@ struct AppEnvironment {
             backup: backup,
             notificationCoordinator: notificationCoordinator,
             notificationActionHandler: notificationActionHandler,
+            notificationRescheduler: notificationRescheduler,
             rescheduleNotifications: rescheduleNotifications,
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
@@ -383,133 +412,6 @@ struct AppEnvironment {
         calendar.timeZone = timeZone
         let locale = Locale.current
         return .init(now: Date(), calendar: calendar, locale: locale, timeZone: timeZone)
-    }
-
-    private static func makeNotificationRescheduler(
-        calendar: any CalendarServicing,
-        reminders: any RemindersServicing,
-        routines: any RoutineRepository,
-        profiles: any ProfileRepository,
-        composer: AgendaComposer,
-        settings: AppSettingsStore,
-        profileScopes: ProfileScopeResolver,
-        authorization: any NotificationAuthorizing,
-        coordinator: NotificationCoordinator
-    ) -> @MainActor @Sendable () async -> Void {
-        let generationState = NotificationRescheduleGeneration()
-        return {
-            let generation = generationState.begin()
-            guard await authorization.accessState == .granted else {
-                guard generationState.isLatest(generation) else { return }
-                await coordinator.clear()
-                return
-            }
-
-            var localCalendar = Calendar.current
-            localCalendar.timeZone = .current
-            let now = Date()
-            let today = LocalDay(date: now, calendar: localCalendar)
-            let todaySummaryTime = localCalendar.date(
-                bySettingHour: settings.morningSummaryHour,
-                minute: settings.morningSummaryMinute,
-                second: 0,
-                of: today.startDate(in: localCalendar)
-            )
-            let summaryDay: LocalDay
-            if let todaySummaryTime, todaySummaryTime > now {
-                summaryDay = today
-            } else {
-                summaryDay = LocalDay(date: localCalendar.date(byAdding: .day, value: 1, to: today.startDate(in: localCalendar))!, calendar: localCalendar)
-            }
-
-            let everythingScope: ProfileScope
-            do {
-                everythingScope = try profileScopes.resolve(.everything)
-            } catch {
-                return
-            }
-
-            let routineSnapshots: [RoutineSnapshot]
-            var completedDays: [UUID: Set<LocalDay>] = [:]
-            do {
-                routineSnapshots = try routines.list(includeArchived: false).filter {
-                    everythingScope.routineIDs.contains($0.id)
-                }
-                for routine in routineSnapshots {
-                    completedDays[routine.id] = try routines.completedDays(
-                        routineID: routine.id
-                    )
-                }
-            } catch {
-                return
-            }
-
-            let alertStart = localCalendar.startOfDay(for: now)
-            let alertEnd = localCalendar.date(byAdding: .day, value: 15, to: alertStart)!
-            let eventInterval = DateInterval(start: alertStart, end: alertEnd)
-            let events: [CalendarEventSnapshot]
-            if !everythingScope.calendarIDs.isEmpty {
-                do {
-                    events = try calendar.fetchEvents(
-                        in: eventInterval,
-                        calendarIDs: everythingScope.calendarIDs
-                    )
-                } catch {
-                    return
-                }
-            } else {
-                events = []
-            }
-            let taskSnapshots: [ReminderSnapshot]
-            if !everythingScope.reminderListIDs.isEmpty {
-                do {
-                    taskSnapshots = try await reminders.fetchReminders(
-                        listIDs: everythingScope.reminderListIDs
-                    )
-                } catch {
-                    return
-                }
-            } else {
-                taskSnapshots = []
-            }
-            let completedRoutineIDs = Set(routineSnapshots.filter { completedDays[$0.id]?.contains(summaryDay) == true }.map(\.id))
-            let agenda = composer.compose(day: summaryDay, events: events, reminders: taskSnapshots, routines: routineSnapshots, completedRoutineIDs: completedRoutineIDs, includeOverdueTasks: false, calendar: localCalendar)
-            let profileSnapshots: [ProfileSnapshot]
-            do {
-                profileSnapshots = try profiles.list()
-                settings.reconcileClassAlertPreferences(
-                    validProfileIDs: Set(profileSnapshots.map(\.id))
-                )
-            } catch {
-                return
-            }
-            let classAlerts = ClassAlertCoordinator(calendar: localCalendar).requests(
-                profiles: profileSnapshots,
-                preferences: settings.classAlertPreferences,
-                events: events,
-                now: now
-            )
-            var routineProfiles: [UUID: ProfileIdentity] = [:]
-            for profile in profileSnapshots.sorted(by: {
-                $0.sortOrder == $1.sortOrder
-                    ? $0.id.uuidString < $1.id.uuidString
-                    : $0.sortOrder < $1.sortOrder
-            }) {
-                for routineID in profile.routineIDs where routineProfiles[routineID] == nil {
-                    routineProfiles[routineID] = .saved(profile.id)
-                }
-            }
-            guard generationState.isLatest(generation) else { return }
-            await coordinator.reschedule(
-                summary: .init(enabled: settings.morningSummaryEnabled, hour: settings.morningSummaryHour, minute: settings.morningSummaryMinute, day: summaryDay, agenda: agenda, showsNextTitle: settings.showNextItemOnLockScreen),
-                routines: routineSnapshots,
-                completedDays: completedDays,
-                routineProfiles: routineProfiles,
-                classAlerts: classAlerts,
-                now: now,
-                calendar: localCalendar
-            )
-        }
     }
 
     private static func fixedQuickEntryContext(referenceDate: Date) -> QuickEntryParseContext {
@@ -539,18 +441,4 @@ private struct UnavailableTimetableCatalogWriter: TimetableWidgetCatalogWriting 
 @MainActor
 private final class NoopTimetableWidgetReloader: TimetableWidgetReloading {
     func reloadTimetableWidgets() {}
-}
-
-@MainActor
-private final class NotificationRescheduleGeneration {
-    private var latest = 0
-
-    func begin() -> Int {
-        latest &+= 1
-        return latest
-    }
-
-    func isLatest(_ generation: Int) -> Bool {
-        generation == latest
-    }
 }

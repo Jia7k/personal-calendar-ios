@@ -307,6 +307,37 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertTrue(scheduler.pending.isEmpty)
     }
 
+    func testStaleInputRemovalClearsSnoozesAndEveryOtherOwnedRequest() async {
+        let scheduler = FakeNotificationScheduler()
+        scheduler.pending = [
+            LocalNotificationRequest(
+                identifier: "morning-summary",
+                title: "Your day",
+                body: "Old summary",
+                fireDate: .distantFuture
+            ),
+            LocalNotificationRequest(
+                identifier: "routine|routine|2026-08-24",
+                title: "Read",
+                body: "Old routine alert",
+                fireDate: .distantFuture
+            ),
+            LocalNotificationRequest(
+                identifier: "snooze|routine|2026-08-24|1",
+                title: "Read",
+                body: "Old snooze",
+                fireDate: .distantFuture
+            )
+        ]
+        let subject = NotificationCoordinator(scheduler: scheduler)
+
+        let succeeded = await subject.removeRequestsForStaleInput()
+
+        XCTAssertTrue(succeeded)
+        XCTAssertTrue(scheduler.pending.isEmpty)
+        XCTAssertEqual(scheduler.replacementCount, 1)
+    }
+
     func testRescheduleIncludesPreparedClassAlertsWithoutReplacingTheirRoutePayload() async throws {
         let calendar = singaporeCalendar()
         let now = try XCTUnwrap(calendar.date(from: DateComponents(

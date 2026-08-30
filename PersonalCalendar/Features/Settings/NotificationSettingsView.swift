@@ -61,6 +61,22 @@ struct NotificationSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            if settings.notificationsPausedForStaleInput
+                || settings.lastSuccessfulNotificationRefresh != nil {
+                VStack(alignment: .leading, spacing: 4) {
+                    if settings.notificationsPausedForStaleInput {
+                        Text("Notification scheduling is paused because current calendar data could not be refreshed. Check permissions and try again.")
+                    }
+                    if let refreshed = settings.lastSuccessfulNotificationRefresh {
+                        Text("Last successful refresh: \(refreshed.formatted(date: .abbreviated, time: .shortened)).")
+                    } else if settings.notificationsPausedForStaleInput {
+                        Text("No successful notification refresh has been recorded.")
+                    }
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("notification-schedule-status")
+            }
             if let error = coordinator.errorMessage {
                 Text(error)
                     .font(.footnote)

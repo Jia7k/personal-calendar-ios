@@ -316,6 +316,42 @@ final class AppSettingsStoreTests: XCTestCase {
         )
     }
 
+    func testNotificationHealthDefaultsAndPersistsPauseThenSuccessfulRefresh() {
+        let defaults = makeDefaults()
+        let subject = AppSettingsStore(defaults: defaults)
+        let refreshDate = Date(timeIntervalSince1970: 1_777_777_777)
+
+        XCTAssertFalse(subject.notificationsPausedForStaleInput)
+        XCTAssertNil(subject.lastSuccessfulNotificationRefresh)
+
+        subject.markNotificationsPausedForStaleInput()
+        var reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertTrue(reloaded.notificationsPausedForStaleInput)
+        XCTAssertNil(reloaded.lastSuccessfulNotificationRefresh)
+
+        reloaded.markNotificationRefreshSuccessful(at: refreshDate)
+        reloaded = AppSettingsStore(defaults: defaults)
+        XCTAssertFalse(reloaded.notificationsPausedForStaleInput)
+        XCTAssertEqual(reloaded.lastSuccessfulNotificationRefresh, refreshDate)
+    }
+
+    func testNotificationHealthIsExcludedFromManualBackup() throws {
+        let subject = AppSettingsStore(defaults: makeDefaults())
+        subject.markNotificationsPausedForStaleInput()
+        subject.markNotificationRefreshSuccessful(
+            at: Date(timeIntervalSince1970: 1_777_777_777)
+        )
+
+        let encoded = try JSONEncoder().encode(subject.backupValueV4)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        let serialized = String(describing: object)
+
+        XCTAssertFalse(serialized.contains("notificationsPausedForStaleInput"))
+        XCTAssertFalse(serialized.contains("lastSuccessfulNotificationRefresh"))
+    }
+
     private func makeDefaults() -> UserDefaults {
         let suite = "AppSettingsStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

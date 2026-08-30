@@ -22,6 +22,7 @@ final class NotificationCoordinator {
         self.horizonDays = horizonDays
     }
 
+    @discardableResult
     func reschedule(
         summary: MorningSummaryInput?,
         routines: [RoutineSnapshot],
@@ -30,7 +31,7 @@ final class NotificationCoordinator {
         classAlerts: [LocalNotificationRequest] = [],
         now: Date,
         calendar: Calendar
-    ) async {
+    ) async -> Bool {
         operationGeneration &+= 1
         let generation = operationGeneration
         let sortedClassAlerts = classAlerts.sorted {
@@ -89,7 +90,7 @@ final class NotificationCoordinator {
         let sortedRoutineRequests = routineRequests.sorted {
             $0.fireDate == $1.fireDate ? $0.identifier < $1.identifier : $0.fireDate < $1.fireDate
         }
-        guard generation == operationGeneration else { return }
+        guard generation == operationGeneration else { return false }
         do {
             try await scheduler.mutateAppRequests { [self] pendingRequests in
                 guard generation == operationGeneration else {
@@ -128,25 +129,39 @@ final class NotificationCoordinator {
                 ))
                 return requests
             }
-            guard generation == operationGeneration else { return }
+            guard generation == operationGeneration else { return false }
             errorMessage = nil
+            return true
         } catch {
-            guard generation == operationGeneration else { return }
+            guard generation == operationGeneration else { return false }
             errorMessage = "Notifications could not be updated. Open Settings and try again."
+            return false
         }
     }
 
-    func clear() async {
+    @discardableResult
+    func clear() async -> Bool {
+        await removeAllRequests()
+    }
+
+    @discardableResult
+    func removeRequestsForStaleInput() async -> Bool {
+        await removeAllRequests()
+    }
+
+    private func removeAllRequests() async -> Bool {
         operationGeneration &+= 1
         let generation = operationGeneration
         deferredRoutineRequestCount = 0
         do {
             try await scheduler.replaceAppRequests(with: [])
-            guard generation == operationGeneration else { return }
+            guard generation == operationGeneration else { return false }
             errorMessage = nil
+            return true
         } catch {
-            guard generation == operationGeneration else { return }
+            guard generation == operationGeneration else { return false }
             errorMessage = "Notifications could not be updated. Open Settings and try again."
+            return false
         }
     }
 

@@ -49,6 +49,7 @@
 		26924EB8B191A5E28AA0674E /* PermissionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D032D8750AC5FC2A10963C8 /* PermissionCoordinator.swift */; };
 		27CD7B0F0980F9EA7E512484 /* MonthGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0305691ED4EE8A7D16468599 /* MonthGridView.swift */; };
 		28D03848B9E739FD6978019B /* TimetableActivityRouteResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6160753D7F698AD2CC060D09 /* TimetableActivityRouteResolver.swift */; };
+		2971F236FFE3FCEE3F6320FB /* NotificationRescheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E28273A3E470E9B5E51987D /* NotificationRescheduler.swift */; };
 		2A77B412EB00DF027D6C6BB8 /* PermissionOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6701BC3732DB260CE0FB7AB0 /* PermissionOnboardingView.swift */; };
 		2AC6BB8C8B1E3E13778B2233 /* CategoryRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11606057D572CC85B248770A /* CategoryRepositoryTests.swift */; };
 		2B6185A08B313AD95C07C42C /* RoutineRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42E5204C6EBBF12A94323F2B /* RoutineRepositoryTests.swift */; };
@@ -215,6 +216,7 @@
 		DD2993B1CF72F96C54426DC4 /* AppRouteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC68A1BF05DC11A2CEDA6417 /* AppRouteController.swift */; };
 		DD4D840C121A997E6864D136 /* QuickEntryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B884E1B989F29A6A05BE6D4 /* QuickEntryViewModelTests.swift */; };
 		DE6499CAB15E7D8E13625667 /* QuickEntryParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF568880E1F8DB12CB2AE99 /* QuickEntryParsing.swift */; };
+		DF68315B1CB6F182720E9BD0 /* NotificationReschedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC634BA3B6FD9C07089175F /* NotificationReschedulerTests.swift */; };
 		DFAE4445D8FF598A8E2508E8 /* WeekPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07DBE486124BAB25813956C3 /* WeekPlannerView.swift */; };
 		E3F00C8B2BE2A11B793C24CB /* CalendarServicing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31E336549FD5D9F67BF560 /* CalendarServicing.swift */; };
 		E560CB5493CB0093CA2AEE21 /* AppRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2DD87A579084653870BA9B7 /* AppRouteTests.swift */; };
@@ -304,6 +306,7 @@
 		188AEF64D96AD2ED12D38727 /* TaskTimeBlockPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTimeBlockPlanner.swift; sourceTree = "<group>"; };
 		19A10ECC0DFBDA03D6DB5073 /* AppRefreshCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRefreshCoordinator.swift; sourceTree = "<group>"; };
 		1AD2801ACBEB6344A2849275 /* TaskEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditorViewModel.swift; sourceTree = "<group>"; };
+		1CC634BA3B6FD9C07089175F /* NotificationReschedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationReschedulerTests.swift; sourceTree = "<group>"; };
 		1D2B31C9BF321FABB1DF2059 /* NotificationScheduling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduling.swift; sourceTree = "<group>"; };
 		1E71C223A2E9BE6D9406931E /* TimetableSnapshotCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableSnapshotCoordinatorTests.swift; sourceTree = "<group>"; };
 		1EBA6F5D46317158C80AAD66 /* TimetableSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableSnapshot.swift; sourceTree = "<group>"; };
@@ -319,6 +322,7 @@
 		29CE0271BC869A0EA249EA14 /* RoutineCompletionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineCompletionRecord.swift; sourceTree = "<group>"; };
 		29E5A68FE9293E4CA53E0168 /* PermissionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionCard.swift; sourceTree = "<group>"; };
 		2D97B653770B9C8FE9A44B65 /* TimetableTimelineBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableTimelineBuilder.swift; sourceTree = "<group>"; };
+		2E28273A3E470E9B5E51987D /* NotificationRescheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRescheduler.swift; sourceTree = "<group>"; };
 		2EEBE4F7EBDF4E2C371E1410 /* SwiftDataProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataProfileRepository.swift; sourceTree = "<group>"; };
 		2F509D0F8D42B552ED07BB6E /* BackupServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupServiceTests.swift; sourceTree = "<group>"; };
 		30E948D27579161FDEB40135 /* UniversalQuickEntryModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalQuickEntryModifier.swift; sourceTree = "<group>"; };
@@ -648,6 +652,7 @@
 				9A23DA50859CC07518ADFCDB /* ClassAlertCoordinator.swift */,
 				8971AC3F5D81FB0722D097D2 /* NotificationContracts.swift */,
 				5B88E152BB724F5C32324CEE /* NotificationCoordinator.swift */,
+				2E28273A3E470E9B5E51987D /* NotificationRescheduler.swift */,
 				1D2B31C9BF321FABB1DF2059 /* NotificationScheduling.swift */,
 				798062A76C649FD1C942D8EE /* SystemNotificationScheduler.swift */,
 			);
@@ -783,6 +788,7 @@
 				CC4972998C4330CCEFD837A5 /* ClassAlertCoordinatorTests.swift */,
 				73EB39FD16463102DF9B5C8D /* NotificationActionHandlerTests.swift */,
 				8D69BB6699376EC1C56A7353 /* NotificationCoordinatorTests.swift */,
+				1CC634BA3B6FD9C07089175F /* NotificationReschedulerTests.swift */,
 			);
 			path = Notifications;
 			sourceTree = "<group>";
@@ -1407,6 +1413,7 @@
 				FFC5AB7A285E5EA5216DF6CB /* NextUpSnapshot.swift in Sources */,
 				36244D3E0442DB32F753458B /* NotificationContracts.swift in Sources */,
 				BB5CBCDF43C332E840CB627B /* NotificationCoordinator.swift in Sources */,
+				2971F236FFE3FCEE3F6320FB /* NotificationRescheduler.swift in Sources */,
 				A4517433A99936517329B957 /* NotificationScheduling.swift in Sources */,
 				726B66EC743013D8005ABD54 /* NotificationSettingsView.swift in Sources */,
 				52F2EB3488323A3419FE4748 /* PermissionCard.swift in Sources */,
@@ -1524,6 +1531,7 @@
 				940E9B551EB34FDB997E7FF3 /* NextUpSnapshotTests.swift in Sources */,
 				2184256B5038DA8B63E9B8C9 /* NotificationActionHandlerTests.swift in Sources */,
 				5757806677B03BAD1F403ABC /* NotificationCoordinatorTests.swift in Sources */,
+				DF68315B1CB6F182720E9BD0 /* NotificationReschedulerTests.swift in Sources */,
 				AAFA5B7DF5BE6FEC97BC945F /* PermissionCoordinatorTests.swift in Sources */,
 				394C4B462053AD0D0669F671 /* PermissionOnboardingModelTests.swift in Sources */,
 				462C510B5AE56227CAB94287 /* ProfileBackupTests.swift in Sources */,
