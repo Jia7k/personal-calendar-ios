@@ -44,7 +44,7 @@ final class QuickEntryIntentTests: XCTestCase {
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: payload) as? [String: Any]
         )
-        XCTAssertEqual(object["version"] as? Int, 1)
+        XCTAssertEqual(object["version"] as? Int, 2)
         XCTAssertFalse(String(decoding: payload, as: UTF8.self).contains("personalcalendar://"))
         XCTAssertFalse(fixture.store.fileURL.absoluteString.contains(text))
         XCTAssertEqual(
@@ -53,6 +53,211 @@ final class QuickEntryIntentTests: XCTestCase {
         )
         XCTAssertNil(try fixture.store.consume())
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.store.fileURL.path))
+    }
+
+    func testSequentialWritesAreConsumedFIFOAndKeepStableItemIdentifiers() throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+
+        try fixture.store.write(.quickEntry(text: "first", profile: nil))
+        let firstObject = try jsonObject(at: fixture.store.fileURL)
+        let firstItems = try XCTUnwrap(firstObject["items"] as? [[String: Any]])
+        let firstID = try XCTUnwrap(firstItems.first?["id"] as? String)
+
+        try fixture.store.write(.quickEntry(text: "second", profile: .saved(Self.workID)))
+
+        let secondObject = try jsonObject(at: fixture.store.fileURL)
+        let secondItems = try XCTUnwrap(secondObject["items"] as? [[String: Any]])
+        XCTAssertEqual(secondObject["version"] as? Int, 2)
+        XCTAssertEqual(secondItems.count, 2)
+        XCTAssertEqual(secondItems.first?["id"] as? String, firstID)
+        XCTAssertNotEqual(secondItems.last?["id"] as? String, firstID)
+        XCTAssertEqual(try fixture.store.consume(), .quickEntry(text: "first", profile: nil))
+        XCTAssertEqual(
+            try fixture.store.consume(),
+            .quickEntry(text: "second", profile: .saved(Self.workID))
+        )
+        XCTAssertNil(try fixture.store.consume())
+    }
+
+    func testRepeatedIdenticalCapturesRemainSeparateQueueItems() throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        let route = AppRoute.quickEntry(text: "same capture", profile: nil)
+
+        try fixture.store.write(route)
+        try fixture.store.write(route)
+
+        XCTAssertEqual(try fixture.store.consume(), route)
+        XCTAssertEqual(try fixture.store.consume(), route)
+        XCTAssertNil(try fixture.store.consume())
+    }
+
+    func testConcurrentWritersDoNotLoseAcceptedCaptures() async throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        let store = fixture.store
+        let captureCount = 12
+
+        let failedIndexes = await withTaskGroup(of: Int?.self, returning: [Int].self) { group in
+            for index in 0..<captureCount {
+                group.addTask {
+                    do {
+                        try store.write(.quickEntry(text: "capture-\(index)", profile: nil))
+                        return nil
+                    } catch {
+                        return index
+                    }
+                }
+            }
+
+            var failures: [Int] = []
+            for await failedIndex in group {
+                if let failedIndex {
+                    failures.append(failedIndex)
+                }
+            }
+            return failures
+        }
+        XCTAssertTrue(failedIndexes.isEmpty, "Every capture below capacity should be accepted.")
+
+        var consumedTexts: [String] = []
+        while let route = try fixture.store.consume() {
+            guard case let .quickEntry(text, profile) = route else {
+                return XCTFail("The handoff queue must contain only Quick Entry routes.")
+            }
+            XCTAssertNil(profile)
+            consumedTexts.append(text)
+        }
+        XCTAssertEqual(consumedTexts.count, captureCount)
+        XCTAssertEqual(Set(consumedTexts), Set((0..<captureCount).map { "capture-\($0)" }))
+    }
+
+    func testVersionOnePayloadMigratesAheadOfTheNextWrite() throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        try writeJSON(
+            [
+                "version": 1,
+                "route": "quickEntry",
+                "payload": [
+                    "text": "legacy capture",
+                    "profile": ProfileIdentity.saved(Self.schoolID).storageKey
+                ]
+            ],
+            to: fixture.store.fileURL
+        )
+
+        try fixture.store.write(.quickEntry(text: "new capture", profile: nil))
+
+        let migratedObject = try jsonObject(at: fixture.store.fileURL)
+        XCTAssertEqual(migratedObject["version"] as? Int, 2)
+        XCTAssertEqual((migratedObject["items"] as? [[String: Any]])?.count, 2)
+        XCTAssertEqual(
+            try fixture.store.consume(),
+            .quickEntry(text: "legacy capture", profile: .saved(Self.schoolID))
+        )
+        XCTAssertEqual(
+            try fixture.store.consume(),
+            .quickEntry(text: "new capture", profile: nil)
+        )
+    }
+
+    func testCapturesOlderThanTwentyFourHoursArePrunedBeforeConsumption() throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        try writeVersionTwoQueue(
+            [
+                queueItem(text: "expired", enqueuedAt: Date().addingTimeInterval(-(25 * 60 * 60))),
+                queueItem(text: "fresh", enqueuedAt: Date())
+            ],
+            to: fixture.store.fileURL
+        )
+
+        XCTAssertEqual(
+            try fixture.store.consume(),
+            .quickEntry(text: "fresh", profile: nil)
+        )
+        XCTAssertNil(try fixture.store.consume())
+    }
+
+    func testMalformedVersionTwoEnvelopeIsDiscardedAndDoesNotBlockRecovery() throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        try writeVersionTwoQueue(
+            [queueItem(text: " \n\t ", enqueuedAt: Date())],
+            to: fixture.store.fileURL
+        )
+
+        XCTAssertNil(try fixture.store.consume())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.store.fileURL.path))
+
+        try fixture.store.write(.quickEntry(text: "recovered", profile: nil))
+        XCTAssertEqual(
+            try fixture.store.consume(),
+            .quickEntry(text: "recovered", profile: nil)
+        )
+    }
+
+    func testPerItemAndAggregateSizeLimitsRejectNewestWithoutLosingAcceptedItems() throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+
+        XCTAssertThrowsError(
+            try fixture.store.write(
+                .quickEntry(text: String(repeating: "x", count: 1_000_000), profile: nil)
+            )
+        ) { error in
+            XCTAssertEqual(error as? AppRouteHandoffStoreError, .payloadTooLarge)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.store.fileURL.path))
+
+        let acceptedText = String(repeating: "a", count: 40_000)
+        try fixture.store.write(.quickEntry(text: acceptedText, profile: nil))
+        XCTAssertThrowsError(
+            try fixture.store.write(
+                .quickEntry(text: String(repeating: "b", count: 30_000), profile: nil)
+            )
+        ) { error in
+            XCTAssertEqual(error as? AppRouteHandoffStoreError, .queueFull)
+        }
+        XCTAssertEqual(
+            try fixture.store.consume(),
+            .quickEntry(text: acceptedText, profile: nil)
+        )
+        XCTAssertNil(try fixture.store.consume())
+    }
+
+    func testFullQueueRejectsItemSeventeenAndIntentProvidesPrivateRetryMessage() async throws {
+        let fixture = try makeHandoffFixture()
+        defer { fixture.remove() }
+        for index in 1...16 {
+            try fixture.store.write(.quickEntry(text: "accepted-\(index)", profile: nil))
+        }
+        let rejectedText = "private rejected capture"
+        let intent = QuickEntryIntent(
+            text: rejectedText,
+            profile: nil,
+            handoffStore: fixture.store
+        )
+
+        do {
+            _ = try await intent.perform()
+            XCTFail("Item 17 must be rejected without evicting accepted captures.")
+        } catch {
+            XCTAssertEqual(error as? QuickEntryIntentError, .queueFull)
+            let retryMessage = try XCTUnwrap((error as? LocalizedError)?.errorDescription)
+            XCTAssertTrue(retryMessage.localizedCaseInsensitiveContains("try again"))
+            XCTAssertFalse(retryMessage.contains(rejectedText))
+        }
+
+        for index in 1...16 {
+            XCTAssertEqual(
+                try fixture.store.consume(),
+                .quickEntry(text: "accepted-\(index)", profile: nil)
+            )
+        }
+        XCTAssertNil(try fixture.store.consume())
     }
 
     func testWritingHandoffPublishesArrivalRevisionWithoutPayloadInSignal() async throws {
@@ -254,9 +459,10 @@ final class QuickEntryIntentTests: XCTestCase {
 
         _ = try await intent.perform()
 
+        let artifactNames = try contents(of: fixture.directory).map(\.lastPathComponent)
         XCTAssertEqual(
-            try contents(of: fixture.directory).map(\.lastPathComponent),
-            [fixture.store.fileURL.lastPathComponent]
+            Set(artifactNames),
+            Set([fixture.store.fileURL.lastPathComponent, ".quick-entry-handoff.lock"])
         )
         XCTAssertEqual(
             try fixture.store.consume(),
@@ -313,6 +519,29 @@ final class QuickEntryIntentTests: XCTestCase {
             )
         )
         return CatalogFixture(directory: directory, store: store)
+    }
+
+    private func jsonObject(at url: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: url)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private func writeJSON(_ object: [String: Any], to url: URL) throws {
+        try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            .write(to: url, options: .atomic)
+    }
+
+    private func writeVersionTwoQueue(_ items: [[String: Any]], to url: URL) throws {
+        try writeJSON(["items": items, "version": 2], to: url)
+    }
+
+    private func queueItem(text: String, enqueuedAt: Date) -> [String: Any] {
+        [
+            "enqueuedAt": enqueuedAt.timeIntervalSinceReferenceDate,
+            "id": UUID().uuidString,
+            "payload": ["text": text],
+            "route": "quickEntry"
+        ]
     }
 
     private func profile(

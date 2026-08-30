@@ -5,6 +5,18 @@ enum QuickEntryIntentError: Error, Equatable {
     case blankText
     case invalidProfile
     case handoffUnavailable
+    case queueFull
+}
+
+extension QuickEntryIntentError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .queueFull:
+            "Quick Entry is full. Open Personal Calendar and try again."
+        case .blankText, .invalidProfile, .handoffUnavailable:
+            nil
+        }
+    }
 }
 
 struct QuickEntryIntent: AppIntent {
@@ -63,7 +75,13 @@ struct QuickEntryIntent: AppIntent {
             }
         }
 
-        try handoffStore.write(.quickEntry(text: text, profile: identity))
+        do {
+            try handoffStore.write(.quickEntry(text: text, profile: identity))
+        } catch AppRouteHandoffStoreError.queueFull {
+            throw QuickEntryIntentError.queueFull
+        } catch {
+            throw QuickEntryIntentError.handoffUnavailable
+        }
         return .result()
     }
 }

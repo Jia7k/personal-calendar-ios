@@ -2,19 +2,26 @@ import CoreFoundation
 import Darwin
 import Foundation
 
+@_silgen_name("flock")
+private func appRouteHandoffFlock(_ descriptor: Int32, _ operation: Int32) -> Int32
+
 enum AppRouteHandoffStoreError: Error, Equatable, Sendable {
     case containerUnavailable
     case unsupportedRoute
     case invalidQuickEntry
     case payloadTooLarge
+    case queueFull
 }
 
 struct AppRouteHandoffStore: Sendable {
     static let filename = "quick-entry-handoff-v1.json"
     static let arrivalNotificationName = "local.personalcalendar.quick-entry-handoff.arrived"
 
-    private static let currentVersion = 1
+    private static let currentVersion = 2
+    private static let lockFilename = ".quick-entry-handoff.lock"
+    private static let maximumItemCount = 16
     private static let maximumPayloadSize = 64 * 1_024
+    private static let maximumItemAge: TimeInterval = 24 * 60 * 60
     private static let claimStaleInterval: TimeInterval = 5 * 60
 
     let fileURL: URL
@@ -26,13 +33,13 @@ struct AppRouteHandoffStore: Sendable {
             throw AppRouteHandoffStoreError.containerUnavailable
         }
         let store = Self(fileURL: directory.appendingPathComponent(filename, isDirectory: false))
-        try store.removeOrphanedClaims()
+        try store.withExclusiveLock {
+            try store.removeOrphanedClaims()
+        }
         return store
     }
 
     func write(_ route: AppRoute) throws {
-        try removeOrphanedClaims()
-
         let payload: QuickEntryPayload
         switch route {
         case let .quickEntry(text, profile):
@@ -47,70 +54,170 @@ struct AppRouteHandoffStore: Sendable {
             throw AppRouteHandoffStoreError.unsupportedRoute
         }
 
-        let envelope = Envelope(
-            version: Self.currentVersion,
+        let item = QueuedItem(
+            id: UUID(),
+            enqueuedAt: Date(),
             route: .quickEntry,
             payload: payload
         )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(envelope)
-        guard data.count <= Self.maximumPayloadSize else {
+        guard try Self.encodedQueue([item]).count <= Self.maximumPayloadSize else {
             throw AppRouteHandoffStoreError.payloadTooLarge
         }
 
-        try data.write(to: fileURL, options: .atomic)
+        try withExclusiveLock {
+            try removeOrphanedClaims()
+            var items = try readQueue(now: item.enqueuedAt)
+            items = Self.pruned(items, now: item.enqueuedAt)
+            guard items.count < Self.maximumItemCount else {
+                throw AppRouteHandoffStoreError.queueFull
+            }
+
+            items.append(item)
+            let data = try Self.encodedQueue(items)
+            guard data.count <= Self.maximumPayloadSize else {
+                throw AppRouteHandoffStoreError.queueFull
+            }
+            try data.write(to: fileURL, options: .atomic)
+        }
         Self.postArrivalNotification()
     }
 
     func consume() throws -> AppRoute? {
-        try removeOrphanedClaims()
-        guard let claimedURL = try claimPayload() else { return nil }
-        defer { try? FileManager.default.removeItem(at: claimedURL) }
+        try withExclusiveLock {
+            try removeOrphanedClaims()
+            let now = Date()
+            var items = Self.pruned(try readQueue(now: now), now: now)
+            guard !items.isEmpty else {
+                try removePayloadIfPresent()
+                return nil
+            }
 
-        let values = try claimedURL.resourceValues(forKeys: [.fileSizeKey])
-        guard let fileSize = values.fileSize,
-              fileSize <= Self.maximumPayloadSize else {
-            return nil
+            let item = items.removeFirst()
+            if items.isEmpty {
+                try removePayloadIfPresent()
+            } else {
+                try Self.encodedQueue(items).write(to: fileURL, options: .atomic)
+            }
+
+            return .quickEntry(
+                text: item.payload.text,
+                profile: item.payload.profile
+            )
         }
-
-        let data = try Data(contentsOf: claimedURL)
-        guard data.count <= Self.maximumPayloadSize,
-              let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
-              envelope.version == Self.currentVersion,
-              envelope.route == .quickEntry,
-              Self.containsNonWhitespace(envelope.payload.text),
-              envelope.payload.profile != .everything else {
-            return nil
-        }
-
-        return .quickEntry(
-            text: envelope.payload.text,
-            profile: envelope.payload.profile
-        )
     }
 
-    private func claimPayload() throws -> URL? {
+    private func readQueue(now: Date) throws -> [QueuedItem] {
         let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
+        guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
 
-        let claimedURL = fileURL.deletingLastPathComponent().appendingPathComponent(
-            ".\(fileURL.lastPathComponent).consuming-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)",
-            isDirectory: false
-        )
-        do {
-            try fileManager.moveItem(at: fileURL, to: claimedURL)
-            return claimedURL
-        } catch {
-            guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
-            throw error
+        let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+        guard let fileSize = values.fileSize,
+              fileSize <= Self.maximumPayloadSize else {
+            try removePayloadIfPresent()
+            return []
         }
+
+        let data = try Data(contentsOf: fileURL)
+        guard data.count <= Self.maximumPayloadSize,
+              let marker = try? JSONDecoder().decode(VersionMarker.self, from: data) else {
+            try removePayloadIfPresent()
+            return []
+        }
+
+        let items: [QueuedItem]
+        switch marker.version {
+        case 1:
+            guard let legacy = try? JSONDecoder().decode(LegacyEnvelope.self, from: data),
+                  legacy.version == 1 else {
+                try removePayloadIfPresent()
+                return []
+            }
+            items = [
+                QueuedItem(
+                    id: UUID(),
+                    enqueuedAt: now,
+                    route: legacy.route,
+                    payload: legacy.payload
+                )
+            ]
+        case Self.currentVersion:
+            guard let envelope = try? JSONDecoder().decode(QueueEnvelope.self, from: data),
+                  envelope.version == Self.currentVersion else {
+                try removePayloadIfPresent()
+                return []
+            }
+            items = envelope.items
+        default:
+            try removePayloadIfPresent()
+            return []
+        }
+
+        guard Self.isValid(items) else {
+            try removePayloadIfPresent()
+            return []
+        }
+        return items
     }
 
     private static func containsNonWhitespace(_ value: String) -> Bool {
         value.unicodeScalars.contains {
             !CharacterSet.whitespacesAndNewlines.contains($0)
         }
+    }
+
+    private static func encodedQueue(_ items: [QueuedItem]) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(QueueEnvelope(version: currentVersion, items: items))
+    }
+
+    private static func isValid(_ items: [QueuedItem]) -> Bool {
+        guard items.count <= maximumItemCount,
+              Set(items.map(\.id)).count == items.count else {
+            return false
+        }
+        return items.allSatisfy {
+            $0.route == .quickEntry
+                && containsNonWhitespace($0.payload.text)
+                && $0.payload.profile != .everything
+                && $0.enqueuedAt.timeIntervalSinceReferenceDate.isFinite
+        }
+    }
+
+    private static func pruned(_ items: [QueuedItem], now: Date) -> [QueuedItem] {
+        items.filter { now.timeIntervalSince($0.enqueuedAt) <= maximumItemAge }
+    }
+
+    private func removePayloadIfPresent(fileManager: FileManager = .default) throws {
+        do {
+            try fileManager.removeItem(at: fileURL)
+        } catch where Self.isMissingFileError(error) {
+            return
+        }
+    }
+
+    private func withExclusiveLock<T>(_ operation: () throws -> T) throws -> T {
+        let lockURL = fileURL.deletingLastPathComponent().appendingPathComponent(
+            Self.lockFilename,
+            isDirectory: false
+        )
+        let descriptor = lockURL.path.withCString {
+            Darwin.open($0, O_CREAT | O_RDWR, mode_t(0o600))
+        }
+        guard descriptor >= 0 else {
+            throw Self.posixError()
+        }
+        defer { Darwin.close(descriptor) }
+
+        while appRouteHandoffFlock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else { throw Self.posixError() }
+        }
+        defer { _ = appRouteHandoffFlock(descriptor, LOCK_UN) }
+        return try operation()
+    }
+
+    private static func posixError() -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
 
     private func removeOrphanedClaims(
@@ -181,8 +288,24 @@ struct AppRouteHandoffStore: Sendable {
 }
 
 private extension AppRouteHandoffStore {
-    struct Envelope: Codable {
+    struct VersionMarker: Decodable {
         let version: Int
+    }
+
+    struct LegacyEnvelope: Codable {
+        let version: Int
+        let route: RouteKind
+        let payload: QuickEntryPayload
+    }
+
+    struct QueueEnvelope: Codable {
+        let version: Int
+        let items: [QueuedItem]
+    }
+
+    struct QueuedItem: Codable {
+        let id: UUID
+        let enqueuedAt: Date
         let route: RouteKind
         let payload: QuickEntryPayload
     }
