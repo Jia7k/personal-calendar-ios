@@ -9,15 +9,23 @@ struct AppRouteEnvelope: Equatable, Sendable, Identifiable {
 @MainActor
 @Observable
 final class AppRouteController {
-    private(set) var pending: AppRouteEnvelope?
+    private static let maximumPendingRoutes = 16
+    private var queue: [AppRouteEnvelope] = []
 
-    func submit(_ route: AppRoute) {
-        pending = .init(id: UUID(), route: route)
+    var pending: AppRouteEnvelope? {
+        queue.first
+    }
+
+    @discardableResult
+    func submit(_ route: AppRoute) -> Bool {
+        guard queue.count < Self.maximumPendingRoutes else { return false }
+        queue.append(.init(id: UUID(), route: route))
+        return true
     }
 
     func consume(id: UUID) {
-        guard pending?.id == id else { return }
-        pending = nil
+        guard queue.first?.id == id else { return }
+        queue.removeFirst()
     }
 }
 

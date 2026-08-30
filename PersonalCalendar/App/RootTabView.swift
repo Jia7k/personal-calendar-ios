@@ -322,7 +322,10 @@ struct RootTabView: View {
 
     private func receiveRouteURL(_ url: URL) {
         do {
-            routeController.submit(try AppRouteCodec().route(from: url))
+            guard routeController.submit(try AppRouteCodec().route(from: url)) else {
+                showRouteQueueFull()
+                return
+            }
         } catch {
             showRouteUnavailable()
         }
@@ -485,6 +488,13 @@ struct RootTabView: View {
         routeAlert = .unavailable
     }
 
+    private func showRouteQueueFull() {
+        guard presentation == nil,
+              creationProfileChoice == nil,
+              routeAlert == nil else { return }
+        routeAlert = .queueFull
+    }
+
     private func requestAccess(
         for kind: QuickEntryKind,
         profileID: UUID,
@@ -587,6 +597,13 @@ private struct RootRouteAlert: Identifiable {
         .init(
             title: "Can’t Open This Item",
             message: "It may have been removed or is no longer available in that profile."
+        )
+    }
+
+    static var queueFull: RootRouteAlert {
+        .init(
+            title: "Can’t Open This Item",
+            message: "Too many items are waiting to open. Please try again."
         )
     }
 }

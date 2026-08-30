@@ -91,30 +91,86 @@ final class AppRouteTests: XCTestCase {
         XCTAssertFalse(same.contains("event-display-id"))
     }
 
-    func testRepeatedEqualRoutesReceiveDistinctEnvelopes() throws {
+    func testControllerPreservesFIFOOrderAndExposesTheNextRouteAfterHeadConsumption() throws {
         let controller = AppRouteController()
-        controller.submit(.today)
+        let routes: [AppRoute] = [
+            .today,
+            .task(id: "route-second", profile: nil),
+            .routine(id: UUID(uuidString: "B2000000-0000-4000-8000-000000000002")!, profile: nil)
+        ]
+
+        for route in routes {
+            XCTAssertTrue(controller.submit(route))
+        }
+
+        let first = try XCTUnwrap(controller.pending)
+        XCTAssertEqual(first.route, routes[0])
+        controller.consume(id: first.id)
+
+        let second = try XCTUnwrap(controller.pending)
+        XCTAssertEqual(second.route, routes[1])
+        controller.consume(id: second.id)
+
+        let third = try XCTUnwrap(controller.pending)
+        XCTAssertEqual(third.route, routes[2])
+        controller.consume(id: third.id)
+        XCTAssertNil(controller.pending)
+    }
+
+    func testRepeatedEqualRoutesReceiveDistinctFIFOEnvelopes() throws {
+        let controller = AppRouteController()
+        XCTAssertTrue(controller.submit(.today))
         let first = try XCTUnwrap(controller.pending)
 
-        controller.submit(.today)
+        XCTAssertTrue(controller.submit(.today))
+        XCTAssertEqual(controller.pending, first)
+        controller.consume(id: first.id)
         let second = try XCTUnwrap(controller.pending)
 
         XCTAssertEqual(first.route, second.route)
         XCTAssertNotEqual(first.id, second.id)
     }
 
-    func testControllerConsumesOnlyMatchingEnvelopeOnce() throws {
+    func testControllerConsumesOnlyTheMatchingHeadEnvelopeOnce() throws {
         let controller = AppRouteController()
-        controller.submit(.today)
-        let envelope = try XCTUnwrap(controller.pending)
+        XCTAssertTrue(controller.submit(.today))
+        let first = try XCTUnwrap(controller.pending)
+        XCTAssertTrue(controller.submit(.task(id: "route-second", profile: nil)))
 
         controller.consume(id: UUID())
-        XCTAssertEqual(controller.pending, envelope)
+        XCTAssertEqual(controller.pending, first)
 
-        controller.consume(id: envelope.id)
-        XCTAssertNil(controller.pending)
+        controller.consume(id: first.id)
+        let second = try XCTUnwrap(controller.pending)
+        XCTAssertEqual(second.route, .task(id: "route-second", profile: nil))
 
-        controller.consume(id: envelope.id)
+        controller.consume(id: first.id)
+        XCTAssertEqual(controller.pending, second)
+    }
+
+    func testControllerRejectsNewestRouteWhenQueueIsFullWithoutEvictingAcceptedRoutes() throws {
+        let controller = AppRouteController()
+        let acceptedRoutes: [AppRoute] = [
+            .task(id: "route-01", profile: nil), .task(id: "route-02", profile: nil),
+            .task(id: "route-03", profile: nil), .task(id: "route-04", profile: nil),
+            .task(id: "route-05", profile: nil), .task(id: "route-06", profile: nil),
+            .task(id: "route-07", profile: nil), .task(id: "route-08", profile: nil),
+            .task(id: "route-09", profile: nil), .task(id: "route-10", profile: nil),
+            .task(id: "route-11", profile: nil), .task(id: "route-12", profile: nil),
+            .task(id: "route-13", profile: nil), .task(id: "route-14", profile: nil),
+            .task(id: "route-15", profile: nil), .task(id: "route-16", profile: nil)
+        ]
+
+        for route in acceptedRoutes {
+            XCTAssertTrue(controller.submit(route))
+        }
+        XCTAssertFalse(controller.submit(.task(id: "route-rejected", profile: nil)))
+
+        for expectedRoute in acceptedRoutes {
+            let envelope = try XCTUnwrap(controller.pending)
+            XCTAssertEqual(envelope.route, expectedRoute)
+            controller.consume(id: envelope.id)
+        }
         XCTAssertNil(controller.pending)
     }
 

@@ -41,7 +41,7 @@ final class AppNotificationDelegate: NSObject, UIApplicationDelegate, UNUserNoti
                       let url = URL(string: encodedRoute),
                       let route = try? AppRouteCodec().route(from: url)
                 else { return }
-                routeController?.submit(route)
+                _ = routeController?.submit(route)
 
             case NotificationActionIdentifier.routineComplete,
                  NotificationActionIdentifier.routineSnooze15:
