@@ -25,6 +25,7 @@ struct RoutinesView: View {
     @State private var editing: RoutineRowState?
     @State private var deleteRequest: DeleteRequest?
     @State private var deepLinkResolver = RoutineDeepLinkResolver()
+    @State private var refreshRegistrationID = UUID()
     private let revision: AppContentRevision
     private let quickEntryRefresh: QuickEntryRefreshSignal?
     private let routineDeepLink: RoutineDeepLinkSignal?
@@ -114,6 +115,14 @@ struct RoutinesView: View {
         onPresentationChanged(isPresented)
     }
     .refreshable { model.reload() }
+    }
+    .onAppear {
+        environment.agendaRefreshRegistry.register(id: refreshRegistrationID) { [weak model] in
+            await model?.refreshForExternalChange()
+        }
+    }
+    .onDisappear {
+        environment.agendaRefreshRegistry.unregister(id: refreshRegistrationID)
     }
     }
     private var actionRetryLabel: String { switch model.failedActionOperation { case .pause: "Retry Pause"; case .archive: "Retry Archive"; case .completion: "Retry Completion"; case .delete: "Retry Delete"; case nil: "Retry" } }

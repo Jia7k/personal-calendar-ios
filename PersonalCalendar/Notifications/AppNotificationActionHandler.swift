@@ -7,19 +7,22 @@ final class AppNotificationActionHandler {
     private let calendar: Calendar
     private let now: () -> Date
     private let isRoutineInNotificationScope: @MainActor (UUID) -> Bool
+    private let onRoutineCompletionCommitted: @MainActor @Sendable () async -> Void
 
     init(
         routines: any RoutineRepository,
         scheduler: any NotificationScheduling,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init,
-        isRoutineInNotificationScope: @escaping @MainActor (UUID) -> Bool = { _ in true }
+        isRoutineInNotificationScope: @escaping @MainActor (UUID) -> Bool = { _ in true },
+        onRoutineCompletionCommitted: @escaping @MainActor @Sendable () async -> Void = {}
     ) {
         self.routines = routines
         self.scheduler = scheduler
         self.calendar = calendar
         self.now = now
         self.isRoutineInNotificationScope = isRoutineInNotificationScope
+        self.onRoutineCompletionCommitted = onRoutineCompletionCommitted
     }
 
     func handle(actionIdentifier: String, userInfo: [String: String]) async {
@@ -48,10 +51,17 @@ final class AppNotificationActionHandler {
             guard (try? routines.isCompleted(routineID: routineID, day: currentDay)) == false else {
                 return
             }
-            try? routines.setCompleted(routineID: routineID, day: currentDay, completed: true)
+            do {
+                try routines.setCompleted(routineID: routineID, day: currentDay, completed: true)
+            } catch {
+                return
+            }
+            await onRoutineCompletionCommitted()
 
         case NotificationActionIdentifier.routineSnooze15:
-            guard let fireDate = calendar.date(byAdding: .minute, value: 15, to: responseDate) else {
+            guard (try? routines.isCompleted(routineID: routineID, day: currentDay)) == false,
+                  let fireDate = calendar.date(byAdding: .minute, value: 15, to: responseDate)
+            else {
                 return
             }
             try? await scheduler.schedule(.init(

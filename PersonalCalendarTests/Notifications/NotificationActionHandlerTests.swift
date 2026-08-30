@@ -24,7 +24,12 @@ final class NotificationActionHandlerTests: XCTestCase {
         let routine = makeRoutine()
         let routines = FakeRoutineRepository(routines: [routine])
         let scheduler = NotificationActionSchedulerSpy()
-        let subject = makeSubject(routines: routines, scheduler: scheduler)
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: scheduler,
+            onRoutineCompletionCommitted: { refreshCount += 1 }
+        )
         let userInfo = payload(routineID: routine.id, day: day)
 
         await subject.handle(
@@ -42,13 +47,113 @@ final class NotificationActionHandlerTests: XCTestCase {
         )
         XCTAssertTrue(scheduler.scheduled.isEmpty)
         XCTAssertTrue(scheduler.replacements.isEmpty)
+        XCTAssertEqual(refreshCount, 1)
     }
 
-    func testStaleRoutineDayDoesNotCompleteOrSnooze() async {
+    func testCompleteAwaitsRefreshHookAfterSuccessfulWrite() async {
+        let day = LocalDay(date: now, calendar: calendar)
+        let routine = makeRoutine()
+        let routines = FakeRoutineRepository(routines: [routine])
+        let gate = NotificationActionHookGate()
+        let hookStarted = expectation(description: "completion refresh hook started")
+        var didReturn = false
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: NotificationActionSchedulerSpy(),
+            onRoutineCompletionCommitted: {
+                XCTAssertEqual(
+                    routines.completionCalls,
+                    [.init(id: routine.id, day: day, completed: true)]
+                )
+                hookStarted.fulfill()
+                await gate.wait()
+            }
+        )
+
+        let handling = Task { @MainActor in
+            await subject.handle(
+                actionIdentifier: NotificationActionIdentifier.routineComplete,
+                userInfo: payload(routineID: routine.id, day: day)
+            )
+            didReturn = true
+        }
+        await fulfillment(of: [hookStarted], timeout: 1)
+
+        XCTAssertFalse(didReturn)
+        await gate.open()
+        await handling.value
+        XCTAssertTrue(didReturn)
+    }
+
+    func testFailedCompletionWriteDoesNotRunRefreshHook() async {
+        let routine = makeRoutine()
+        let routines = FakeRoutineRepository(routines: [routine])
+        routines.completionError = NotificationActionTestError.failed
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: NotificationActionSchedulerSpy(),
+            onRoutineCompletionCommitted: { refreshCount += 1 }
+        )
+
+        await subject.handle(
+            actionIdentifier: NotificationActionIdentifier.routineComplete,
+            userInfo: payload(
+                routineID: routine.id,
+                day: LocalDay(date: now, calendar: calendar)
+            )
+        )
+
+        XCTAssertTrue(routines.completionCalls.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
+    }
+
+    func testRefreshFailureAfterCompletionDoesNotRepeatCompletionWrite() async {
+        let day = LocalDay(date: now, calendar: calendar)
+        let routine = makeRoutine()
+        let routines = FakeRoutineRepository(routines: [routine])
+        let model = RoutinesViewModel(repository: routines, calendar: calendar, now: { self.now })
+        model.reload()
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: NotificationActionSchedulerSpy(),
+            onRoutineCompletionCommitted: {
+                refreshCount += 1
+                routines.listError = NotificationActionTestError.failed
+                await model.refreshForExternalChange()
+            }
+        )
+        let userInfo = payload(routineID: routine.id, day: day)
+
+        await subject.handle(
+            actionIdentifier: NotificationActionIdentifier.routineComplete,
+            userInfo: userInfo
+        )
+        routines.listError = nil
+        await subject.handle(
+            actionIdentifier: NotificationActionIdentifier.routineComplete,
+            userInfo: userInfo
+        )
+
+        XCTAssertEqual(
+            routines.completionCalls,
+            [.init(id: routine.id, day: day, completed: true)]
+        )
+        XCTAssertEqual(refreshCount, 1)
+        XCTAssertNotNil(model.refreshErrorMessage)
+    }
+
+    func testStaleRoutineDayDoesNotCompleteSnoozeOrRunRefreshHook() async {
         let routine = makeRoutine()
         let routines = FakeRoutineRepository(routines: [routine])
         let scheduler = NotificationActionSchedulerSpy()
-        let subject = makeSubject(routines: routines, scheduler: scheduler)
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: scheduler,
+            onRoutineCompletionCommitted: { refreshCount += 1 }
+        )
         let staleDay = LocalDay(year: 2026, month: 8, day: 23)
         let userInfo = payload(routineID: routine.id, day: staleDay)
 
@@ -64,6 +169,7 @@ final class NotificationActionHandlerTests: XCTestCase {
         XCTAssertTrue(routines.completionCalls.isEmpty)
         XCTAssertTrue(scheduler.scheduled.isEmpty)
         XCTAssertTrue(scheduler.replacements.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
     }
 
     func testSnoozeSchedulesOneActionableRequestFifteenMinutesAfterResponseWithoutReplacingPendingRequests() async {
@@ -71,7 +177,12 @@ final class NotificationActionHandlerTests: XCTestCase {
         let routine = makeRoutine(title: "Morning review")
         let routines = FakeRoutineRepository(routines: [routine])
         let scheduler = NotificationActionSchedulerSpy()
-        let subject = makeSubject(routines: routines, scheduler: scheduler)
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: scheduler,
+            onRoutineCompletionCommitted: { refreshCount += 1 }
+        )
         let userInfo = payload(routineID: routine.id, day: day)
 
         await subject.handle(
@@ -89,6 +200,29 @@ final class NotificationActionHandlerTests: XCTestCase {
         XCTAssertEqual(request.userInfo, userInfo)
         XCTAssertTrue(scheduler.replacements.isEmpty)
         XCTAssertTrue(routines.completionCalls.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
+    }
+
+    func testSnoozeRejectsRoutineAlreadyCompletedForPayloadDay() async throws {
+        let day = LocalDay(date: now, calendar: calendar)
+        let routine = makeRoutine()
+        let routines = FakeRoutineRepository(routines: [routine])
+        try routines.setCompleted(routineID: routine.id, day: day, completed: true)
+        let scheduler = NotificationActionSchedulerSpy()
+        var refreshCount = 0
+        let subject = makeSubject(
+            routines: routines,
+            scheduler: scheduler,
+            onRoutineCompletionCommitted: { refreshCount += 1 }
+        )
+
+        await subject.handle(
+            actionIdentifier: NotificationActionIdentifier.routineSnooze15,
+            userInfo: payload(routineID: routine.id, day: day)
+        )
+
+        XCTAssertTrue(scheduler.scheduled.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
     }
 
     func testMissingPausedArchivedAndWrongWeekdayRoutinesRejectEveryActionWithoutWrites() async {
@@ -136,10 +270,12 @@ final class NotificationActionHandlerTests: XCTestCase {
         let routine = makeRoutine()
         let routines = FakeRoutineRepository(routines: [routine])
         let scheduler = NotificationActionSchedulerSpy()
+        var refreshCount = 0
         let subject = makeSubject(
             routines: routines,
             scheduler: scheduler,
-            isRoutineInNotificationScope: { _ in false }
+            isRoutineInNotificationScope: { _ in false },
+            onRoutineCompletionCommitted: { refreshCount += 1 }
         )
         let userInfo = payload(routineID: routine.id, day: day)
 
@@ -154,19 +290,22 @@ final class NotificationActionHandlerTests: XCTestCase {
 
         XCTAssertTrue(routines.completionCalls.isEmpty)
         XCTAssertTrue(scheduler.scheduled.isEmpty)
+        XCTAssertEqual(refreshCount, 0)
     }
 
     private func makeSubject(
         routines: FakeRoutineRepository,
         scheduler: NotificationActionSchedulerSpy,
-        isRoutineInNotificationScope: @escaping @MainActor (UUID) -> Bool = { _ in true }
+        isRoutineInNotificationScope: @escaping @MainActor (UUID) -> Bool = { _ in true },
+        onRoutineCompletionCommitted: @escaping @MainActor @Sendable () async -> Void = {}
     ) -> AppNotificationActionHandler {
         AppNotificationActionHandler(
             routines: routines,
             scheduler: scheduler,
             calendar: calendar,
             now: { self.now },
-            isRoutineInNotificationScope: isRoutineInNotificationScope
+            isRoutineInNotificationScope: isRoutineInNotificationScope,
+            onRoutineCompletionCommitted: onRoutineCompletionCommitted
         )
     }
 
@@ -198,6 +337,23 @@ final class NotificationActionHandlerTests: XCTestCase {
                 day.day
             )
         ]
+    }
+}
+
+private enum NotificationActionTestError: Error {
+    case failed
+}
+
+private actor NotificationActionHookGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 

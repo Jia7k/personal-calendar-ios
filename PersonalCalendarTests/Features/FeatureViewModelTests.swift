@@ -259,6 +259,40 @@ final class FeatureViewModelTests: XCTestCase {
         XCTAssertTrue(repository.createdDrafts.isEmpty)
     }
 
+    func testRoutinesExternalRefreshLoadsCommittedCompletionWithoutAnotherWrite() async throws {
+        let now = calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 24,
+            hour: 9
+        ))!
+        let day = LocalDay(date: now, calendar: calendar)
+        let routine = RoutineSnapshot(
+            id: UUID(),
+            title: "Read",
+            weekdays: [calendar.component(.weekday, from: now)],
+            window: .morning,
+            reminderHour: 9,
+            reminderMinute: 0,
+            isPaused: false,
+            isArchived: false
+        )
+        let repository = FakeRoutineRepository(routines: [routine])
+        let subject = RoutinesViewModel(
+            repository: repository,
+            calendar: calendar,
+            now: { now }
+        )
+        subject.reload()
+        try repository.setCompleted(routineID: routine.id, day: day, completed: true)
+        let committedWrites = repository.completionCalls
+
+        await subject.refreshForExternalChange()
+
+        XCTAssertTrue(subject.active[0].isCompletedToday)
+        XCTAssertEqual(repository.completionCalls, committedWrites)
+    }
+
     func testQuickEntryRefreshSignalKeepsUniqueIdentityAndTypedOutcome() {
         let id = UUID(uuidString: "12345678-1234-5678-9ABC-123456789ABC")!
         let signal = QuickEntryRefreshSignal(id: id, outcome: .task(id: nil))

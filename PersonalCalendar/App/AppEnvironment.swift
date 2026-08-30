@@ -65,14 +65,6 @@ struct AppEnvironment {
         localCalendar.timeZone = .current
         let notificationScheduler = SystemNotificationScheduler()
         let notificationCoordinator = NotificationCoordinator(scheduler: notificationScheduler)
-        let notificationActionHandler = AppNotificationActionHandler(
-            routines: routines,
-            scheduler: notificationScheduler,
-            calendar: localCalendar,
-            isRoutineInNotificationScope: { routineID in
-                (try? profileScopes.resolve(.everything).routineIDs.contains(routineID)) == true
-            }
-        )
         try! categories.seedDefaultsIfNeeded(settings: settings)
         let permissions = PermissionCoordinator(
             calendar: calendar,
@@ -144,6 +136,18 @@ struct AppEnvironment {
         let rescheduleNotifications: @MainActor @Sendable () async -> Void = {
             _ = await notificationRenewalScheduler.rescheduleNotifications()
         }
+        let notificationActionHandler = AppNotificationActionHandler(
+            routines: routines,
+            scheduler: notificationScheduler,
+            calendar: localCalendar,
+            isRoutineInNotificationScope: { routineID in
+                (try? profileScopes.resolve(.everything).routineIDs.contains(routineID)) == true
+            },
+            onRoutineCompletionCommitted: {
+                await agendaRefreshRegistry.refreshAll()
+                await rescheduleNotifications()
+            }
+        )
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
             migrateProfiles: { try? profileMigration.run() },
@@ -282,14 +286,6 @@ struct AppEnvironment {
         localCalendar.timeZone = .current
         let notificationScheduler = SystemNotificationScheduler()
         let notificationCoordinator = NotificationCoordinator(scheduler: notificationScheduler)
-        let notificationActionHandler = AppNotificationActionHandler(
-            routines: routines,
-            scheduler: notificationScheduler,
-            calendar: localCalendar,
-            isRoutineInNotificationScope: { routineID in
-                (try? profileScopes.resolve(.everything).routineIDs.contains(routineID)) == true
-            }
-        )
         let permissions = PermissionCoordinator(
             calendar: calendar,
             reminders: reminders,
@@ -357,6 +353,18 @@ struct AppEnvironment {
         let rescheduleNotifications: @MainActor @Sendable () async -> Void = {
             _ = await notificationRenewalScheduler.rescheduleNotifications()
         }
+        let notificationActionHandler = AppNotificationActionHandler(
+            routines: routines,
+            scheduler: notificationScheduler,
+            calendar: localCalendar,
+            isRoutineInNotificationScope: { routineID in
+                (try? profileScopes.resolve(.everything).routineIDs.contains(routineID)) == true
+            },
+            onRoutineCompletionCommitted: {
+                await agendaRefreshRegistry.refreshAll()
+                await rescheduleNotifications()
+            }
+        )
         let refreshCoordinator = AppRefreshCoordinator(actions: .init(
             refreshPermissions: { await permissions.refresh() },
             migrateProfiles: { try? profileMigration.run() },

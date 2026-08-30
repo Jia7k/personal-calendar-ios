@@ -165,6 +165,10 @@ final class RoutinesViewModel {
         } catch { refreshErrorMessage = savedMutation ? "Your routine change was saved, but routines could not be refreshed. Pull to try again." : "Your routines could not be loaded. Pull to try again." }
     }
 
+    func refreshForExternalChange() async {
+        reload()
+    }
+
     /// Host-owned post-Quick-Entry reconciliation. Each committed signal is consumed at most once.
     func refreshAfterQuickEntry(_ signal: QuickEntryRefreshSignal) {
         guard case .routine = signal.outcome,
