@@ -93,7 +93,7 @@ final class ProfileCreationTests: XCTestCase {
         )
     }
 
-    func testMissingProfileDefaultsRequireExplicitDestinationBeforeQuickEntrySaves() {
+    func testMissingProfileDefaultsKeepEventExplicitAndFallbackTaskToWritableMemberList() {
         let calendar = FakeCalendarService(
             access: .granted,
             descriptors: [calendarDescriptor(id: "school")],
@@ -136,10 +136,13 @@ final class ProfileCreationTests: XCTestCase {
         )
         task.text = "Submit assignment tomorrow"
         task.parse()
+
+        XCTAssertEqual(task.preview?.destinationID, "assignments")
+        XCTAssertTrue(task.canSave)
         task.confirmSave()
 
-        XCTAssertEqual(task.errorMessage, "Choose a reminder list before saving.")
-        XCTAssertTrue(taskSaver.received.isEmpty)
+        XCTAssertNil(task.errorMessage)
+        XCTAssertEqual(taskSaver.received.map(\.destinationID), ["assignments"])
     }
 
     func testExplicitDestinationOutsideProfileIsAllowedAndClearlyIdentified() {

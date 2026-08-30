@@ -140,7 +140,7 @@ struct ProfileEditorView: View {
 
                 Section("Default Reminder List") {
                     Picker("New tasks", selection: defaultReminderSelection) {
-                        Text("Ask Every Time").tag(String?.none)
+                        Text("First Available").tag(String?.none)
                         ForEach(editor.defaultReminderListChoices) { list in
                             Text(list.title).tag(Optional(list.id))
                         }
@@ -150,7 +150,7 @@ struct ProfileEditorView: View {
 
                     if editor.draft.defaultReminderListID != nil,
                        editor.validatedDefaultReminderListID == nil {
-                        Text("The previous default is no longer writable. Choose another or ask every time.")
+                        Text("The previous default is no longer writable. Choose another or use the first available list.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

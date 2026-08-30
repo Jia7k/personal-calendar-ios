@@ -72,10 +72,12 @@ struct QuickEntryDestinationOptions: Equatable, Sendable {
             context.memberCalendarIDs.contains(id)
                 && writableCalendars.contains(where: { $0.id == id }) ? id : nil
         }
-        let validListDefault = context.defaultReminderListID.flatMap { id in
+        let configuredListDefault = context.defaultReminderListID.flatMap { id in
             context.memberReminderListIDs.contains(id)
                 && writableLists.contains(where: { $0.id == id }) ? id : nil
         }
+        let validListDefault = configuredListDefault
+            ?? writableLists.first(where: { context.memberReminderListIDs.contains($0.id) })?.id
 
         return .init(
             calendarAccess: calendarAccess,

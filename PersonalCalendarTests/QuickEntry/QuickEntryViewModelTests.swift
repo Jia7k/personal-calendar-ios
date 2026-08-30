@@ -67,6 +67,123 @@ final class QuickEntryViewModelTests: XCTestCase {
         XCTAssertNil(options.defaultReminderListID)
     }
 
+    func testTitleOnlyTaskUsesFirstWritableProfileListWhenNoDefaultIsConfigured() {
+        let profileID = UUID(uuidString: "11111111-2222-4333-8444-555555555555")!
+        let creationProfile = creationProfile(
+            id: profileID,
+            calendarIDs: [],
+            reminderListIDs: ["alpha", "locked", "zulu"],
+            defaultCalendarID: nil,
+            defaultReminderListID: nil
+        )
+        let resolvedOptions = QuickEntryDestinationOptions.resolve(
+            calendar: FakeCalendarService(access: .granted, descriptors: []),
+            reminders: FakeRemindersService(
+                access: .granted,
+                descriptors: [
+                    listDescriptor("outside", "Aardvark"),
+                    listDescriptor("zulu", "Zulu"),
+                    listDescriptor("alpha", "Alpha"),
+                    listDescriptor("locked", "Locked", writable: false)
+                ]
+            ),
+            context: creationProfile
+        )
+        let saver = RecordingQuickEntrySaver(steps: [.success(.task(id: "saved-task"))])
+        let subject = makeSubject(
+            result: .success(taskPreview(due: nil, dueHasTime: false)),
+            saver: saver,
+            options: resolvedOptions,
+            creationProfile: creationProfile
+        )
+        subject.text = "Call Alex"
+
+        subject.parse()
+
+        XCTAssertEqual(resolvedOptions.defaultReminderListID, "alpha")
+        XCTAssertEqual(subject.preview?.destinationID, "alpha")
+        XCTAssertNil(subject.preview?.dueDate)
+        XCTAssertFalse(subject.preview?.dueHasTime ?? true)
+        XCTAssertNil(subject.preview?.reminderDate)
+        XCTAssertNil(subject.preview?.recurrence)
+        XCTAssertTrue(subject.canSave)
+
+        subject.confirmSave()
+
+        XCTAssertEqual(subject.phase, .committed(.task(id: "saved-task")))
+        XCTAssertEqual(saver.received.count, 1)
+        XCTAssertEqual(saver.received.first?.title, "Submit report")
+        XCTAssertEqual(saver.received.first?.destinationID, "alpha")
+        XCTAssertNil(saver.received.first?.dueDate)
+        XCTAssertFalse(saver.received.first?.dueHasTime ?? true)
+        XCTAssertNil(saver.received.first?.reminderDate)
+        XCTAssertNil(saver.received.first?.recurrence)
+    }
+
+    func testTaskFallbackStaysBlockedWhenNoWritableListBelongsToTheProfile() {
+        let creationProfile = creationProfile(
+            id: UUID(uuidString: "66666666-7777-4888-8999-AAAAAAAAAAAA")!,
+            calendarIDs: [],
+            reminderListIDs: ["locked"],
+            defaultCalendarID: nil,
+            defaultReminderListID: nil
+        )
+        let resolvedOptions = QuickEntryDestinationOptions.resolve(
+            calendar: FakeCalendarService(access: .granted, descriptors: []),
+            reminders: FakeRemindersService(
+                access: .granted,
+                descriptors: [
+                    listDescriptor("outside", "Outside"),
+                    listDescriptor("locked", "Locked", writable: false)
+                ]
+            ),
+            context: creationProfile
+        )
+        let saver = RecordingQuickEntrySaver()
+        let subject = makeSubject(
+            result: .success(taskPreview(due: nil, dueHasTime: false)),
+            saver: saver,
+            options: resolvedOptions,
+            creationProfile: creationProfile
+        )
+        subject.text = "Call Alex"
+
+        subject.parse()
+
+        XCTAssertNil(resolvedOptions.defaultReminderListID)
+        XCTAssertNil(subject.preview?.destinationID)
+        XCTAssertFalse(subject.canSave)
+
+        subject.confirmSave()
+
+        XCTAssertEqual(subject.phase, .confirmation(.failed(.explicitDestinationRequired)))
+        XCTAssertTrue(saver.received.isEmpty)
+    }
+
+    func testConfiguredProfileTaskDefaultWinsOverEarlierSortedWritableMember() {
+        let creationProfile = creationProfile(
+            id: UUID(uuidString: "BBBBBBBB-CCCC-4DDD-8EEE-FFFFFFFFFFFF")!,
+            calendarIDs: [],
+            reminderListIDs: ["alpha", "zulu"],
+            defaultCalendarID: nil,
+            defaultReminderListID: "zulu"
+        )
+
+        let resolvedOptions = QuickEntryDestinationOptions.resolve(
+            calendar: FakeCalendarService(access: .granted, descriptors: []),
+            reminders: FakeRemindersService(
+                access: .granted,
+                descriptors: [
+                    listDescriptor("alpha", "Alpha"),
+                    listDescriptor("zulu", "Zulu")
+                ]
+            ),
+            context: creationProfile
+        )
+
+        XCTAssertEqual(resolvedOptions.defaultReminderListID, "zulu")
+    }
+
     func testParseMovesToConfirmationSeedsEventDefaultAndNeverSaves() {
         let saver = RecordingQuickEntrySaver()
         let subject = makeSubject(result: .success(eventPreview()), saver: saver, options: options(defaultCalendarID: "work"))
