@@ -38,6 +38,22 @@ struct SettingsView: View {
     }
     var body: some View {
         NavigationStack { List {
+            Section {
+                Picker("Open app to", selection: Binding(
+                    get: { environment.settings.openingScreen },
+                    set: { environment.settings.openingScreen = $0 }
+                )) {
+                    ForEach(OpeningScreenPreference.allCases) { preference in
+                        Text(preference.title).tag(preference)
+                    }
+                }
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("settings-opening-screen")
+            } header: {
+                Text("App")
+            } footer: {
+                Text("Used when the app starts. Links and notifications still open the screen you requested.")
+            }
             Section("Permissions") {
                 permission("Calendar", state: environment.permissions.calendarAccess, request: environment.permissions.requestCalendar)
                 permission("Reminders", state: environment.permissions.remindersAccess, request: environment.permissions.requestReminders)

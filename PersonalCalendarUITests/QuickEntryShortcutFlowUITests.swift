@@ -18,12 +18,13 @@ final class QuickEntryShortcutFlowUITests: XCTestCase {
         XCTAssertTrue(source.waitForExistence(timeout: 5))
 
         let destination = app.descendants(matching: .any)["quick-entry-destination"]
-        XCTAssertTrue(destination.waitForExistence(timeout: 3))
-        XCTAssertEqual(destination.value as? String, "Google School")
+        XCTAssertTrue(app.textFields["quick-entry-title"].waitForExistence(timeout: 3))
         XCTAssertEqual(
             app.textFields["quick-entry-title"].value as? String,
             firstCaptureTitle
         )
+        scrollToDestination(destination, in: app)
+        XCTAssertEqual(destination.value as? String, "Google School")
         XCTAssertFalse(app.descendants(matching: .any)["quick-entry-saved"].exists)
 
         app.buttons["quick-entry-back"].tap()
@@ -35,12 +36,13 @@ final class QuickEntryShortcutFlowUITests: XCTestCase {
         )
         discardCapturedEntry(in: app)
 
-        XCTAssertTrue(destination.waitForExistence(timeout: 5))
-        XCTAssertEqual(destination.value as? String, "Home")
+        XCTAssertTrue(app.textFields["quick-entry-title"].waitForExistence(timeout: 5))
         XCTAssertEqual(
             app.textFields["quick-entry-title"].value as? String,
             secondCaptureTitle
         )
+        scrollToDestination(destination, in: app)
+        XCTAssertEqual(destination.value as? String, "Home")
         XCTAssertFalse(app.descendants(matching: .any)["quick-entry-saved"].exists)
 
         app.buttons["quick-entry-back"].tap()
@@ -95,7 +97,7 @@ final class QuickEntryShortcutFlowUITests: XCTestCase {
         )
 
         let destination = app.descendants(matching: .any)["quick-entry-destination"]
-        XCTAssertTrue(destination.waitForExistence(timeout: 3))
+        scrollToDestination(destination, in: app)
         XCTAssertEqual(destination.value as? String, "Google School")
         XCTAssertTrue(app.buttons["quick-entry-save"].isEnabled)
         XCTAssertFalse(app.descendants(matching: .any)["quick-entry-saved"].exists)
@@ -115,6 +117,18 @@ final class QuickEntryShortcutFlowUITests: XCTestCase {
         let confirmation = app.alerts["Discard quick entry?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
         confirmation.buttons["Discard"].tap()
+    }
+
+    private func scrollToDestination(
+        _ destination: XCUIElement,
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let form = app.collectionViews.firstMatch
+        XCTAssertTrue(form.waitForExistence(timeout: 3), file: file, line: line)
+        for _ in 0..<10 where !destination.isHittable { form.swipeUp() }
+        XCTAssertTrue(destination.isHittable, file: file, line: line)
     }
 
     private func assertTaskAndEventProvidersDoNotContain(

@@ -30,6 +30,7 @@ Use the [foundation accessibility manual-QA checklist](docs/manual-qa/foundation
 - Profiles store references to selected Apple or Google calendars and reminder lists. They never copy, move, or delete provider content.
 - A manual backup contains app-owned profiles, routines, completions, categories, source/default selections, notification preferences, per-profile class-alert preferences, the foreground Live Activity preference, and bounded Quick Entry history and choices.
 - Backups never contain Calendar event or Reminder task payloads. Per-widget configuration and a running Live Activity are system/runtime state and are not included.
+- Unsaved Quick Entry drafts and the opening-screen preference are device-local and are not part of manual backups. Draft recovery is scoped to the exact saved profile; deleting a profile removes its draft.
 
 The app has no backend, account, analytics, or CloudKit entitlement.
 
@@ -49,9 +50,9 @@ For a school timetable synced from Google Calendar:
 
 ### Triage overdue tasks
 
-The Tasks screen keeps Overdue separate from Today. Swipe an editable, nonrecurring overdue task for **Tomorrow** or **Next Week**, or use its actions menu for **Later Today**, **Tomorrow**, **Next Week**, or **Pick Date**. A successful change exposes one **Undo reschedule** action that restores the exact previous schedule. Recurring and read-only tasks stay on the full editor path.
+The Tasks screen keeps Overdue separate from Today. Editable, nonrecurring tasks in Today and Upcoming have the same quick rescheduling actions as overdue tasks: **Later Today**, **Tomorrow**, **Next Week**, and **Pick Date**. A successful change exposes one **Undo reschedule** action that restores the exact previous schedule. Recurring and read-only tasks stay on the full editor path.
 
-Completing a task from Today also offers a one-item Undo. Tasks shown in Calendar's Week view can be completed without leaving the planner.
+Completing a task from Today or Tasks also offers a one-item Undo. Tasks shown in Calendar's Week view can be completed without leaving the planner.
 
 ### Schedule focused time
 
@@ -63,6 +64,12 @@ Saving creates a separate Calendar event; the original Reminder remains unchange
 
 Quick Entry parses a short phrase into an event, task, or routine and always shows an in-app confirmation before writing. Successful entries are kept in a bounded recent list, and safe choices such as duration, category, and destination are remembered separately for each saved profile and item kind.
 
+Going Back and reviewing the same unchanged phrase keeps your manual corrections. Editing the phrase or choosing a recent entry starts a fresh interpretation.
+
+Opening **+** focuses a blank input, unless a draft needs your choice or VoiceOver is active. The keyboard's **Continue** opens the same review as the visible Review button. After saving, **Add Another** starts another capture in the same profile; **Done** closes Quick Entry.
+
+Quick Entry keeps a local checkpoint of your phrase and corrected review. Choose **Save Draft** when leaving, then **Resume draft** or **Discard draft** when you return. If a draft is waiting, make that choice before starting fresh. Recovery never saves an event, task, or routine automatically. Link and Shortcut captures stay separate from a waiting in-app draft, even after saving. Successful in-app save or explicit discard clears that capture's draft. This recovery covers new items in Quick Entry, not unsaved edits to existing Calendar events or Reminders. Draft storage is bounded to one per profile, up to 20 profiles and 4,096 phrase characters within a 128 KiB total envelope.
+
 The **Quick Add** action is available in Shortcuts, Siri, Spotlight, and the Action Button where supported. Its suggested Siri phrases are “Add to My Calendar” and “Plan with My Calendar.” The shortcut can target a saved profile, adds each accepted capture to a small on-device queue, opens the app, and never silently saves provider data. If several captures arrive before review, the app presents them one at a time in arrival order; when the queue is full, the newest capture asks you to open the app and try again instead of replacing earlier captures.
 
 ### See what is next
@@ -70,6 +77,16 @@ The **Quick Add** action is available in Shortcuts, Siri, Spotlight, and the Act
 Today shows a **Next Up** card for the current or next timed event and the nearest incomplete deadline. Use **Open** to edit the underlying item. When an event has a location, **Maps** searches that location in Apple Maps.
 
 Calendar includes profile-scoped search, Month and Week views, and **Jump to Date**. Week shows events as timed blocks, tasks as due markers, and routines for the selected day.
+
+Calendar remembers your last Month/Week choice on this device. The collapsed day panel distinguishes **Now** from **Next**, skips finished events for today, and still lets you browse the schedule on other days.
+
+Use the labeled profile dropdown to switch context, and tap the date heading to jump to another date. Recognized timetable titles show a compact course code and class kind in Week; the full original title remains in the event preview and for VoiceOver. Event previews offer **Copy Location**, **Directions** for physical locations, and **Join Call** for recognized meeting links when available. **Open Event** remains available for full details.
+
+Event and task editors show essentials first. **More options** contains notes, destination, color, alerts, repeat and other optional fields, with a summary of the current settings visible while collapsed. Opening or closing these options does not alter provider settings.
+
+When editing an event, changing its start preserves its duration; you can still change its end separately. Event alerts offer readable before-event presets and custom amounts in seconds, minutes, hours, or days instead of requiring negative second offsets.
+
+In **Settings → Open app to**, choose Calendar, Today, Tasks, Routines, or Last Used. Calendar remains the default. Incoming links and notification taps still open their requested screen, and changing this preference does not interrupt your current screen.
 
 ### Use actionable alerts
 

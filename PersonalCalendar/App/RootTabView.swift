@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-enum RootTab: Hashable { case calendar, today, tasks, routines }
+enum RootTab: String, Hashable, Sendable { case calendar, today, tasks, routines }
 
 struct RootTabView: View {
     let environment: AppEnvironment
@@ -32,6 +32,7 @@ struct RootTabView: View {
         quickEntryHandoffMonitor: AppRouteHandoffMonitor = AppRouteHandoffMonitor()
     ) {
         self.environment = environment
+        _selection = State(initialValue: environment.settings.initialTab)
         self.routeController = routeController
         self.quickEntryHandoffStore = quickEntryHandoffStore
         self.quickEntryHandoffMonitor = quickEntryHandoffMonitor
@@ -158,7 +159,8 @@ struct RootTabView: View {
                                     model: session.model
                                 )
                             },
-                            onOpenSettings: openSystemSettings
+                            onOpenSettings: openSystemSettings,
+                            onAddAnother: { startAnotherQuickEntry(session) }
                         )
                     }
                 }
@@ -187,6 +189,8 @@ struct RootTabView: View {
             } else { PermissionOnboardingView(environment: environment) }
         }
         .tint(CalendarTheme.accent)
+        .onAppear { environment.settings.lastUsedTab = selection }
+        .onChange(of: selection) { _, tab in environment.settings.lastUsedTab = tab }
         .onOpenURL(perform: receiveRouteURL)
         .task(id: routeProcessingKey) {
             presentDeferredRouteOverflowIfPossible()
@@ -237,7 +241,7 @@ struct RootTabView: View {
         guard presentation == nil, creationProfileChoice == nil else { return }
         let resolver = creationProfileResolver()
         guard let resolution = try? resolver.resolve(active: environment.profileSelection.activeIdentity) else {
-            if captureSource == .shortcut {
+            if captureSource != .inApp {
                 presentCreationProfileChoice(
                     profiles: environment.profileSelection.profiles,
                     initialText: initialText,
@@ -283,7 +287,7 @@ struct RootTabView: View {
         captureSource: QuickEntryCaptureSource
     ) {
         guard !profiles.isEmpty else {
-            if captureSource == .shortcut { showRouteUnavailable() }
+            if captureSource != .inApp { showRouteUnavailable() }
             return
         }
         creationProfileChoice = CreationProfileChoice(
@@ -322,6 +326,7 @@ struct RootTabView: View {
             categories: (try? environment.categories.list()) ?? [],
             creationProfile: creationProfile,
             historyStore: environment.settings.quickEntryHistory,
+            draftStore: environment.settings.quickEntryDrafts,
             captureSource: captureSource,
             onCommitted: { outcome in
                 if case .routine = outcome {
@@ -477,7 +482,7 @@ struct RootTabView: View {
                 showRouteUnavailable()
                 return
             }
-            presentQuickEntry(initialText: text)
+            presentQuickEntry(initialText: text, captureSource: .link)
         }
     }
 
@@ -578,6 +583,22 @@ struct RootTabView: View {
                 calendar: environment.calendar,
                 reminders: environment.reminders,
                 context: creationProfile
+            )
+        )
+    }
+
+    private func startAnotherQuickEntry(_ session: RootQuickEntrySession) {
+        guard let profile = try? creationProfileResolver().resolve(chosen: session.profileID) else {
+            presentation = nil
+            showRouteUnavailable()
+            return
+        }
+        session.model.startAnotherEntry(
+            creationProfile: profile,
+            destinations: .resolve(
+                calendar: environment.calendar,
+                reminders: environment.reminders,
+                context: profile
             )
         )
     }

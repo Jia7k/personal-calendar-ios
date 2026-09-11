@@ -31,11 +31,11 @@ enum QuickEntryParseError: Error, Equatable, Sendable {
     case ambiguousExpression
 }
 
-enum QuickEntryParseWarning: Hashable, Sendable {
+enum QuickEntryParseWarning: Hashable, Codable, Sendable {
     case scheduledTimeIsPast
 }
 
-struct QuickEntryPreview: Equatable, Sendable {
+struct QuickEntryPreview: Codable, Equatable, Sendable {
     var kind: QuickEntryKind
     var title: String
     var startDate: Date?

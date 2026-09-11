@@ -47,6 +47,9 @@ final class AppSettingsStore {
         static let showNextItemOnLockScreen = "showNextItemOnLockScreen"
         static let classAlertPreferences = "classAlertPreferences"
         static let quickEntryMemory = "quickEntryMemory"
+        static let calendarDisplayMode = "calendarDisplayMode"
+        static let openingScreen = "openingScreen"
+        static let lastUsedTab = "lastUsedTab"
         static let preferredLiveActivityProfile = "preferredLiveActivityProfile"
         static let automaticallyStartsLiveActivityOnForeground =
             "automaticallyStartsLiveActivityOnForeground"
@@ -64,6 +67,7 @@ final class AppSettingsStore {
 
     private let defaults: UserDefaults
     @ObservationIgnored let quickEntryHistory: QuickEntryHistoryStore
+    @ObservationIgnored let quickEntryDrafts: QuickEntryDraftStore
     private(set) var selectedCalendarIDs: Set<String>
     private(set) var selectedReminderListIDs: Set<String>
     private(set) var defaultCalendarID: String?
@@ -74,6 +78,17 @@ final class AppSettingsStore {
     var morningSummaryHour: Int { didSet { defaults.set(morningSummaryHour, forKey: Key.morningSummaryHour) } }
     var morningSummaryMinute: Int { didSet { defaults.set(morningSummaryMinute, forKey: Key.morningSummaryMinute) } }
     var showNextItemOnLockScreen: Bool { didSet { defaults.set(showNextItemOnLockScreen, forKey: Key.showNextItemOnLockScreen) } }
+    var calendarDisplayMode: CalendarDisplayMode {
+        didSet { defaults.set(calendarDisplayMode.rawValue, forKey: Key.calendarDisplayMode) }
+    }
+    var openingScreen: OpeningScreenPreference {
+        didSet { defaults.set(openingScreen.rawValue, forKey: Key.openingScreen) }
+    }
+    var lastUsedTab: RootTab {
+        didSet { defaults.set(lastUsedTab.rawValue, forKey: Key.lastUsedTab) }
+    }
+
+    var initialTab: RootTab { openingScreen.initialTab(lastUsed: lastUsedTab) }
     private(set) var classAlertPreferences: [UUID: ClassAlertPreference]
     private(set) var preferredLiveActivityProfile: ProfileIdentity?
     private(set) var automaticallyStartsLiveActivityOnForeground: Bool
@@ -88,6 +103,7 @@ final class AppSettingsStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        quickEntryDrafts = QuickEntryDraftStore(defaults: defaults)
         quickEntryHistory = QuickEntryHistoryStore(
             defaults: defaults,
             key: Key.quickEntryMemory
@@ -108,6 +124,12 @@ final class AppSettingsStore {
         morningSummaryHour = (defaults.object(forKey: Key.morningSummaryHour) as? Int).flatMap { (0...23).contains($0) ? $0 : nil } ?? 8
         morningSummaryMinute = (defaults.object(forKey: Key.morningSummaryMinute) as? Int).flatMap { (0...59).contains($0) ? $0 : nil } ?? 0
         showNextItemOnLockScreen = defaults.bool(forKey: Key.showNextItemOnLockScreen)
+        calendarDisplayMode = defaults.string(forKey: Key.calendarDisplayMode)
+            .flatMap(CalendarDisplayMode.init(rawValue:)) ?? .month
+        openingScreen = defaults.string(forKey: Key.openingScreen)
+            .flatMap(OpeningScreenPreference.init(rawValue:)) ?? .calendar
+        lastUsedTab = defaults.string(forKey: Key.lastUsedTab)
+            .flatMap(RootTab.init(rawValue:)) ?? .calendar
         classAlertPreferences = Self.decodeClassAlertPreferences(
             defaults.data(forKey: Key.classAlertPreferences)
         )
@@ -175,6 +197,7 @@ final class AppSettingsStore {
 
     func reconcileQuickEntryHistory(validProfileIDs: Set<UUID>) {
         quickEntryHistory.reconcile(validProfileIDs: validProfileIDs)
+        quickEntryDrafts.reconcile(validProfileIDs: validProfileIDs)
     }
 
     func setPreferredLiveActivityProfile(

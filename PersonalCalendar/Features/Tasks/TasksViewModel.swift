@@ -13,6 +13,7 @@ final class TasksViewModel {
     private(set) var refreshErrorMessage: String?
     private(set) var mutationErrorMessage: String?
     private(set) var failedMutationOperation: TaskMutationOperation?
+    private(set) var latestTaskUndo: TaskUndoState?
     private(set) var rescheduleUndo: TaskRescheduleUndo?
     private(set) var rescheduleErrorMessage: String?
     var errorMessage: String? { rescheduleErrorMessage ?? mutationErrorMessage ?? refreshErrorMessage }
@@ -158,6 +159,16 @@ final class TasksViewModel {
         do {
             try service.setCompleted(id: id, completed: state)
             confirmed = confirmed.map { $0.id == id ? replacing($0, completed: state) : $0 }
+            if state {
+                latestTaskUndo = TaskUndoState(
+                    generation: UUID(),
+                    title: item.title,
+                    rawID: id,
+                    snapshot: item
+                )
+            } else {
+                clearCompletionUndo(for: id)
+            }
             publish(scope: scope)
             let operation = TaskMutationOperation(id: id, completed: state)
             if failedMutationOperation?.id == operation.id {
@@ -176,11 +187,65 @@ final class TasksViewModel {
         guard let item = confirmed.first(where: { $0.id == operation.id }),
               item.allowsModification,
               scopeAllows(item, scope: scope),
-              item.isCompleted != operation.completed else {
+              item.isCompleted != operation.completed,
+              let live = service.reminder(id: operation.id),
+              live.listID == item.listID,
+              live.allowsModification,
+              scopeAllows(live, scope: scope),
+              live.isCompleted != operation.completed,
+              listAllowsContentModifications(live.listID, scope: scope) else {
             clearMutationRecovery(id: operation.id)
             return
         }
         await setCompleted(id: operation.id, completed: operation.completed)
+    }
+
+    func undoLastTaskCompletion() async {
+        guard let capturedUndo = latestTaskUndo,
+              !capturedUndo.isPending,
+              !mutatingIDs.contains(capturedUndo.rawID),
+              let scope = scopeForMutation()
+        else { return }
+        reconcileMutationRecovery(authoritativeFetch: false, scope: scope)
+        guard var undo = latestTaskUndo,
+              undo.generation == capturedUndo.generation,
+              completionUndoIsEligible(undo, scope: scope)
+        else {
+            clearCompletionUndo(for: capturedUndo.rawID)
+            return
+        }
+
+        let generation = undo.generation
+        mutatingIDs.insert(undo.rawID)
+        defer { mutatingIDs.remove(undo.rawID) }
+        undo.isPending = true
+        if latestTaskUndo?.generation == generation { latestTaskUndo = undo }
+
+        do {
+            try service.setCompleted(id: undo.rawID, completed: false)
+            let restored = undo.snapshot.withCompletion(false)
+            confirmed = confirmed.map { item in
+                item.id == undo.rawID ? restored : item
+            }
+            if !confirmed.contains(where: { $0.id == undo.rawID }) {
+                confirmed.append(restored)
+            }
+            publish(scope: scope)
+            await load()
+            if refreshErrorMessage != nil {
+                refreshErrorMessage = "Your task change was saved, but tasks could not be refreshed. Pull to try again."
+            }
+            if failedMutationOperation?.id == undo.rawID {
+                failedMutationOperation = nil
+                mutationErrorMessage = nil
+            }
+            if latestTaskUndo?.generation == generation { latestTaskUndo = nil }
+        } catch {
+            undo.isPending = false
+            if latestTaskUndo?.generation == generation { latestTaskUndo = undo }
+            failedMutationOperation = .init(id: undo.rawID, completed: false)
+            mutationErrorMessage = "Your task was not changed. Try again."
+        }
     }
 
     func quickReschedule(id: String, command: TaskQuickReschedule) async {
@@ -333,6 +398,10 @@ final class TasksViewModel {
             refreshErrorMessage = nil
         } else {
             confirmed.removeAll { !scope.reminderListIDs.contains($0.listID) }
+            if let undo = latestTaskUndo,
+               !scope.reminderListIDs.contains(undo.snapshot.listID) {
+                latestTaskUndo = nil
+            }
             publish(scope: scope)
         }
         cachedScopeIdentity = scope.identity
@@ -390,6 +459,7 @@ final class TasksViewModel {
                   selected.contains(item.listID),
                   item.allowsModification else {
                 clearMutationRecovery(id: operation.id)
+                reconcileCompletionUndo(scope: scope)
                 reconcileRescheduleUndo(authoritativeFetch: authoritativeFetch, selectedListIDs: selected)
                 return
             }
@@ -397,10 +467,21 @@ final class TasksViewModel {
                 clearMutationRecovery(id: operation.id)
             }
         }
+        reconcileCompletionUndo(scope: scope)
         reconcileRescheduleUndo(authoritativeFetch: authoritativeFetch, selectedListIDs: selected)
     }
     private func scopeAllows(_ item: ReminderSnapshot, scope: CapturedScope) -> Bool {
         visibleListIDs(for: scope).contains(item.listID)
+    }
+    private func listAllowsContentModifications(
+        _ listID: String,
+        scope: CapturedScope
+    ) -> Bool {
+        let descriptors = service.lists()
+        if descriptors.isEmpty { return !scope.isProfileScope }
+        return descriptors.contains {
+            $0.id == listID && $0.allowsContentModifications
+        }
     }
     private func visibleListIDs(for scope: CapturedScope) -> Set<String> {
         if scope.isProfileScope { return scope.reminderListIDs }
@@ -414,8 +495,44 @@ final class TasksViewModel {
     private func clearAllMutationRecovery() {
         failedMutationOperation = nil
         mutationErrorMessage = nil
+        latestTaskUndo = nil
         clearRescheduleUndo()
         rescheduleErrorMessage = nil
+    }
+
+    private func reconcileCompletionUndo(scope: CapturedScope) {
+        guard let undo = latestTaskUndo,
+              completionUndoIsEligible(undo, scope: scope) else {
+            latestTaskUndo = nil
+            return
+        }
+    }
+
+    private func completionUndoIsEligible(
+        _ undo: TaskUndoState,
+        scope: CapturedScope
+    ) -> Bool {
+        let descriptors = service.lists()
+        let descriptorIDs = Set(descriptors.map(\.id))
+        let writableDescriptorIDs = Set(
+            descriptors.filter(\.allowsContentModifications).map(\.id)
+        )
+        guard service.accessState == .granted,
+              undo.snapshot.allowsModification,
+              visibleListIDs(for: scope).contains(undo.snapshot.listID),
+              descriptorIDs.contains(undo.snapshot.listID),
+              writableDescriptorIDs.contains(undo.snapshot.listID)
+        else { return false }
+
+        guard let authoritative = service.reminder(id: undo.rawID) else { return false }
+        return authoritative.listID == undo.snapshot.listID
+            && authoritative.allowsModification
+            && (authoritative.isCompleted || undo.isPending)
+    }
+
+    private func clearCompletionUndo(for id: String? = nil) {
+        if let id, latestTaskUndo?.rawID != id { return }
+        latestTaskUndo = nil
     }
 
     private func reconcileRescheduleUndo(

@@ -21,6 +21,11 @@ final class DuplicateFlowUITests: XCTestCase {
             app.staticTexts["task-duplicate-editor-screen"]
                 .waitForExistence(timeout: 3)
         )
+        let moreOptions = app.descendants(matching: .any)["task-duplicate-editor-form"]
+            .buttons["task-editor-more-options"]
+        scrollToHittable(moreOptions, in: app)
+        XCTAssertTrue(moreOptions.isHittable)
+        moreOptions.tap()
         let alertChoice = app.descendants(matching: .any)[
             "task-duplicate-alarm-intent"
         ]

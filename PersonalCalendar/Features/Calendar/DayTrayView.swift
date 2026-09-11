@@ -48,11 +48,21 @@ struct DayTrayView: View {
     }
 
     private var restingContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let event = Self.nextEvent(in: agenda) { trayRow(event, label: "Next") }
-            if let task = Self.highestPriorityTask(in: agenda) { trayRow(task, label: "Priority") }
-            if let routine = Self.nextIncompleteRoutine(in: agenda) { trayRow(routine, label: "Routine") }
-            if agenda.allDay.isEmpty && agenda.scheduled.isEmpty && agenda.priority.isEmpty { Text("Nothing planned yet.").foregroundStyle(.secondary) }
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            let isToday = day == LocalDay(date: context.date, calendar: calendar)
+            let event = Self.nextEvent(in: agenda, referenceDate: isToday ? context.date : nil)
+            VStack(alignment: .leading, spacing: 8) {
+                if let event {
+                    let isOngoing = event.sortDate.map { $0 <= context.date } ?? false
+                    trayRow(event, label: isToday ? (isOngoing ? "Now" : "Next") : "Schedule")
+                } else if isToday && agenda.scheduled.contains(where: { $0.source == .event }) {
+                    Text("No more events today.").font(.subheadline).foregroundStyle(.secondary)
+                }
+                if let allDay = agenda.allDay.first(where: { $0.source == .event }) { trayRow(allDay, label: "All day") }
+                if let task = Self.highestPriorityTask(in: agenda) { trayRow(task, label: "Priority") }
+                if let routine = Self.nextIncompleteRoutine(in: agenda) { trayRow(routine, label: "Routine") }
+                if agenda.allDay.isEmpty && agenda.scheduled.isEmpty && agenda.priority.isEmpty { Text("Nothing planned yet.").foregroundStyle(.secondary) }
+            }
         }
     }
 
@@ -64,7 +74,14 @@ struct DayTrayView: View {
         }
     }
 
-    static func nextEvent(in agenda: DayAgenda) -> AgendaItem? { agenda.scheduled.filter { $0.source == .event }.sorted(by: AgendaItem.stableSort).first }
+    static func nextEvent(in agenda: DayAgenda, referenceDate: Date? = .now) -> AgendaItem? {
+        agenda.scheduled.filter { item in
+            guard item.source == .event else { return false }
+            guard let referenceDate else { return true }
+            if let end = item.eventEndDate { return end > referenceDate }
+            return item.sortDate.map { $0 >= referenceDate } ?? false
+        }.sorted(by: AgendaItem.stableSort).first
+    }
     static func highestPriorityTask(in agenda: DayAgenda) -> AgendaItem? { (agenda.scheduled + agenda.priority).filter { $0.source == .task && !$0.isCompleted }.sorted(by: AgendaItem.prioritySort).first }
     static func nextIncompleteRoutine(in agenda: DayAgenda) -> AgendaItem? {
         agenda.scheduled.first(where: { $0.source == .routine && !$0.isCompleted })

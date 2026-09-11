@@ -149,6 +149,7 @@ final class CalendarViewModel {
         self.routines = routines
         self.composer = composer
         self.settings = settings
+        displayMode = settings.calendarDisplayMode
         currentScope = {
             let calendarDescriptorIDs = Set(calendarService.calendars().map(\.id))
             let reminderDescriptorIDs = Set(remindersService.lists().map(\.id))
@@ -187,6 +188,7 @@ final class CalendarViewModel {
         self.routines = routines
         self.composer = composer
         self.settings = settings
+        displayMode = settings.calendarDisplayMode
         self.currentScope = currentScope
         usesLegacyScope = false
         self.systemCalendar = systemCalendar
@@ -407,6 +409,7 @@ final class CalendarViewModel {
     func setDisplayMode(_ mode: CalendarDisplayMode) async {
         guard displayMode != mode else { return }
         displayMode = mode
+        settings.calendarDisplayMode = mode
         await load()
     }
 

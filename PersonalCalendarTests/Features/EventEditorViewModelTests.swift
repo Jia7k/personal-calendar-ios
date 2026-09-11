@@ -8,6 +8,28 @@ import XCTest
 /// resolved snapshot's opaque mutation ID.
 @MainActor
 final class EventEditorViewModelTests: XCTestCase {
+    func testSavePreflightIssueComesFromExistingRecurrenceValidationAndClearsAfterRepair() async {
+        let service = RecordingCalendarService(event: event())
+        let subject = EventEditorViewModel.edit(displayID: "display", service: service)
+        await subject.load()
+        subject.recurrenceIntent = .replace(
+            .init(
+                frequency: .weekly,
+                interval: 1,
+                weekdays: [2],
+                endDate: subject.start.addingTimeInterval(-1)
+            )
+        )
+
+        XCTAssertEqual(subject.savePreflightIssue, .repeatInvalid)
+        XCTAssertFalse(subject.canSave)
+
+        subject.recurrenceIntent = .preserve
+
+        XCTAssertNil(subject.savePreflightIssue)
+        XCTAssertTrue(subject.canSave)
+    }
+
     func testCreateAssignsSelectedCategoryToReturnedOpaqueIdentifier() async {
         let category = CategorySnapshot(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000077")!,
@@ -122,6 +144,109 @@ final class EventEditorViewModelTests: XCTestCase {
         XCTAssertEqual(subject.end, initialEnd)
         XCTAssertTrue(subject.isAllDay)
         XCTAssertFalse(subject.requiresDiscardConfirmation)
+    }
+
+    func testChangingStartPreservesThePreviouslyEditedPositiveDuration() {
+        let initialStart = Date(timeIntervalSinceReferenceDate: 10_000)
+        let subject = EventEditorViewModel.create(
+            service: RecordingCalendarService(),
+            savedDefaultCalendarID: nil,
+            initialStart: initialStart,
+            initialEnd: initialStart.addingTimeInterval(3_600)
+        )
+        subject.end = initialStart.addingTimeInterval(5_400)
+        let changedStart = initialStart.addingTimeInterval(86_400)
+
+        subject.start = changedStart
+
+        XCTAssertEqual(subject.start, changedStart)
+        XCTAssertEqual(subject.end, changedStart.addingTimeInterval(5_400))
+    }
+
+    func testChangingAllDayStartPreservesCivilDayCountAcrossDST() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let initialStart = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 7))
+        )
+        let initialEnd = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 3, day: 9))
+        )
+        let changedStart = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: 31))
+        )
+        let expectedEnd = try XCTUnwrap(
+            calendar.date(from: DateComponents(year: 2026, month: 11, day: 2))
+        )
+        let subject = EventEditorViewModel.create(
+            service: RecordingCalendarService(),
+            savedDefaultCalendarID: nil,
+            calendar: calendar,
+            initialStart: initialStart,
+            initialEnd: initialEnd,
+            isAllDay: true
+        )
+
+        subject.start = changedStart
+
+        XCTAssertEqual(subject.start, changedStart)
+        XCTAssertEqual(subject.end, expectedEnd)
+        XCTAssertEqual(
+            calendar.dateComponents([.day], from: subject.start, to: subject.end).day,
+            2
+        )
+        XCTAssertEqual(subject.end.timeIntervalSince(subject.start), 49 * 3_600)
+    }
+
+    func testAlarmPresetConversionUsesTheExactReadableOffsets() {
+        let cases: [(EventAlarmPreset, TimeInterval)] = [
+            (.atStart, 0),
+            (.fiveMinutesBefore, -300),
+            (.tenMinutesBefore, -600),
+            (.fifteenMinutesBefore, -900),
+            (.thirtyMinutesBefore, -1_800),
+            (.oneHourBefore, -3_600),
+            (.oneDayBefore, -86_400)
+        ]
+
+        for (preset, offset) in cases {
+            XCTAssertEqual(preset.offset, offset)
+            XCTAssertEqual(EventAlarmPreset(offset: offset), preset)
+        }
+        XCTAssertNil(EventAlarmPreset(offset: -301))
+        XCTAssertNil(EventAlarmPreset(offset: 300))
+    }
+
+    func testCustomAlarmConversionRoundTripsUnitsTimingAndUnusualBoundaries() {
+        let cases: [(TimeInterval, Double, EventAlarmUnit, EventAlarmTiming)] = [
+            (-91.25, 91.25, .seconds, .before),
+            (-90, 1.5, .minutes, .before),
+            (-5_400, 1.5, .hours, .before),
+            (-129_600, 1.5, .days, .before),
+            (45, 45, .seconds, .after),
+            (7_200, 2, .hours, .after)
+        ]
+
+        for (offset, amount, unit, timing) in cases {
+            let value = EventAlarmCustomValue(offset: offset)
+            XCTAssertEqual(value.amount, amount)
+            XCTAssertEqual(value.unit, unit)
+            XCTAssertEqual(value.timing, timing)
+            XCTAssertEqual(value.offset, offset)
+        }
+    }
+
+    func testSavingWithoutEditingUnusualProviderAlarmsKeepsPreserveIntent() async {
+        let service = RecordingCalendarService(
+            event: event(alarms: .editable([-91.25, 45]))
+        )
+        let subject = EventEditorViewModel.edit(displayID: "display", service: service)
+        await subject.load()
+        subject.title = "Renamed"
+
+        await subject.requestSave()
+
+        XCTAssertEqual(service.updates.single?.draft.alarms, .preserve)
     }
 
     func testEditNilDestinationMeansPreserveCurrentAndExplicitDestinationMoves() async {
@@ -755,7 +880,7 @@ final class EventEditorViewModelTests: XCTestCase {
     private var rule: RecurrenceRuleDraft { Self.rule }
     private func writable(_ id: String) -> CalendarDescriptor { .init(id: id, title: id, colorHex: "#000", allowsContentModifications: true) }
     private func readOnly(_ id: String) -> CalendarDescriptor { .init(id: id, title: id, colorHex: "#000", allowsContentModifications: false) }
-    private func event(id: String = "display", mutationID: String? = "opaque", title: String = "Event", allowsModification: Bool = true, notes: String? = nil, location: String? = nil, url: URL? = nil, alarms: EventAlarmSnapshot = .none, recurrence: RecurrenceSnapshot = .none, eventStart: Date? = nil, eventEnd: Date? = nil, occurrenceDate: Date? = nil) -> CalendarEventSnapshot { .init(id: id, mutationID: mutationID, title: title, start: eventStart ?? start, end: eventEnd ?? end, isAllDay: false, calendarID: "home", calendarTitle: "Home", allowsModification: allowsModification, hasRecurrence: recurrence != .none, notes: notes, location: location, url: url, alarms: alarms, recurrence: recurrence, occurrenceDate: occurrenceDate) }
+    private func event(id: String = "display", mutationID: String? = "opaque", title: String = "Event", allowsModification: Bool = true, isAllDay: Bool = false, notes: String? = nil, location: String? = nil, url: URL? = nil, alarms: EventAlarmSnapshot = .none, recurrence: RecurrenceSnapshot = .none, eventStart: Date? = nil, eventEnd: Date? = nil, occurrenceDate: Date? = nil) -> CalendarEventSnapshot { .init(id: id, mutationID: mutationID, title: title, start: eventStart ?? start, end: eventEnd ?? end, isAllDay: isAllDay, calendarID: "home", calendarTitle: "Home", allowsModification: allowsModification, hasRecurrence: recurrence != .none, notes: notes, location: location, url: url, alarms: alarms, recurrence: recurrence, occurrenceDate: occurrenceDate) }
 
     private func mutationErrorTaxonomy(action: EventEditorAction) -> [(EventKitMutationError, EventEditorPhase)] {
         [

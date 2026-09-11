@@ -10,6 +10,95 @@ final class CalendarViewModelTests: XCTestCase {
     }
     private let today = LocalDay(year: 2026, month: 8, day: 24)
 
+    func testReopeningCalendarRestoresWeekModeAndLoadsAWeek() async {
+        let defaults = UserDefaults.ephemeral
+        let original = makeModel(settings: AppSettingsStore(defaults: defaults))
+        await original.setDisplayMode(.week)
+
+        let reopened = makeModel(settings: AppSettingsStore(defaults: defaults))
+        await reopened.load()
+
+        XCTAssertEqual(reopened.displayMode, .week)
+        XCTAssertEqual(reopened.visibleDays.count, 7)
+        XCTAssertTrue(reopened.visibleDays.contains(today))
+    }
+
+    func testReopeningCalendarRemembersSwitchBackToMonth() async {
+        let defaults = UserDefaults.ephemeral
+        let original = makeModel(settings: AppSettingsStore(defaults: defaults))
+        await original.setDisplayMode(.week)
+        await original.setDisplayMode(.month)
+
+        let reopened = makeModel(settings: AppSettingsStore(defaults: defaults))
+
+        XCTAssertEqual(reopened.displayMode, .month)
+        XCTAssertGreaterThan(reopened.visibleDays.count, 7)
+    }
+
+    func testProfileScopedCalendarAlsoRestoresWeekMode() async {
+        let defaults = UserDefaults.ephemeral
+        let original = makeModel(settings: AppSettingsStore(defaults: defaults))
+        await original.setDisplayMode(.week)
+        let restored = CalendarViewModel(
+            today: today, calendarService: FakeCalendarService(access: .granted),
+            remindersService: FakeRemindersService(access: .granted),
+            routines: FakeRoutineRepository(), composer: AgendaComposer(),
+            settings: AppSettingsStore(defaults: defaults),
+            currentScope: { .init(identity: .everything, calendarIDs: [], reminderListIDs: [], routineIDs: [], defaultCalendarID: nil, defaultReminderListID: nil) },
+            systemCalendar: calendar
+        )
+
+        XCTAssertEqual(restored.displayMode, .week)
+        XCTAssertEqual(restored.visibleDays.count, 7)
+    }
+
+    func testUnknownSavedModeFallsBackToMonth() {
+        let defaults = UserDefaults.ephemeral
+        defaults.set("unknown-future-mode", forKey: "calendarDisplayMode")
+        let model = makeModel(settings: AppSettingsStore(defaults: defaults))
+
+        XCTAssertEqual(model.displayMode, .month)
+        XCTAssertGreaterThan(model.visibleDays.count, 7)
+    }
+
+    func testRestingTraySkipsEndedEventsAndKeepsAnOngoingEvent() {
+        let now = Date.now
+        let ended = trayEvent("Ended", start: now.addingTimeInterval(-7_200), end: now.addingTimeInterval(-3_600))
+        let ongoing = trayEvent("Ongoing", start: now.addingTimeInterval(-1_800), end: now.addingTimeInterval(1_800))
+        let upcoming = trayEvent("Upcoming", start: now.addingTimeInterval(3_600), end: now.addingTimeInterval(7_200))
+        let agenda = DayAgenda(allDay: [], scheduled: [upcoming, ended, ongoing], priority: [])
+
+        XCTAssertEqual(DayTrayView.nextEvent(in: agenda)?.title, "Ongoing")
+    }
+
+    func testRestingTrayShowsUpcomingEventAfterEarlierEventsEnd() {
+        let now = Date.now
+        let ended = trayEvent("Ended", start: now.addingTimeInterval(-7_200), end: now.addingTimeInterval(-3_600))
+        let upcoming = trayEvent("Upcoming", start: now.addingTimeInterval(3_600), end: now.addingTimeInterval(7_200))
+        let agenda = DayAgenda(allDay: [], scheduled: [ended, upcoming], priority: [])
+
+        XCTAssertEqual(DayTrayView.nextEvent(in: agenda)?.title, "Upcoming")
+        XCTAssertNil(DayTrayView.nextEvent(in: .init(allDay: [], scheduled: [ended], priority: [])))
+    }
+
+    func testRestingTrayEndBoundaryAndBrowsingOtherDays() {
+        let noon = today.startDate(in: calendar).addingTimeInterval(43_200)
+        let ended = trayEvent("Morning", start: noon.addingTimeInterval(-3_600), end: noon)
+        let upcoming = trayEvent("Afternoon", start: noon.addingTimeInterval(3_600), end: noon.addingTimeInterval(7_200))
+        let agenda = DayAgenda(allDay: [], scheduled: [upcoming, ended], priority: [])
+
+        XCTAssertEqual(DayTrayView.nextEvent(in: agenda, referenceDate: noon)?.title, "Afternoon")
+        XCTAssertEqual(DayTrayView.nextEvent(in: agenda, referenceDate: nil)?.title, "Morning")
+    }
+
+    private func trayEvent(_ title: String, start: Date, end: Date) -> AgendaItem {
+        AgendaItem(event: CalendarEventSnapshot(
+            id: title, title: title, start: start, end: end,
+            isAllDay: false, calendarID: "school", calendarTitle: "School",
+            allowsModification: false, hasRecurrence: false
+        ))
+    }
+
     func testLoadUsesOnlySelectedSources() async {
         let start = today.startDate(in: calendar).addingTimeInterval(3_600)
         let event = CalendarEventSnapshot(id: "included", title: "Included", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "included", calendarTitle: "Included", allowsModification: true, hasRecurrence: false)
@@ -550,7 +639,7 @@ final class CalendarViewModelTests: XCTestCase {
         let routine = AgendaItem(id: "routine", title: "Routine", source: .routine, placement: .window(.anytime), sortDate: nil, priority: 0, isCompleted: false, allowsModification: true)
         let agenda = DayAgenda(allDay: [], scheduled: [earlyTask, event], priority: [highTask, routine])
 
-        XCTAssertEqual(DayTrayView.nextEvent(in: agenda)?.title, "Event")
+        XCTAssertEqual(DayTrayView.nextEvent(in: agenda, referenceDate: nil)?.title, "Event")
         XCTAssertEqual(DayTrayView.highestPriorityTask(in: agenda)?.title, "High task")
         XCTAssertEqual(DayTrayView.nextIncompleteRoutine(in: agenda)?.title, "Routine")
     }

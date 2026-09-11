@@ -20,6 +20,7 @@ struct WeekPlannerView: View {
     let onSetTaskCompleted: (String, Bool) -> Void
     let onScheduleTaskTime: ((String) -> Void)?
     let onOpenEvent: ((CalendarEventSnapshot) -> Void)?
+    let eventActionEffects: EventPreviewActionEffects
 
     init(
         snapshot: WeekPlannerSnapshot,
@@ -30,7 +31,8 @@ struct WeekPlannerView: View {
         onOpenItem: @escaping (AgendaItemOrigin) -> Void,
         onSetTaskCompleted: @escaping (String, Bool) -> Void = { _, _ in },
         onScheduleTaskTime: ((String) -> Void)? = nil,
-        onOpenEvent: ((CalendarEventSnapshot) -> Void)? = nil
+        onOpenEvent: ((CalendarEventSnapshot) -> Void)? = nil,
+        eventActionEffects: EventPreviewActionEffects = .unavailable
     ) {
         self.snapshot = snapshot
         self.selectedDay = selectedDay
@@ -41,6 +43,7 @@ struct WeekPlannerView: View {
         self.onSetTaskCompleted = onSetTaskCompleted
         self.onScheduleTaskTime = onScheduleTaskTime
         self.onOpenEvent = onOpenEvent
+        self.eventActionEffects = eventActionEffects
     }
 
     var body: some View {
@@ -67,7 +70,10 @@ struct WeekPlannerView: View {
     private var sevenDayTimeline: some View {
         VStack(spacing: 0) {
             ScrollView(.vertical, showsIndicators: true) {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                // These five sections have very different heights. Eager layout
+                // keeps their positions stable when scrolling past all-day rows
+                // into the tall timeline, without lazy height-estimation loops.
+                VStack(alignment: .leading, spacing: 12) {
                     allDayStrip
                     dayHeaders
                     timeline
@@ -104,13 +110,16 @@ struct WeekPlannerView: View {
                                         Button {
                                             select(day: day, item: value.item, identifier: value.id)
                                         } label: {
-                                            Text(value.item.title)
+                                            Text(displayTitle(for: value.item))
                                                 .font(.caption)
                                                 .lineLimit(2)
                                                 .frame(
                                                     maxWidth: .infinity,
                                                     minHeight: CalendarTheme.minimumTapSize,
                                                     alignment: .leading
+                                                )
+                                                .accessibilityIdentifier(
+                                                    displayTitleIdentifier(for: value.item)
                                                 )
                                                 .padding(.horizontal, 10)
                                                 .background(
@@ -254,17 +263,27 @@ struct WeekPlannerView: View {
                 (minuteOffset(for: stack.renderedEnd, on: stack.day) ?? y) - y
             )
             let width = WeekPlannerTimelineMetrics.stackedEventWidth(dayWidth: dayWidth)
-            let presentation = WeekPlannerCompactCardPresentation.resolve(
+            let presentation = WeekEventBlockPresentation.resolve(
+                title: first.item.title,
                 height: height,
-                itemCount: stack.items.count
+                itemCount: stack.items.count,
+                availableTextWidth: max(0, width - 10)
             )
             Button {
                 selectCollisionStack(stack)
             } label: {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(first.item.title)
-                        .font(.caption.weight(.semibold))
+                    Text(presentation.displayTitle)
+                        .font(
+                            presentation.usesCompactClassStyle
+                                ? .caption2.weight(.semibold)
+                                : .caption.weight(.semibold)
+                        )
                         .lineLimit(presentation.titleLineLimit)
+                        .allowsTightening(presentation.usesCompactClassStyle)
+                        .accessibilityIdentifier(
+                            displayTitleIdentifier(for: first.item)
+                        )
 
                     if presentation.showsTime || stack.items.count > 1 {
                         HStack(alignment: .center, spacing: 2) {
@@ -286,7 +305,8 @@ struct WeekPlannerView: View {
                     }
                 }
                 .foregroundStyle(.primary)
-                .padding(5)
+                .padding(.horizontal, 5)
+                .padding(.vertical, presentation.usesCompactClassStyle ? 2 : 5)
                 .frame(maxWidth: .infinity, minHeight: height, alignment: .topLeading)
                 .background(itemColor(first.item).opacity(0.22), in: RoundedRectangle(cornerRadius: 7))
                 .overlay {
@@ -506,7 +526,8 @@ struct WeekPlannerView: View {
                     Image(systemName: symbol(for: item.source))
                         .foregroundStyle(itemColor(item))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
+                        Text(displayTitle(for: item))
+                            .accessibilityIdentifier(displayTitleIdentifier(for: item))
                         Text(prefix)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -514,6 +535,7 @@ struct WeekPlannerView: View {
                     Spacer()
                 }
                 .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(accessibilityIdentifier(for: item))
@@ -536,6 +558,7 @@ struct WeekPlannerView: View {
                     calendar: calendar,
                     isInline: true,
                     containerIdentifier: "week-event-detail-inline",
+                    actionEffects: eventActionEffects,
                     onClose: { selectedItem = nil },
                     onOpen: { openEvent(event) }
                 )
@@ -677,6 +700,7 @@ struct WeekPlannerView: View {
                 WeekEventDetailCard(
                     event: event,
                     calendar: calendar,
+                    actionEffects: eventActionEffects,
                     onClose: closeCollisionStack,
                     onOpen: { openEvent(event) }
                 )
@@ -864,6 +888,19 @@ struct WeekPlannerView: View {
         }
     }
 
+    private func displayTitle(for item: AgendaItem) -> String {
+        item.source == .event
+            ? WeekEventDisplayTitle.compact(item.title)
+            : item.title
+    }
+
+    private func displayTitleIdentifier(for item: AgendaItem) -> String {
+        let identifier = originIdentifier(item.origin) ?? item.id
+        return item.source == .event
+            ? "week-event-display-title-\(identifier)"
+            : "week-item-display-title-\(identifier)"
+    }
+
     private func eventDetails(for item: AgendaItem) -> CalendarEventSnapshot? {
         guard let key = WeekPlannerEventOccurrenceKey(item: item) else { return nil }
         return snapshot.eventDetailsByOccurrence[key]
@@ -932,7 +969,7 @@ struct WeekPlannerView: View {
 
 private enum WeekPlannerPopupMetrics {
     static let width: CGFloat = 340
-    static let height: CGFloat = 260
+    static let height: CGFloat = 420
 }
 
 private struct WeekPlannerPopupSurface: ViewModifier {
@@ -969,10 +1006,13 @@ private struct WeekPlannerPopupSurface: ViewModifier {
 }
 
 private struct WeekEventDetailCard: View {
+    @State private var actionFeedback: String?
+
     let event: CalendarEventSnapshot
     let calendar: Calendar
     var isInline = false
     var containerIdentifier = "week-event-detail-card"
+    let actionEffects: EventPreviewActionEffects
     let onClose: () -> Void
     let onOpen: () -> Void
 
@@ -984,7 +1024,7 @@ private struct WeekEventDetailCard: View {
                     Spacer(minLength: 8)
                     closeButton
                 }
-                detailRows
+                scrollableDetails
             } else {
                 HStack(alignment: .top, spacing: 12) {
                     title
@@ -994,7 +1034,7 @@ private struct WeekEventDetailCard: View {
                 }
 
                 ScrollView(.vertical) {
-                    detailRows
+                    scrollableDetails
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -1010,6 +1050,21 @@ private struct WeekEventDetailCard: View {
         .modifier(WeekPlannerPopupSurface(padding: 20, isInline: isInline))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(containerIdentifier)
+    }
+
+    private var scrollableDetails: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            detailRows
+            actionButtons
+
+            if let actionFeedback {
+                Text(actionFeedback)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("week-event-action-feedback")
+            }
+        }
     }
 
     private var title: some View {
@@ -1073,6 +1128,64 @@ private struct WeekEventDetailCard: View {
             }
         }
         .font(.subheadline)
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        let actionContent = EventPreviewActionContent.resolve(
+            location: event.location,
+            eventURL: event.url,
+            notes: event.notes
+        )
+        VStack(spacing: 8) {
+            if let location = actionContent.directionsLocation,
+               let directionsURL = EventDirectionsURL.make(location: location) {
+                Button("Directions", systemImage: "map") {
+                    Task { @MainActor in
+                        let opened = await actionEffects.openDirections(directionsURL)
+                        actionFeedback = opened
+                            ? nil
+                            : "Couldn’t open Maps. Copy the location and try another maps app."
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityIdentifier("week-event-directions")
+                .accessibilityLabel("Directions to \(location)")
+            }
+
+            if let location = actionContent.location {
+                Button("Copy Location", systemImage: "doc.on.doc") {
+                    actionFeedback = actionEffects.copyLocation(location)
+                        ? "Location copied."
+                        : "Couldn’t copy the location. Select the location text to copy it manually."
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityIdentifier("week-event-copy-location")
+                .accessibilityLabel("Copy location, \(location)")
+            }
+
+            if let meetingURL = actionContent.meetingURL,
+               let destination = actionContent.meetingDestination {
+                Button("Join Call", systemImage: "video") {
+                    Task { @MainActor in
+                        let opened = await actionEffects.openMeeting(meetingURL)
+                        actionFeedback = opened
+                            ? nil
+                            : "Couldn’t open the meeting link. Try again or open it from the event details."
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                .accessibilityIdentifier("week-event-join-call")
+                .accessibilityLabel("Join Call on \(destination)")
+                .accessibilityValue(meetingURL.absoluteString)
+            }
+        }
     }
 
     private func normalized(_ value: String?) -> String? {

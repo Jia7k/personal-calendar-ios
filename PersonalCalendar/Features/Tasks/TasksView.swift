@@ -64,10 +64,28 @@ struct TasksView: View {
                         .accessibilityIdentifier("task-reschedule-undo")
                     }
                 }
+                if let undo = model.latestTaskUndo {
+                    Section {
+                        HStack {
+                            Text("Marked \(undo.title) complete")
+                            Spacer(minLength: 8)
+                            Button("Undo") {
+                                Task { await model.undoLastTaskCompletion() }
+                            }
+                            .frame(
+                                minWidth: CalendarTheme.minimumTapSize,
+                                minHeight: CalendarTheme.minimumTapSize
+                            )
+                            .disabled(undo.isPending)
+                            .accessibilityIdentifier("tasks-completion-undo")
+                            .accessibilityLabel("Undo completion for \(undo.title)")
+                        }
+                    }
+                }
                 overdueSection
                 needsSchedulingSection
-                taskSection("Today", model.today)
-                taskSection("Upcoming", model.upcoming)
+                taskSection("Today", model.today, actionMode: .scheduled)
+                taskSection("Upcoming", model.upcoming, actionMode: .scheduled)
                 if !model.completed.isEmpty { Section { DisclosureGroup("Completed") { ForEach(model.completed) { taskRow($0) } } } }
             }
             .scrollContentBackground(.hidden)
@@ -206,7 +224,17 @@ struct TasksView: View {
         }
     }
 
-    @ViewBuilder private func taskSection(_ title: String, _ values: [ReminderSnapshot]) -> some View { if !values.isEmpty { Section(title) { ForEach(values) { taskRow($0) } } } }
+    @ViewBuilder private func taskSection(
+        _ title: String,
+        _ values: [ReminderSnapshot],
+        actionMode: TaskRowActionMode = .none
+    ) -> some View {
+        if !values.isEmpty {
+            Section(title) {
+                ForEach(values) { taskRow($0, actionMode: actionMode) }
+            }
+        }
+    }
 
     private func taskRow(
         _ task: ReminderSnapshot,
@@ -320,7 +348,7 @@ struct TasksView: View {
                 quickReschedule(task, command: .today)
             }
             .accessibilityIdentifier("task-schedule-today-\(task.id)")
-        } else if mode == .overdue {
+        } else if mode == .overdue || mode == .scheduled {
             Button("Later Today", systemImage: "clock") {
                 quickReschedule(task, command: .laterToday)
             }
@@ -328,7 +356,7 @@ struct TasksView: View {
         Button("Tomorrow", systemImage: "sunrise") {
             quickReschedule(task, command: .tomorrow)
         }
-        if mode == .overdue {
+        if mode == .overdue || mode == .scheduled {
             Button("Next Week", systemImage: "calendar.badge.plus") {
                 quickReschedule(task, command: .nextWeek)
             }
@@ -488,6 +516,7 @@ private enum TaskRowActionMode {
     case none
     case overdue
     case needsScheduling
+    case scheduled
 }
 
 private struct TasksEditorPresentation: Identifiable {

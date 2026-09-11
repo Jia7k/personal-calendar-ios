@@ -415,6 +415,336 @@ final class TaskQuickRescheduleViewModelTests: XCTestCase {
         XCTAssertNil(subject.rescheduleUndo)
     }
 
+    func testCompletionPublishesNamedUndoAndRestoresTheTaskExactlyOnce() async throws {
+        let calendar = singaporeCalendar()
+        let item = reminder(
+            id: "opaque|task",
+            dueDate: now,
+            title: "Submit lab notes"
+        )
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+
+        await subject.setCompleted(id: item.id, completed: true)
+
+        XCTAssertEqual(subject.latestTaskUndo?.title, "Submit lab notes")
+        XCTAssertEqual(subject.latestTaskUndo?.rawID, "opaque|task")
+        XCTAssertEqual(subject.latestTaskUndo?.snapshot, item)
+        XCTAssertEqual(subject.completed.map(\.id), ["opaque|task"])
+
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(
+            service.completedCalls,
+            [
+                .init(id: "opaque|task", completed: true),
+                .init(id: "opaque|task", completed: false)
+            ]
+        )
+        XCTAssertEqual(subject.today.map(\.id), ["opaque|task"])
+        XCTAssertNil(subject.latestTaskUndo)
+
+        await subject.undoLastTaskCompletion()
+        XCTAssertEqual(service.completedCalls.count, 2)
+    }
+
+    func testCompletionUndoClearsWithoutWritingAfterProfileIdentityChanges() async {
+        let calendar = singaporeCalendar()
+        var activeScope = scope(id: UUID(), reminderListIDs: ["school"])
+        let item = reminder(id: "task", dueDate: now, listID: "school")
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "school"), descriptor(id: "work")]
+        )
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { activeScope },
+            calendar: calendar,
+            now: { self.now }
+        )
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertNotNil(subject.latestTaskUndo)
+        let completedCalls = service.completedCalls
+
+        activeScope = scope(id: UUID(), reminderListIDs: ["work"])
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertNil(subject.latestTaskUndo)
+        XCTAssertTrue(subject.today.isEmpty)
+        XCTAssertTrue(subject.completed.isEmpty)
+    }
+
+    func testCompletionUndoClearsWithoutWritingAfterSameProfileListSelectionChanges() async {
+        let calendar = singaporeCalendar()
+        let profileID = UUID()
+        var activeScope = scope(id: profileID, reminderListIDs: ["school"])
+        let item = reminder(id: "task", dueDate: now, listID: "school")
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "school"), descriptor(id: "work")]
+        )
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { activeScope },
+            calendar: calendar,
+            now: { self.now }
+        )
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertNotNil(subject.latestTaskUndo)
+        let completedCalls = service.completedCalls
+
+        activeScope = scope(id: profileID, reminderListIDs: ["work"])
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertNil(subject.latestTaskUndo)
+        XCTAssertTrue(subject.completed.isEmpty)
+    }
+
+    func testCompletionUndoRejectsLiveTaskMovedOutsideProfileWithoutWriting() async {
+        let calendar = singaporeCalendar()
+        let profileID = UUID()
+        let item = reminder(id: "task", dueDate: now, listID: "school")
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "school"), descriptor(id: "work")]
+        )
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { self.scope(id: profileID, reminderListIDs: ["school"]) },
+            calendar: calendar,
+            now: { self.now }
+        )
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertNotNil(subject.latestTaskUndo)
+        let completedCalls = service.completedCalls
+        service.reminders = [reminder(
+            id: item.id,
+            dueDate: now,
+            listID: "work",
+            isCompleted: true
+        )]
+
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertTrue(service.reminders.first?.isCompleted == true)
+        XCTAssertNil(subject.latestTaskUndo)
+    }
+
+    func testCompletionUndoRejectsDeletedLiveTaskWithoutWriting() async {
+        let calendar = singaporeCalendar()
+        let item = reminder(id: "task", dueDate: now)
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertNotNil(subject.latestTaskUndo)
+        let completedCalls = service.completedCalls
+        service.reminders = []
+
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertNil(subject.latestTaskUndo)
+    }
+
+    func testAuthoritativeLoadClearsCompletionUndoWhenTaskDisappears() async {
+        let calendar = singaporeCalendar()
+        let item = reminder(id: "task", dueDate: now)
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertNotNil(subject.latestTaskUndo)
+        let completedCalls = service.completedCalls
+        service.reminders = []
+
+        await subject.load()
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertNil(subject.latestTaskUndo)
+    }
+
+    func testCompletionUndoRejectsListThatBecomesReadOnlyWithoutWriting() async {
+        let calendar = singaporeCalendar()
+        let item = reminder(id: "task", dueDate: now)
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        XCTAssertNotNil(subject.latestTaskUndo)
+        let completedCalls = service.completedCalls
+        service.descriptors = [descriptor(
+            id: "list",
+            allowsContentModifications: false
+        )]
+
+        await subject.undoLastTaskCompletion()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertTrue(service.reminders.first?.isCompleted == true)
+        XCTAssertNil(subject.latestTaskUndo)
+    }
+
+    func testFailedCompletionUndoRetryRejectsLiveTaskMovedOutsideProfile() async {
+        let calendar = singaporeCalendar()
+        let profileID = UUID()
+        let item = reminder(id: "task", dueDate: now, listID: "school")
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "school"), descriptor(id: "work")]
+        )
+        let subject = TasksViewModel(
+            service: service,
+            settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { self.scope(id: profileID, reminderListIDs: ["school"]) },
+            calendar: calendar,
+            now: { self.now }
+        )
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        service.completionError = RescheduleTestError.failed
+        await subject.undoLastTaskCompletion()
+        XCTAssertEqual(
+            subject.failedMutationOperation,
+            .init(id: "task", completed: false)
+        )
+        service.completionError = nil
+        service.reminders = [reminder(
+            id: item.id,
+            dueDate: now,
+            listID: "work",
+            isCompleted: true
+        )]
+        let completedCalls = service.completedCalls
+
+        await subject.retryFailedMutation()
+
+        XCTAssertEqual(service.completedCalls, completedCalls)
+        XCTAssertTrue(service.reminders.first?.isCompleted == true)
+        XCTAssertNil(subject.failedMutationOperation)
+        XCTAssertNil(subject.latestTaskUndo)
+    }
+
+    func testFailedCompletionUndoRetryKeepsNewerCompletionUndoForAnotherTask() async {
+        let calendar = singaporeCalendar()
+        let first = reminder(id: "first", dueDate: now, title: "First")
+        let second = reminder(id: "second", dueDate: now, title: "Second")
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [first, second],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.setCompleted(id: first.id, completed: true)
+        service.completionError = RescheduleTestError.failed
+        await subject.undoLastTaskCompletion()
+        service.completionError = nil
+        await subject.setCompleted(id: second.id, completed: true)
+        XCTAssertEqual(subject.latestTaskUndo?.rawID, "second")
+        XCTAssertEqual(
+            subject.failedMutationOperation,
+            .init(id: "first", completed: false)
+        )
+
+        await subject.retryFailedMutation()
+
+        XCTAssertEqual(
+            service.completedCalls,
+            [
+                .init(id: "first", completed: true),
+                .init(id: "second", completed: true),
+                .init(id: "first", completed: false)
+            ]
+        )
+        XCTAssertFalse(service.reminders.first { $0.id == "first" }!.isCompleted)
+        XCTAssertTrue(service.reminders.first { $0.id == "second" }!.isCompleted)
+        XCTAssertNil(subject.failedMutationOperation)
+        XCTAssertEqual(subject.latestTaskUndo?.rawID, "second")
+    }
+
+    func testCompletionUndoStaysPendingAndDoesNotWriteTwice() async {
+        let calendar = singaporeCalendar()
+        let item = reminder(id: "task", dueDate: now, title: "Task")
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [item],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.setCompleted(id: item.id, completed: true)
+        service.suspendFetchAfterUndo = true
+
+        let undo = Task { await subject.undoLastTaskCompletion() }
+        for _ in 0..<30 where !service.isFetchSuspended { await Task.yield() }
+
+        XCTAssertTrue(service.isFetchSuspended)
+        XCTAssertTrue(subject.latestTaskUndo?.isPending == true)
+        await subject.undoLastTaskCompletion()
+        XCTAssertEqual(service.completedCalls.filter { !$0.completed }.count, 1)
+
+        service.resumeSuspendedFetch()
+        await undo.value
+        XCTAssertNil(subject.latestTaskUndo)
+    }
+
+    func testNewestCompletionReplacesOlderCompletionUndoWithoutDiscardingRescheduleUndo() async {
+        let calendar = singaporeCalendar()
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        let first = reminder(id: "first", dueDate: now, title: "First")
+        let second = reminder(id: "second", dueDate: now, title: "Second")
+        let rescheduled = reminder(id: "rescheduled", dueDate: yesterday)
+        let service = FakeRemindersService(
+            access: .granted,
+            reminders: [first, second, rescheduled],
+            descriptors: [descriptor(id: "list")]
+        )
+        let subject = makeSubject(service: service, calendar: calendar)
+        await subject.load()
+        await subject.quickReschedule(id: rescheduled.id, command: .tomorrow)
+        let expectedRescheduleUndo = subject.rescheduleUndo
+
+        await subject.setCompleted(id: first.id, completed: true)
+        XCTAssertEqual(subject.latestTaskUndo?.rawID, "first")
+        await subject.setCompleted(id: second.id, completed: true)
+
+        XCTAssertEqual(subject.latestTaskUndo?.rawID, "second")
+        XCTAssertEqual(subject.latestTaskUndo?.title, "Second")
+        XCTAssertEqual(subject.rescheduleUndo, expectedRescheduleUndo)
+    }
+
     private func makeSubject(service: any RemindersServicing, calendar: Calendar) -> TasksViewModel {
         TasksViewModel(
             service: service,

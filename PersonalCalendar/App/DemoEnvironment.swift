@@ -73,7 +73,7 @@ final class DemoCalendarService: CalendarServicing {
     private let includeRecurringItems: Bool
     private let includeUnsupportedItems: Bool
 
-    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false, denseWeekFixtures: Bool = false) {
+    init(access: AccessState, failFirstCreate: Bool = false, failFirstUpdate: Bool = false, failFirstDelete: Bool = false, multipleSources: Bool = false, includeReadOnlySource: Bool = false, replacePrimaryEventWithReadOnly: Bool = false, includeRecurringItems: Bool = false, includeUnsupportedItems: Bool = false, profileFixtures: Bool = false, dailyQOLFixtures: Bool = false, denseWeekFixtures: Bool = false, usabilityActionFixtures: Bool = false) {
         accessState = access
         shouldFailNextCreate = failFirstCreate
         shouldFailNextUpdate = failFirstUpdate
@@ -140,6 +140,71 @@ final class DemoCalendarService: CalendarServicing {
                     .init(id: "demo-week-all-day-event-2", mutationID: "demo-week-all-day-event-2", title: "Campus Fair", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
                     .init(id: "demo-week-all-day-event-3", mutationID: "demo-week-all-day-event-3", title: "Project Showcase", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false),
                     .init(id: "demo-week-all-day-late", mutationID: "demo-week-all-day-late", title: "Student Expo", start: startOfDay, end: calendar.date(byAdding: .day, value: 1, to: startOfDay)!, isAllDay: true, calendarID: DemoProfileFixture.schoolCalendarID, calendarTitle: "Google School", allowsModification: true, hasRecurrence: false)
+                ])
+            }
+            if usabilityActionFixtures {
+                let calendar = Calendar.current
+                let physicalStart = calendar.date(
+                    bySettingHour: 16,
+                    minute: 0,
+                    second: 0,
+                    of: start
+                )!
+                let onlineStart = calendar.date(
+                    bySettingHour: 18,
+                    minute: 0,
+                    second: 0,
+                    of: start
+                )!
+                let tallClassStart = calendar.date(
+                    bySettingHour: 19,
+                    minute: 0,
+                    second: 0,
+                    of: start
+                )!
+                events.append(contentsOf: [
+                    .init(
+                        id: "demo-calendar-actions-physical",
+                        mutationID: "demo-calendar-actions-physical",
+                        title: "INF 2001 - Introduction to Software Engineering (P7 Laboratory)",
+                        start: physicalStart,
+                        end: physicalStart.addingTimeInterval(3_600),
+                        isAllDay: false,
+                        calendarID: DemoProfileFixture.schoolCalendarID,
+                        calendarTitle: "Google School",
+                        allowsModification: true,
+                        hasRecurrence: false,
+                        notes: "Bring your laptop.",
+                        location: "SIT Building, 1 Punggol Coast Road",
+                        url: URL(string: "https://meet.google.com/abc-defg-hij")
+                    ),
+                    .init(
+                        id: "demo-calendar-actions-online",
+                        mutationID: "demo-calendar-actions-online",
+                        title: "Remote project sync",
+                        start: onlineStart,
+                        end: onlineStart.addingTimeInterval(3_600),
+                        isAllDay: false,
+                        calendarID: DemoProfileFixture.schoolCalendarID,
+                        calendarTitle: "Google School",
+                        allowsModification: true,
+                        hasRecurrence: false,
+                        notes: "Join https://zoom.us/j/2223334444",
+                        location: "Online"
+                    ),
+                    .init(
+                        id: "demo-calendar-actions-tall",
+                        mutationID: "demo-calendar-actions-tall",
+                        title: "BAC 2005 - Fintech Investment and Risk Management (S2 Seminar)",
+                        start: tallClassStart,
+                        end: tallClassStart.addingTimeInterval(7_200),
+                        isAllDay: false,
+                        calendarID: DemoProfileFixture.schoolCalendarID,
+                        calendarTitle: "Google School",
+                        allowsModification: true,
+                        hasRecurrence: false,
+                        location: "Seminar Room 2"
+                    )
                 ])
             }
         } else {

@@ -104,7 +104,7 @@ final class FoundationFlowUITests: XCTestCase {
             format: "label CONTAINS %@",
             "Notification scheduling is paused"
         )).firstMatch
-        XCTAssertTrue(paused.waitForExistence(timeout: 3))
+        scrollToExistence(paused, in: app)
         XCTAssertTrue(
             paused.label.contains(
                 "current notification inputs could not be refreshed"
@@ -117,7 +117,7 @@ final class FoundationFlowUITests: XCTestCase {
             format: "label CONTAINS %@",
             "No successful notification refresh has been recorded"
         )).firstMatch
-        XCTAssertTrue(noSuccess.exists)
+        scrollToExistence(noSuccess, in: app)
     }
 
     func testRouteQueueOverflowDefersNeutralAlertUntilRootSheetDismisses() {
@@ -326,7 +326,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.buttons["calendar-search-open"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.staticTexts["calendar-header-period"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["calendar-jump-open"].waitForExistence(timeout: 3))
         let monthMode = app.buttons["calendar-mode-month"]
         let weekMode = app.buttons["calendar-mode-week"]
         let today = app.buttons["calendar-period-today"]
@@ -635,16 +635,20 @@ final class FoundationFlowUITests: XCTestCase {
         let unavailableEdit = app.buttons["event-editor-edit-unavailable"]
         let unavailableDelete = app.buttons["event-editor-delete"]
         scrollToExistence(unavailableEdit, in: app)
-        XCTAssertTrue(unavailableDelete.exists)
         XCTAssertFalse(unavailableEdit.isEnabled)
+        scrollToExistence(unavailableDelete, in: app)
         XCTAssertFalse(unavailableDelete.isEnabled)
         app.buttons["event-editor-cancel"].tap()
 
         app.buttons["agenda-open-event-demo-event-nonaddressable"].tap()
         let nonaddressableReason = app.staticTexts["Calendar did not provide a stable editing identifier for this event."]
         scrollToExistence(nonaddressableReason, in: app)
-        XCTAssertFalse(app.buttons["event-editor-edit-unavailable"].isEnabled)
-        XCTAssertFalse(app.buttons["event-editor-delete"].isEnabled)
+        let nonaddressableEdit = app.buttons["event-editor-edit-unavailable"]
+        let nonaddressableDelete = app.buttons["event-editor-delete"]
+        scrollToExistence(nonaddressableEdit, in: app)
+        XCTAssertFalse(nonaddressableEdit.isEnabled)
+        scrollToExistence(nonaddressableDelete, in: app)
+        XCTAssertFalse(nonaddressableDelete.isEnabled)
         app.buttons["event-editor-cancel"].tap()
 
         app.buttons["agenda-open-task-demo-task-read-only"].tap()
@@ -665,6 +669,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["Expand day"].tap()
 
         app.buttons["agenda-open-event-demo-event-unsupported"].tap()
+        app.revealEditorOptions("event")
         let eventAlarm = app.descendants(matching: .any)["event-editor-unsupported-alarm"]
         let eventRepeat = app.descendants(matching: .any)["event-editor-unsupported-recurrence"]
         scrollToExistence(eventAlarm, in: app)
@@ -674,6 +679,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["event-editor-cancel"].tap()
 
         app.buttons["agenda-open-task-demo-task-unsupported"].tap()
+        app.revealEditorOptions("task")
         let taskAlarm = app.descendants(matching: .any)["task-editor-unsupported-alarm"]
         let taskRepeat = app.descendants(matching: .any)["task-editor-unsupported-recurrence"]
         scrollToExistence(taskAlarm, in: app)
@@ -689,6 +695,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons["Expand day"].tap()
 
         app.buttons["agenda-open-event-demo-event-recurring"].tap()
+        app.revealEditorOptions("event")
         let currentAlerts = app.descendants(matching: .any)["event-editor-current-alarm"]
         scrollToExistence(currentAlerts, in: app)
         let alertValue = currentAlerts.label + " " + (currentAlerts.value as? String ?? "")
@@ -720,6 +727,7 @@ final class FoundationFlowUITests: XCTestCase {
         app.buttons.matching(identifier: "event-editor-discard").firstMatch.tap()
 
         app.buttons["agenda-open-task-demo-task-recurring"].tap()
+        app.revealEditorOptions("task")
         let occurrenceCopy = app.staticTexts.matching(
             NSPredicate(format: "label == %@", "Only the current incomplete reminder occurrence is shown. Completing it may reveal the next occurrence supplied by Apple Reminders.")
         ).firstMatch
@@ -743,12 +751,139 @@ final class FoundationFlowUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["task-editor-recurrence-scope"].exists)
     }
 
+    func testEventEditorAlarmPresetAndCustomControlsSaveReadableOffset() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-recurring"]
+        app.launch()
+        app.buttons["Expand day"].tap()
+
+        let recurringEvent = app.buttons["agenda-open-event-demo-event-recurring"]
+        scrollToHittable(recurringEvent, in: app)
+        recurringEvent.tap()
+
+        let alertIntent = app.descendants(matching: .any)["event-editor-alarm-intent"]
+        app.revealEditorOptions("event")
+        scrollToHittable(alertIntent, in: app)
+        alertIntent.tap()
+        app.buttons["Custom"].tap()
+
+        let firstAlert = app.descendants(matching: .any)["event-editor-alarm-preset-0"]
+        XCTAssertTrue(firstAlert.waitForExistence(timeout: 3))
+        XCTAssertTrue(firstAlert.label.contains("15 minutes before") || (firstAlert.value as? String)?.contains("15 minutes before") == true)
+        firstAlert.tap()
+        app.buttons["5 minutes before"].tap()
+        firstAlert.tap()
+        app.buttons["Custom"].tap()
+
+        let amount = app.textFields["event-editor-alarm-offset-0"]
+        let unit = app.descendants(matching: .any)["event-editor-alarm-unit-0"]
+        let timing = app.descendants(matching: .any)["event-editor-alarm-timing-0"]
+        scrollToHittable(amount, in: app)
+        XCTAssertEqual(amount.value as? String, "5")
+        XCTAssertTrue((unit.value as? String)?.contains("Minutes") == true || unit.label.contains("Minutes"))
+        XCTAssertTrue((timing.value as? String)?.contains("Before") == true || timing.label.contains("Before"))
+
+        replaceText(amount, with: "2")
+        dismissKeyboard(in: app)
+        unit.tap()
+        app.buttons["Hours"].tap()
+        timing.tap()
+        app.buttons["After"].tap()
+
+        app.buttons["event-editor-save"].tap()
+        let confirm = app.buttons.matching(identifier: "event-editor-confirm-save").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        confirm.tap()
+        XCTAssertFalse(app.navigationBars["Event"].waitForExistence(timeout: 3))
+
+        let updatedEvent = app.buttons["agenda-open-event-demo-event-recurring"]
+        scrollToHittable(updatedEvent, in: app)
+        updatedEvent.tap()
+        app.revealEditorOptions("event")
+        let currentAlerts = app.descendants(matching: .any)["event-editor-current-alarm"]
+        scrollToExistence(currentAlerts, in: app)
+        let alertValue = currentAlerts.label + " " + (currentAlerts.value as? String ?? "")
+        XCTAssertTrue(alertValue.contains("2 hours after"))
+    }
+
+    func testEventEditorCustomAlarmKeepsChosenUnitAndTimingUntilAmountChanges() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-editor-recurring"]
+        app.launch()
+        app.buttons["Expand day"].tap()
+
+        let recurringEvent = app.buttons["agenda-open-event-demo-event-recurring"]
+        scrollToHittable(recurringEvent, in: app)
+        recurringEvent.tap()
+
+        let alertIntent = app.descendants(matching: .any)["event-editor-alarm-intent"]
+        app.revealEditorOptions("event")
+        scrollToHittable(alertIntent, in: app)
+        alertIntent.tap()
+        app.buttons["Custom"].tap()
+
+        let firstAlert = app.descendants(matching: .any)["event-editor-alarm-preset-0"]
+        XCTAssertTrue(firstAlert.waitForExistence(timeout: 3))
+        firstAlert.tap()
+        app.buttons["At start"].tap()
+        firstAlert.tap()
+        app.buttons["Custom"].tap()
+
+        let amount = app.textFields["event-editor-alarm-offset-0"]
+        let unit = app.descendants(matching: .any)["event-editor-alarm-unit-0"]
+        let timing = app.descendants(matching: .any)["event-editor-alarm-timing-0"]
+        scrollToHittable(amount, in: app)
+        XCTAssertEqual(amount.value as? String, "0")
+
+        app.revealCalendarElement(unit)
+        XCTAssertTrue(unit.isHittable)
+        unit.tap()
+        app.buttons["Minutes"].tap()
+        XCTAssertTrue((unit.value as? String)?.contains("Minutes") == true || unit.label.contains("Minutes"))
+        app.revealCalendarElement(timing)
+        XCTAssertTrue(timing.isHittable)
+        timing.tap()
+        app.buttons["Before"].tap()
+        XCTAssertTrue((timing.value as? String)?.contains("Before") == true || timing.label.contains("Before"))
+
+        replaceText(amount, with: "90")
+        dismissKeyboard(in: app)
+        XCTAssertTrue((unit.value as? String)?.contains("Minutes") == true || unit.label.contains("Minutes"))
+        XCTAssertTrue((timing.value as? String)?.contains("Before") == true || timing.label.contains("Before"))
+
+        replaceText(amount, with: "5")
+        dismissKeyboard(in: app)
+        XCTAssertTrue((unit.value as? String)?.contains("Minutes") == true || unit.label.contains("Minutes"))
+        XCTAssertTrue((timing.value as? String)?.contains("Before") == true || timing.label.contains("Before"))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Event alert — 5 minutes before"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        app.buttons["event-editor-save"].tap()
+        let confirm = app.buttons.matching(identifier: "event-editor-confirm-save").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        confirm.tap()
+        XCTAssertFalse(app.navigationBars["Event"].waitForExistence(timeout: 3))
+
+        let updatedEvent = app.buttons["agenda-open-event-demo-event-recurring"]
+        scrollToHittable(updatedEvent, in: app)
+        updatedEvent.tap()
+        app.revealEditorOptions("event")
+        let currentAlerts = app.descendants(matching: .any)["event-editor-current-alarm"]
+        scrollToExistence(currentAlerts, in: app)
+        let alertValue = currentAlerts.label + " " + (currentAlerts.value as? String ?? "")
+        XCTAssertTrue(alertValue.contains("5 minutes before"))
+    }
+
     func testFailedEventAndTaskUpdatesKeepEditedFormForRetry() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-event-update-fails-once", "-task-update-fails-once"]
         app.launch()
 
-        app.buttons["agenda-open-event-demo-event"].tap()
+        app.buttons["Expand day"].tap()
+        let event = app.buttons["agenda-open-event-demo-event"]
+        scrollToHittable(event, in: app)
+        event.tap()
         let eventTitle = app.textFields["event-editor-title"]
         XCTAssertTrue(eventTitle.waitForExistence(timeout: 3))
         replaceMultilineText(eventTitle, with: "Coffee updated")
@@ -778,7 +913,10 @@ final class FoundationFlowUITests: XCTestCase {
         app.launchArguments = ["-ui-testing", "-event-delete-fails-once", "-task-delete-fails-once"]
         app.launch()
 
-        app.buttons["agenda-open-event-demo-event"].tap()
+        app.buttons["Expand day"].tap()
+        let event = app.buttons["agenda-open-event-demo-event"]
+        scrollToHittable(event, in: app)
+        event.tap()
         let eventDelete = app.buttons["event-editor-delete"]
         scrollToHittable(eventDelete, in: app)
         eventDelete.tap()
@@ -819,6 +957,7 @@ final class FoundationFlowUITests: XCTestCase {
         let recurringEvent = app.buttons["agenda-open-event-demo-event-recurring"]
         recurringEvent.tap()
         let scope = app.descendants(matching: .any)["event-editor-recurrence-scope"]
+        app.revealEditorOptions("event")
         scrollToHittable(scope, in: app)
         let delete = app.buttons["event-editor-delete"]
         scrollToHittable(delete, in: app)
@@ -833,6 +972,7 @@ final class FoundationFlowUITests: XCTestCase {
         ]
         app.launch()
 
+        app.buttons["Expand day"].tap()
         let event = app.buttons["agenda-open-event-demo-event"]
         XCTAssertTrue(event.waitForExistence(timeout: 3))
         scrollToHittable(event, in: app)
@@ -871,6 +1011,10 @@ final class FoundationFlowUITests: XCTestCase {
             )
         }
         XCTAssertFalse(cancel.frame.intersects(save.frame))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Usability event editor at Accessibility XXXL"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     func testTaskEditorActionsAndRecurringDeletionCopyRemainAccessibleAtAccessibilityXXXL() {
@@ -888,6 +1032,7 @@ final class FoundationFlowUITests: XCTestCase {
         let schedule = app.descendants(matching: .any)["task-editor-schedule-intent"]
         scrollToHittable(schedule, in: form)
         let recurrence = app.descendants(matching: .any)["task-editor-recurrence-intent"]
+        app.revealEditorOptions("task")
         scrollToHittable(recurrence, in: form)
         let recurringDeleteCopy = app.staticTexts["Deleting this task removes the repeating reminder."]
         scrollToHittable(recurringDeleteCopy, in: form)
@@ -972,8 +1117,16 @@ final class FoundationFlowUITests: XCTestCase {
     }
 
     private func replaceMultilineText(_ field: XCUIElement, with text: String) {
-        field.tap(withNumberOfTaps: 3, numberOfTouches: 1)
+        // Focus first, then place the caret after the final line. A triple
+        // tap that also opens the keyboard can leave a caret at the start.
+        field.tap()
+        let current = field.value as? String ?? ""
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        let cleared = field.value as? String ?? ""
+        XCTAssertTrue(cleared.isEmpty || cleared == field.placeholderValue)
         field.typeText(text)
+        XCTAssertEqual(field.value as? String, text)
     }
 
     private func dismissKeyboard(in app: XCUIApplication) {
@@ -991,5 +1144,21 @@ final class FoundationFlowUITests: XCTestCase {
         XCTFail("Routine \(action) action was not hittable", file: file, line: line)
     }
     private func confirmationDelete(in app: XCUIApplication) -> XCUIElement { app.buttons["Confirm Delete"] }
-    private func findRoutineRetry(in app: XCUIApplication) -> XCUIElement { for _ in 0..<5 { let button = app.buttons["routine-save-retry"]; if button.exists && button.isHittable { return button }; app.swipeUp() }; return app.buttons["routine-save-retry"] }
+    private func findRoutineRetry(in app: XCUIApplication) -> XCUIElement {
+        let button = app.buttons["routine-save-retry"]
+        let viewport = app.frame.insetBy(dx: 0, dy: 24)
+        for _ in 0..<12 {
+            if button.exists && button.isHittable && !button.frame.isEmpty && viewport.contains(button.frame) {
+                return button
+            }
+            // A fling can report a partially visible row as hittable and
+            // then bounce it below the screen before the following tap.
+            let scrollDown = button.exists && button.frame.midY < viewport.midY
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+            let end = start.withOffset(CGVector(dx: 0, dy: scrollDown ? 180 : -180))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: 100, thenHoldForDuration: 0.2)
+        }
+        XCTFail("Routine Retry must be fully visible and hittable before tapping")
+        return button
+    }
 }

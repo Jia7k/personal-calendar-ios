@@ -388,6 +388,11 @@ final class CompletionFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Discard"].waitForExistence(timeout: 3))
         app.buttons["Discard"].tap()
 
+        // Finished events remain in the full schedule, not today's Next summary.
+        let expandDay = app.buttons["Expand day"]
+        XCTAssertTrue(expandDay.waitForExistence(timeout: 3))
+        scrollToHittable(expandDay, in: app)
+        expandDay.tap()
         let event = app.buttons["agenda-open-event-demo-event"]
         XCTAssertTrue(event.waitForExistence(timeout: 3))
         scrollToHittable(event, in: app)

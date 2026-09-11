@@ -153,7 +153,7 @@ final class WeekPlannerFlowUITests: XCTestCase {
         )
 
         let initialX = stack.frame.minX
-        let periodTitle = app.staticTexts["calendar-header-period"]
+        let periodTitle = app.buttons["calendar-jump-open"]
         let initialPeriod = periodTitle.label
         let normalizedStackY = (stack.frame.midY - planner.frame.minY) / planner.frame.height
         planner.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: normalizedStackY))
@@ -338,6 +338,17 @@ final class WeekPlannerFlowUITests: XCTestCase {
                 )
         }
         XCTAssertTrue(lateEvent.isHittable)
+        for _ in 0..<6 where lateEvent.frame.midY <= planner.frame.midY {
+            let start = planner.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let distance = min(planner.frame.height * 0.12, planner.frame.midY + 20 - lateEvent.frame.midY)
+            start.press(
+                forDuration: 0.1,
+                thenDragTo: start.withOffset(CGVector(dx: 0, dy: distance)),
+                withVelocity: 100,
+                thenHoldForDuration: 0.2
+            )
+        }
+        XCTAssertTrue(lateEvent.isHittable)
         XCTAssertGreaterThan(
             lateEvent.frame.midY,
             planner.frame.midY,
@@ -405,22 +416,22 @@ final class WeekPlannerFlowUITests: XCTestCase {
 
         let detailScroll = detail.descendants(matching: .scrollView).firstMatch
         XCTAssertTrue(detailScroll.exists)
-        for _ in 0..<4 where !detailScroll.frame.insetBy(dx: -2, dy: -2).contains(location.frame) {
-            detailScroll.swipeUp()
-        }
+        detailScroll.revealCalendarElement(location, fullyVisible: true)
         XCTAssertTrue(
             detailScroll.frame.insetBy(dx: -2, dy: -2).contains(location.frame),
             "The complete multi-line address must be reachable inside the detail scroller"
         )
-        for _ in 0..<4 where !detailScroll.frame.insetBy(dx: -2, dy: -2).contains(notes.frame) {
-            detailScroll.swipeUp()
-        }
+        detailScroll.revealCalendarElement(notes, fullyVisible: true)
         XCTAssertTrue(
             detailScroll.frame.insetBy(dx: -2, dy: -2).contains(notes.frame),
             "The complete multi-line notes must be reachable inside the detail scroller"
         )
         XCTAssertTrue(open.isHittable)
         XCTAssertTrue(visibleDetail.contains(open.frame))
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Compact long event notes and fixed Open Event action"
+        attachment.lifetime = .keepAlways
+        self.add(attachment)
     }
 
     func testWeekAllDayRowsStayFixedDuringHorizontalDrag() {
@@ -448,7 +459,7 @@ final class WeekPlannerFlowUITests: XCTestCase {
         XCTAssertTrue(lateAllDayEvent.exists)
         XCTAssertTrue(allDayEvent.isHittable)
         let initialFrame = allDayEvent.frame
-        let periodTitle = app.staticTexts["calendar-header-period"]
+        let periodTitle = app.buttons["calendar-jump-open"]
         let initialPeriod = periodTitle.label
 
         allDayList.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: 0.5))
@@ -532,7 +543,7 @@ final class WeekPlannerFlowUITests: XCTestCase {
         XCTAssertTrue(openSelectedItem.waitForExistence(timeout: 3))
         XCTAssertTrue(openSelectedItem.isHittable)
 
-        let period = app.staticTexts["calendar-header-period"]
+        let period = app.buttons["calendar-jump-open"]
         let originalPeriod = period.label
         app.buttons["calendar-period-next"].tap()
         let changedPeriod = NSPredicate(format: "label != %@", originalPeriod)
@@ -637,18 +648,20 @@ final class WeekPlannerFlowUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(event.frame.height, 44)
         event.tap()
 
+        XCTAssertEqual(event.value as? String, "Expanded")
+        let planner = app.scrollViews["week-planner"]
         let inlineDetail = app.otherElements["week-event-detail-inline"]
-        XCTAssertTrue(inlineDetail.waitForExistence(timeout: 3))
+        for _ in 0..<12 where !inlineDetail.exists { planner.swipeUp() }
+        XCTAssertTrue(inlineDetail.exists)
         XCTAssertEqual(app.staticTexts["week-event-detail-title"].label, "INF 2003 Lecture")
         let close = app.buttons["week-event-detail-close"]
         let open = app.buttons["week-open-selected-item"]
+        planner.revealCalendarElement(close)
         XCTAssertTrue(close.isHittable)
         XCTAssertGreaterThanOrEqual(close.frame.width, 44)
         XCTAssertGreaterThanOrEqual(close.frame.height, 44)
 
-        for _ in 0..<6 where !open.isHittable {
-            app.swipeUp()
-        }
+        planner.revealCalendarElement(open)
         XCTAssertTrue(open.isHittable)
         XCTAssertGreaterThanOrEqual(open.frame.height, 44)
     }

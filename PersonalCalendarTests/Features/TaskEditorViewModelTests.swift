@@ -8,6 +8,24 @@ final class TaskEditorViewModelTests: XCTestCase {
     private let alarm = Date(timeIntervalSince1970: 1_700_003_600)
     private let weekly = RecurrenceRuleDraft(frequency: .weekly, interval: 1, weekdays: [2, 4], endDate: nil)
 
+    func testSavePreflightIssueExplainsHiddenRepeatAndClearsAfterRepair() {
+        let snapshot = reminderWithoutDue(recurrence: .none)
+        let subject = TaskEditorViewModel.editing(
+            reminderID: snapshot.id,
+            service: RecordingRemindersService(reminders: [snapshot])
+        )
+        subject.form.recurrence = .replace(weekly)
+
+        XCTAssertEqual(subject.savePreflightIssue, .repeatRequiresDueDate)
+        XCTAssertFalse(subject.canSave)
+
+        subject.form.recurrence = .clear
+
+        XCTAssertNil(subject.savePreflightIssue)
+        XCTAssertTrue(subject.canSave)
+    }
+
+
     func testSaveEligibilityRejectsInvalidKnownTaskFormValuesWithoutProviderLookupsOrWrites() {
         let snapshot = reminder(recurrence: .editable(weekly))
         let service = RecordingRemindersService(reminders: [snapshot])

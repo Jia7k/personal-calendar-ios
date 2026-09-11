@@ -3,6 +3,52 @@ import XCTest
 
 @MainActor
 final class AppSettingsStoreTests: XCTestCase {
+    func testOpeningScreenDefaultsToCalendarAndRejectsInvalidStoredChoices() {
+        let defaults = makeDefaults()
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).initialTab, .calendar)
+        defaults.set("unknown", forKey: "openingScreen")
+        defaults.set("unknown", forKey: "lastUsedTab")
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).initialTab, .calendar)
+    }
+
+    func testEachExplicitOpeningScreenSurvivesReloadAndOverridesLastUsedTab() {
+        let cases: [(OpeningScreenPreference, RootTab)] = [
+            (.calendar, .calendar), (.today, .today),
+            (.tasks, .tasks), (.routines, .routines)
+        ]
+        for (preference, expectedTab) in cases {
+            let defaults = makeDefaults()
+            let subject = AppSettingsStore(defaults: defaults)
+            subject.openingScreen = preference
+            subject.lastUsedTab = .tasks
+            XCTAssertEqual(AppSettingsStore(defaults: defaults).initialTab, expectedTab)
+        }
+    }
+
+    func testLastUsedOpeningScreenRestoresMostRecentTabAcrossReload() {
+        let defaults = makeDefaults()
+        let subject = AppSettingsStore(defaults: defaults)
+        subject.openingScreen = .lastUsed
+        subject.lastUsedTab = .today
+        subject.lastUsedTab = .routines
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).initialTab, .routines)
+    }
+
+    func testLastUsedOpeningScreenWithInvalidStoredTabFallsBackToCalendar() {
+        let defaults = makeDefaults()
+        defaults.set("lastUsed", forKey: "openingScreen")
+        defaults.set("unknown", forKey: "lastUsedTab")
+        XCTAssertEqual(AppSettingsStore(defaults: defaults).initialTab, .calendar)
+    }
+
+    func testSeparateSettingsSuitesKeepOpeningScreensIndependent() {
+        let firstDefaults = makeDefaults()
+        let first = AppSettingsStore(defaults: firstDefaults)
+        first.openingScreen = .tasks
+        XCTAssertEqual(AppSettingsStore(defaults: firstDefaults).initialTab, .tasks)
+        XCTAssertEqual(AppSettingsStore(defaults: makeDefaults()).initialTab, .calendar)
+    }
+
     func testFreshAndLegacyEmptySelectionsAreImplicitAll() {
         let fresh = AppSettingsStore(defaults: .ephemeral)
         XCTAssertFalse(fresh.calendarSelectionIsExplicit)

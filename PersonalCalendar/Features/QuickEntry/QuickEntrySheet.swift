@@ -7,11 +7,30 @@ struct QuickEntrySheet: View {
     let onDismiss: () -> Void
     let onRequestAccess: (QuickEntryKind) -> Void
     let onOpenSettings: () -> Void
+    let onAddAnother: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var showsDiscardConfirmation = false
+    @State private var showsDraftSaveFailure = false
     @State private var recurrenceIntervalText: String?
+    @FocusState private var inputIsFocused: Bool
     @AccessibilityFocusState private var savedAnnouncementIsFocused: Bool
+
+    init(
+        model: QuickEntryViewModel,
+        onDismiss: @escaping () -> Void,
+        onRequestAccess: @escaping (QuickEntryKind) -> Void,
+        onOpenSettings: @escaping () -> Void,
+        onAddAnother: (() -> Void)? = nil
+    ) {
+        self.model = model
+        self.onDismiss = onDismiss
+        self.onRequestAccess = onRequestAccess
+        self.onOpenSettings = onOpenSettings
+        self.onAddAnother = onAddAnother
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,6 +47,17 @@ struct QuickEntrySheet: View {
         ) {
             Button("Keep Editing", role: .cancel) {}
 
+            if model.captureSource == .inApp {
+                Button("Save Draft") {
+                    if model.checkpointDraft() {
+                        onDismiss()
+                    } else {
+                        showsDraftSaveFailure = true
+                    }
+                }
+                .accessibilityIdentifier("quick-entry-save-draft")
+            }
+
             Button("Discard", role: .destructive) {
                 model.confirmDiscard()
                 onDismiss()
@@ -35,9 +65,15 @@ struct QuickEntrySheet: View {
         } message: {
             Text("Your unsaved quick-entry changes will be discarded.")
         }
+        .alert("Draft not saved", isPresented: $showsDraftSaveFailure) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("This quick entry is too large to store locally. Your changes are still here.")
+        }
         .interactiveDismissDisabled(model.requestDismissal() != .dismiss)
         .onAppear {
             recurrenceIntervalText = model.preview?.recurrence.map { String($0.interval) }
+            focusBlankInAppEntryIfAppropriate()
         }
         .onChange(of: model.preview?.recurrence?.interval) { _, interval in
             recurrenceIntervalText = interval.map { String($0) }
@@ -45,7 +81,22 @@ struct QuickEntrySheet: View {
         .onChange(of: model.phase) { _, phase in
             if case .committed = phase {
                 savedAnnouncementIsFocused = true
+            } else if case .entry = phase {
+                focusBlankInAppEntryIfAppropriate()
             }
+            model.checkpointDraft()
+        }
+        .onChange(of: model.text) { _, _ in
+            model.checkpointDraft()
+        }
+        .onChange(of: model.preview) { _, _ in
+            model.checkpointDraft()
+        }
+        .onChange(of: model.availableDraft) { _, draft in
+            if draft == nil { focusBlankInAppEntryIfAppropriate() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { model.checkpointDraft() }
         }
     }
 
@@ -104,11 +155,19 @@ struct QuickEntrySheet: View {
     private func entryForm(parseError: QuickEntryParseError?) -> some View {
         Form {
             captureSourceSection
+            draftRecoverySection
 
             Section {
                 TextField("Describe what you want to add", text: textBinding)
                     .textInputAutocapitalization(.sentences)
-                    .submitLabel(.done)
+                    .submitLabel(.continue)
+                    .focused($inputIsFocused)
+                    .onSubmit {
+                        guard model.canReview,
+                              model.availableDraft == nil else { return }
+                        model.parse()
+                    }
+                    .disabled(model.availableDraft != nil)
                     .accessibilityValue(
                         model.text.isEmpty ? "Describe what you want to add" : model.text
                     )
@@ -151,6 +210,7 @@ struct QuickEntrySheet: View {
                 } header: {
                     Text("Recent")
                 }
+                .disabled(model.availableDraft != nil)
                 .accessibilityIdentifier("quick-entry-recent")
             }
 
@@ -167,7 +227,36 @@ struct QuickEntrySheet: View {
                     Text("Review")
                         .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
                 }
+                .disabled(!model.canReview || model.availableDraft != nil)
                 .accessibilityIdentifier("quick-entry-parse")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var draftRecoverySection: some View {
+        if model.availableDraft != nil {
+            Section("Unsaved draft") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Resume your last quick entry for this profile, or discard it to start fresh.")
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("Resume Draft") {
+                        model.resumeDraft()
+                    }
+                    .buttonStyle(.borderless)
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("quick-entry-draft-resume")
+
+                    Button("Discard Draft", role: .destructive) {
+                        model.discardDraft()
+                    }
+                    .buttonStyle(.borderless)
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("quick-entry-draft-discard")
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("quick-entry-draft-recovery")
             }
         }
     }
@@ -195,11 +284,13 @@ struct QuickEntrySheet: View {
 
     @ViewBuilder
     private var captureSourceSection: some View {
-        if model.captureSource == .shortcut {
+        if model.captureSource != .inApp {
             Section {
                 Label(
-                    "Captured from Siri or Shortcuts — review before saving.",
-                    systemImage: "waveform.badge.mic"
+                    model.captureSource == .shortcut
+                        ? "Captured from Siri or Shortcuts — review before saving."
+                        : "Opened from a link — review before saving.",
+                    systemImage: model.captureSource == .shortcut ? "waveform.badge.mic" : "link"
                 )
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -255,6 +346,19 @@ struct QuickEntrySheet: View {
             }
 
             Section {
+                Button {
+                    if let onAddAnother {
+                        onAddAnother()
+                    } else {
+                        model.startAnotherEntry()
+                    }
+                } label: {
+                    Text("Add Another")
+                        .frame(maxWidth: .infinity, minHeight: CalendarTheme.minimumTapSize)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("quick-entry-add-another")
+
                 Button {
                     onDismiss()
                 } label: {
@@ -846,6 +950,15 @@ struct QuickEntrySheet: View {
         case .blocked:
             break
         }
+    }
+
+    private func focusBlankInAppEntryIfAppropriate() {
+        guard !voiceOverEnabled,
+              model.captureSource == .inApp,
+              model.availableDraft == nil,
+              case .entry = model.phase,
+              model.text.isEmpty else { return }
+        inputIsFocused = true
     }
 
     private func previewBinding<Value>(

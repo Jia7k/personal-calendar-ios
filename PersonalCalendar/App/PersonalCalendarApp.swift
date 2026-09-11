@@ -17,6 +17,20 @@ struct PersonalCalendarApp: App {
         routeController = AppRouteController()
         let arguments = ProcessInfo.processInfo.arguments
         let isUITesting = arguments.contains("-ui-testing")
+        if isUITesting && arguments.contains("-demo-today-route") {
+            routeController.submit(.today)
+        }
+        if isUITesting && arguments.contains("-demo-direct-quick-entry-route") {
+            let codec = AppRouteCodec()
+            let route = AppRoute.quickEntry(
+                text: "External event tomorrow at 3pm",
+                profile: .saved(SeedProfile.personalID)
+            )
+            if let url = try? codec.url(for: route),
+               let decoded = try? codec.route(from: url) {
+                routeController.submit(decoded)
+            }
+        }
         let handoffStore = try? AppRouteHandoffStore.appGroup()
         quickEntryHandoffStore = handoffStore
         if isUITesting, let handoffStore {

@@ -217,7 +217,8 @@ struct AppEnvironment {
             includeUnsupportedItems: arguments.contains("-demo-editor-unsupported"),
             profileFixtures: usesProfileFixtures,
             dailyQOLFixtures: arguments.contains("-demo-daily-qol"),
-            denseWeekFixtures: arguments.contains("-demo-week-overlaps")
+            denseWeekFixtures: arguments.contains("-demo-week-overlaps"),
+            usabilityActionFixtures: arguments.contains("-demo-calendar-actions")
         )
         let reminderAccess: AccessState = arguments.contains("-reminders-not-determined") ? .notDetermined : arguments.contains("-reminders-restricted") ? .restricted : arguments.contains("-reminders-denied") ? .denied : .granted
         let reminders = DemoRemindersService(
@@ -237,7 +238,15 @@ struct AppEnvironment {
         )
         let notificationAccess: AccessState = arguments.contains("-notifications-not-determined") ? .notDetermined : arguments.contains("-notifications-restricted") ? .restricted : arguments.contains("-notifications-denied") || arguments.contains("-demo-notification-scheduling-paused") ? .denied : .granted
         let notifications = DemoNotificationAuthorizer(access: notificationAccess)
-        let settings = AppSettingsStore(defaults: .ephemeral)
+        let demoDefaults: UserDefaults
+        if let suite = ProcessInfo.processInfo.environment["UI_TEST_SETTINGS_SUITE"],
+           suite.hasPrefix("PersonalCalendarUITests."),
+           let persisted = UserDefaults(suiteName: suite) {
+            demoDefaults = persisted
+        } else {
+            demoDefaults = .ephemeral
+        }
+        let settings = AppSettingsStore(defaults: demoDefaults)
         if !usesProfileFixtures {
             settings.resetProfileMigration(legacy: LegacyProfileSelectionSnapshot(
                 calendarIDs: [],

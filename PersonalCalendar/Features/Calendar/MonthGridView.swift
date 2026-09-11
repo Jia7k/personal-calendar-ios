@@ -47,7 +47,10 @@ struct MonthGridView: View {
     var body: some View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
-                LazyVStack(spacing: 4) {
+                // The accessible calendar displays a bounded set of days. Eager
+                // layout keeps changing row heights stable while scrollTo is
+                // anchored to the selected day during a profile refresh.
+                VStack(spacing: 4) {
                     ForEach(cells) { cell in
                         dayButton(cell)
                     }

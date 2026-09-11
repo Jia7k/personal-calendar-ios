@@ -24,6 +24,14 @@ enum EventEditorError: Equatable {
     case retryableWriteFailure
 }
 
+enum EventEditorSavePreflightIssue: Equatable {
+    case titleRequired
+    case datesOrAlertsInvalid
+    case repeatInvalid
+    case destinationRequired
+    case detailsInvalid
+}
+
 enum EventEditorAction: Equatable {
     case save
     case delete(scope: RecurrenceEditScope)
@@ -64,7 +72,34 @@ final class EventEditorViewModel {
     }
 
     var title: String
-    var start: Date
+    var start: Date {
+        didSet {
+            guard start != oldValue, !isApplyingReadableSnapshot else { return }
+            guard start.timeIntervalSinceReferenceDate.isFinite,
+                  oldValue.timeIntervalSinceReferenceDate.isFinite,
+                  end.timeIntervalSinceReferenceDate.isFinite else { return }
+            if isAllDay {
+                guard end > oldValue else { return }
+                let previousStart = calendar.startOfDay(for: oldValue)
+                let previousEnd = calendar.startOfDay(for: end)
+                let dayCount = max(1, calendar.dateComponents(
+                    [.day],
+                    from: previousStart,
+                    to: previousEnd
+                ).day ?? 1)
+                guard let shiftedEnd = calendar.date(
+                    byAdding: .day,
+                    value: dayCount,
+                    to: start
+                ) else { return }
+                end = shiftedEnd
+            } else {
+                let previousDuration = end.timeIntervalSince(oldValue)
+                guard previousDuration > 0 else { return }
+                end = start.addingTimeInterval(previousDuration)
+            }
+        }
+    }
     var end: Date
     var isAllDay: Bool
     var notes: String?
@@ -115,10 +150,27 @@ final class EventEditorViewModel {
     /// authority (the live item and destination) is deliberately rechecked
     /// only by the mutation path immediately before a write.
     var canSave: Bool {
-        acceptsActions
-            && hasRequiredCreationDestination
-            && hasLocallyAllowedCreationDestination
-            && formValidationError() == nil
+        acceptsActions && savePreflightIssue == nil
+    }
+
+    /// Describes only local, side-effect-free save eligibility. Provider
+    /// authority remains exclusively owned by the mutation path.
+    var savePreflightIssue: EventEditorSavePreflightIssue? {
+        guard acceptsActions else { return nil }
+        guard hasRequiredCreationDestination,
+              hasLocallyAllowedCreationDestination else {
+            return .destinationRequired
+        }
+        guard let error = formValidationError() else { return nil }
+        return switch error as? DraftValidationError {
+        case .some(.emptyTitle): .titleRequired
+        case .some(.invalidDateRange): .datesOrAlertsInvalid
+        case .some(.invalidRecurrence): .repeatInvalid
+        case .none, .some(.readOnlyDestination), .some(.itemNotFound),
+             .some(.invalidDestination), .some(.invalidRecurrenceScope),
+             .some(.recurringReminderRequiresDueDate):
+            .detailsInvalid
+        }
     }
 
     /// The exact scope whose consent is currently being requested. Confirmation
@@ -145,6 +197,7 @@ final class EventEditorViewModel {
 
     @ObservationIgnored private let mode: Mode
     @ObservationIgnored private let service: any CalendarServicing
+    @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let categories: (any CategoryRepository)?
     @ObservationIgnored private let requiresExplicitCreationDestination: Bool
     @ObservationIgnored private let onCommitted: @MainActor (EventEditorCommit) -> Void
@@ -154,6 +207,7 @@ final class EventEditorViewModel {
     @ObservationIgnored private let resolveDuplicateDestinationCalendarIDs: (@MainActor () throws -> Set<String>)?
     @ObservationIgnored private var cleanBaseline: FormState
     @ObservationIgnored private var didLoad = false
+    @ObservationIgnored private var isApplyingReadableSnapshot = false
     @ObservationIgnored private var loadedSnapshot: CalendarEventSnapshot?
     @ObservationIgnored private var didCommit = false
     @ObservationIgnored private var didRequestReconciliation = false
@@ -167,6 +221,7 @@ final class EventEditorViewModel {
     private init(
         mode: Mode,
         service: any CalendarServicing,
+        calendar: Calendar,
         savedDefaultCalendarID: String? = nil,
         requiresExplicitCreationDestination: Bool = false,
         initialStart: Date,
@@ -182,6 +237,7 @@ final class EventEditorViewModel {
     ) {
         self.mode = mode
         self.service = service
+        self.calendar = calendar
         self.categories = categories
         self.creationDestinationCalendarIDs = creationDestinationCalendarIDs
         self.resolveCreationDestinationCalendarIDs = resolveCreationDestinationCalendarIDs
@@ -217,6 +273,7 @@ final class EventEditorViewModel {
     static func create(
         service: any CalendarServicing,
         savedDefaultCalendarID: String?,
+        calendar: Calendar = .current,
         creationProfile: CreationProfileContext? = nil,
         initialDraft: EventDraft? = nil,
         initialCategoryID: UUID? = nil,
@@ -244,6 +301,7 @@ final class EventEditorViewModel {
         let model = EventEditorViewModel(
             mode: .create,
             service: service,
+            calendar: calendar,
             savedDefaultCalendarID: preferredDefaultCalendarID,
             requiresExplicitCreationDestination: initialDraft != nil
                 || creationProfile?.requiresExplicitCalendarDestination == true,
@@ -464,6 +522,7 @@ final class EventEditorViewModel {
         displayID: String,
         occurrence: EventOccurrenceAddress? = nil,
         service: any CalendarServicing,
+        calendar: Calendar = .current,
         categories: (any CategoryRepository)? = nil,
         duplicateDestinationCalendarIDs: Set<String>? = nil,
         resolveDuplicateDestinationCalendarIDs: (@MainActor () throws -> Set<String>)? = nil,
@@ -477,6 +536,7 @@ final class EventEditorViewModel {
                 occurrence: occurrence
             ),
             service: service,
+            calendar: calendar,
             initialStart: initialStart,
             initialEnd: initialStart.addingTimeInterval(3_600),
             initialIsAllDay: false,
@@ -671,6 +731,8 @@ final class EventEditorViewModel {
     }
 
     private func applyReadable(_ snapshot: CalendarEventSnapshot) {
+        isApplyingReadableSnapshot = true
+        defer { isApplyingReadableSnapshot = false }
         title = snapshot.title
         start = snapshot.start
         end = snapshot.end

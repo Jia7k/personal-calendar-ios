@@ -14,9 +14,11 @@ struct EventEditorView: View {
     @State private var selectedSaveScope: RecurrenceEditScope = .thisOccurrence
     @State private var selectedDeleteScope: RecurrenceEditScope = .thisOccurrence
     @State private var replacementAlarmOffsets: [TimeInterval] = []
+    @State private var customAlarmValues: [Int: EventAlarmCustomValue] = [:]
     @State private var replacementRecurrence = Self.defaultRecurrence
     @State private var duplicatePresentation: EventDuplicatePresentation?
     @State private var pendingDuplicateCommit: EventEditorCommit?
+    @State private var showsMoreOptions = false
 
     init(
         model: EventEditorViewModel,
@@ -54,10 +56,15 @@ struct EventEditorView: View {
                     }
                 }
                 detailsSection.disabled(isUnavailable)
-                destinationSection.disabled(isUnavailable)
-                categorySection.disabled(isUnavailable)
-                alarmsSection.disabled(isUnavailable)
-                recurrenceSection.disabled(isUnavailable)
+                moreOptionsSection
+                preflightSection
+                if showsMoreOptions {
+                    optionalDetailsSection.disabled(isUnavailable)
+                    destinationSection.disabled(isUnavailable)
+                    categorySection.disabled(isUnavailable)
+                    alarmsSection.disabled(isUnavailable)
+                    recurrenceSection.disabled(isUnavailable)
+                }
                 mutationSection
                 failureSection
             }
@@ -117,6 +124,7 @@ struct EventEditorView: View {
             .onChange(of: model.alarmSnapshot) { _, _ in synchronizeAlarmSeed() }
             .onChange(of: model.recurrenceSnapshot) { _, _ in synchronizeRecurrenceSeed() }
             .onChange(of: model.phase) { _, phase in
+                if shouldRevealMoreOptions(for: phase) { showsMoreOptions = true }
                 if phase.isCommitted { onDismiss() }
             }
         }
@@ -135,6 +143,11 @@ struct EventEditorView: View {
                 .accessibilityIdentifier("event-editor-end")
             TextField("Location", text: optionalStringBinding(\.location))
                 .accessibilityIdentifier("event-editor-location")
+        }
+    }
+
+    private var optionalDetailsSection: some View {
+        Section("Additional Details") {
             TextField("URL", text: urlBinding)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
@@ -142,6 +155,54 @@ struct EventEditorView: View {
             TextField("Notes", text: optionalStringBinding(\.notes), axis: .vertical)
                 .lineLimit(3...8)
                 .accessibilityIdentifier("event-editor-notes")
+        }
+    }
+
+    private var moreOptionsSection: some View {
+        Section {
+            Button {
+                showsMoreOptions.toggle()
+            } label: {
+                HStack(spacing: 12) {
+                    Text("More options")
+                    Spacer()
+                    Image(systemName: showsMoreOptions ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: CalendarTheme.minimumTapSize)
+            .accessibilityLabel("More options")
+            .accessibilityValue(showsMoreOptions ? "Expanded" : "Collapsed")
+            .accessibilityHint(showsMoreOptions ? "Hides optional event fields" : "Shows optional event fields")
+            .accessibilityIdentifier("event-editor-more-options")
+
+            Text(optionsSummary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("event-editor-options-summary")
+        }
+    }
+
+    @ViewBuilder private var preflightSection: some View {
+        if let issue = model.savePreflightIssue {
+            Section("Needs attention") {
+                Label(preflightMessage(issue), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("event-editor-preflight-message")
+                if issue.concernsMoreOptions, !showsMoreOptions {
+                    Button("Show affected options") {
+                        showsMoreOptions = true
+                    }
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("event-editor-show-invalid-options")
+                }
+            }
         }
     }
 
@@ -206,12 +267,39 @@ struct EventEditorView: View {
             if alarmChoice == .replace {
                 ForEach(replacementAlarmOffsets.indices, id: \.self) { index in
                     VStack(alignment: .leading, spacing: 6) {
-                        TextField("Seconds from event start", value: alarmOffsetBinding(index), format: .number)
-                            .keyboardType(.numbersAndPunctuation)
+                        Picker("Alert \(index + 1)", selection: alarmOffsetChoiceBinding(index)) {
+                            ForEach(EventAlarmPreset.allCases) { preset in
+                                Text(preset.title).tag(EventAlarmOffsetChoice.preset(preset))
+                            }
+                            Text("Custom").tag(EventAlarmOffsetChoice.custom)
+                        }
+                        .frame(minHeight: CalendarTheme.minimumTapSize)
+                        .accessibilityIdentifier("event-editor-alarm-preset-\(index)")
+
+                        if alarmOffsetChoice(at: index) == .custom {
+                            TextField(
+                                "Amount",
+                                value: alarmAmountBinding(index),
+                                format: .number
+                            )
+                            .keyboardType(.decimalPad)
+                            .frame(minHeight: CalendarTheme.minimumTapSize)
                             .accessibilityIdentifier("event-editor-alarm-offset-\(index)")
-                        Text("Use a negative value for an alert before the event.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            Picker("Unit", selection: alarmUnitBinding(index)) {
+                                ForEach(EventAlarmUnit.allCases) { unit in
+                                    Text(unit.title).tag(unit)
+                                }
+                            }
+                            .frame(minHeight: CalendarTheme.minimumTapSize)
+                            .accessibilityIdentifier("event-editor-alarm-unit-\(index)")
+                            Picker("Timing", selection: alarmTimingBinding(index)) {
+                                ForEach(EventAlarmTiming.allCases) { timing in
+                                    Text(timing.title).tag(timing)
+                                }
+                            }
+                            .frame(minHeight: CalendarTheme.minimumTapSize)
+                            .accessibilityIdentifier("event-editor-alarm-timing-\(index)")
+                        }
                         Button("Remove Alert", role: .destructive) { removeAlarm(at: index) }
                             .frame(minHeight: CalendarTheme.minimumTapSize)
                             .accessibilityIdentifier("event-editor-alarm-remove-\(index)")
@@ -450,6 +538,32 @@ struct EventEditorView: View {
     private var canDelete: Bool { !isWriting && !isTerminal }
     private var dateComponents: DatePickerComponents { model.isAllDay ? [.date] : [.date, .hourAndMinute] }
 
+    private var optionsSummary: String {
+        EditorOptionsSummary.event(
+            alarmIntent: model.alarmIntent,
+            alarmSnapshot: model.alarmSnapshot,
+            recurrenceIntent: model.recurrenceIntent,
+            recurrenceSnapshot: model.recurrenceSnapshot,
+            destinationTitle: selectedDestinationTitle,
+            categoryTitle: selectedCategoryTitle,
+            notes: model.notes,
+            url: model.url
+        )
+    }
+
+    private var selectedDestinationTitle: String {
+        if let id = model.destinationCalendarID,
+           let calendar = calendars.first(where: { $0.id == id }) {
+            return calendar.title
+        }
+        return model.currentCalendarTitle ?? nilDestinationLabel
+    }
+
+    private var selectedCategoryTitle: String? {
+        guard let id = model.categoryID else { return nil }
+        return model.availableCategories.first(where: { $0.id == id })?.name
+    }
+
     private var destinationHelp: String {
         if model.destinationCalendarID != nil {
             return showsDelete
@@ -514,15 +628,81 @@ struct EventEditorView: View {
         })
     }
 
-    private func alarmOffsetBinding(_ index: Int) -> Binding<TimeInterval> {
+    private func alarmOffsetChoice(at index: Int) -> EventAlarmOffsetChoice {
+        guard replacementAlarmOffsets.indices.contains(index) else { return .custom }
+        if customAlarmValues[index] != nil { return .custom }
+        guard let preset = EventAlarmPreset(offset: replacementAlarmOffsets[index]) else {
+            return .custom
+        }
+        return .preset(preset)
+    }
+
+    private func alarmOffsetChoiceBinding(_ index: Int) -> Binding<EventAlarmOffsetChoice> {
         Binding(
-            get: { replacementAlarmOffsets.indices.contains(index) ? replacementAlarmOffsets[index] : 0 },
-            set: { value in
+            get: { alarmOffsetChoice(at: index) },
+            set: { choice in
                 guard replacementAlarmOffsets.indices.contains(index) else { return }
-                replacementAlarmOffsets[index] = value
-                model.alarmIntent = .replace(replacementAlarmOffsets)
+                switch choice {
+                case let .preset(preset):
+                    customAlarmValues[index] = nil
+                    replaceAlarm(at: index, with: preset.offset)
+                case .custom:
+                    customAlarmValues[index] = EventAlarmCustomValue(
+                        offset: replacementAlarmOffsets[index]
+                    )
+                }
             }
         )
+    }
+
+    private func alarmAmountBinding(_ index: Int) -> Binding<Double> {
+        Binding(
+            get: { alarmCustomValue(at: index).amount },
+            set: { amount in
+                var value = alarmCustomValue(at: index)
+                value.amount = abs(amount)
+                customAlarmValues[index] = value
+                replaceAlarm(at: index, with: value.offset)
+            }
+        )
+    }
+
+    private func alarmUnitBinding(_ index: Int) -> Binding<EventAlarmUnit> {
+        Binding(
+            get: { alarmCustomValue(at: index).unit },
+            set: { unit in
+                var value = alarmCustomValue(at: index)
+                value.unit = unit
+                customAlarmValues[index] = value
+                replaceAlarm(at: index, with: value.offset)
+            }
+        )
+    }
+
+    private func alarmTimingBinding(_ index: Int) -> Binding<EventAlarmTiming> {
+        Binding(
+            get: { alarmCustomValue(at: index).timing },
+            set: { timing in
+                var value = alarmCustomValue(at: index)
+                value.timing = timing
+                customAlarmValues[index] = value
+                replaceAlarm(at: index, with: value.offset)
+            }
+        )
+    }
+
+    private func alarmCustomValue(at index: Int) -> EventAlarmCustomValue {
+        if let value = customAlarmValues[index] { return value }
+        guard replacementAlarmOffsets.indices.contains(index) else {
+            return EventAlarmCustomValue(offset: 0)
+        }
+        return EventAlarmCustomValue(offset: replacementAlarmOffsets[index])
+    }
+
+    private func replaceAlarm(at index: Int, with offset: TimeInterval) {
+        guard replacementAlarmOffsets.indices.contains(index) else { return }
+        replacementAlarmOffsets[index] = offset
+        model.alarmIntent = .replace(replacementAlarmOffsets)
     }
 
     private var recurrenceFrequencyBinding: Binding<RecurrenceFrequency> {
@@ -577,6 +757,26 @@ struct EventEditorView: View {
         else { onDismiss() }
     }
 
+    private func shouldRevealMoreOptions(for phase: EventEditorPhase) -> Bool {
+        guard case let .failed(action, error) = phase, action == .save else { return false }
+        return error == .invalidDestination || error == .validationFailure
+    }
+
+    private func preflightMessage(_ issue: EventEditorSavePreflightIssue) -> String {
+        switch issue {
+        case .titleRequired:
+            "Enter an event title."
+        case .datesOrAlertsInvalid:
+            "Ends must be after Starts, and custom alert values under More options must be valid."
+        case .repeatInvalid:
+            "The repeat rule conflicts with this event’s dates. Review Repeat under More options."
+        case .destinationRequired:
+            "Choose an available calendar under More options."
+        case .detailsInvalid:
+            "Check the event details and the fields under More options."
+        }
+    }
+
     private func finishDuplicatePresentation() {
         guard let commit = pendingDuplicateCommit else { return }
         pendingDuplicateCommit = nil
@@ -591,6 +791,10 @@ struct EventEditorView: View {
     private func removeAlarm(at index: Int) {
         guard replacementAlarmOffsets.indices.contains(index) else { return }
         replacementAlarmOffsets.remove(at: index)
+        customAlarmValues = Dictionary(uniqueKeysWithValues: customAlarmValues.compactMap { customIndex, value in
+            if customIndex == index { return nil }
+            return (customIndex > index ? customIndex - 1 : customIndex, value)
+        })
         model.alarmIntent = replacementAlarmOffsets.isEmpty ? .clear : .replace(replacementAlarmOffsets)
     }
 
@@ -603,8 +807,10 @@ struct EventEditorView: View {
         guard alarmChoice != .replace || replacementAlarmOffsets.isEmpty else { return }
         if case let .editable(offsets) = model.alarmSnapshot, !offsets.isEmpty {
             replacementAlarmOffsets = offsets
+            customAlarmValues = [:]
         } else if forceDefault || !showsDelete {
             replacementAlarmOffsets = [-600]
+            customAlarmValues = [:]
         }
     }
 
@@ -656,14 +862,17 @@ struct EventEditorView: View {
         if offset == 0 { return "At start" }
         let absolute = abs(offset)
         let amount: String
-        if absolute.truncatingRemainder(dividingBy: 3_600) == 0 {
+        if absolute.truncatingRemainder(dividingBy: 86_400) == 0 {
+            let days = Int(absolute / 86_400)
+            amount = "\(days) day\(days == 1 ? "" : "s")"
+        } else if absolute.truncatingRemainder(dividingBy: 3_600) == 0 {
             let hours = Int(absolute / 3_600)
             amount = "\(hours) hour\(hours == 1 ? "" : "s")"
         } else if absolute.truncatingRemainder(dividingBy: 60) == 0 {
             let minutes = Int(absolute / 60)
             amount = "\(minutes) minute\(minutes == 1 ? "" : "s")"
         } else {
-            amount = "\(absolute.formatted(.number.precision(.fractionLength(0...2)))) seconds"
+            amount = "\(absolute.formatted(.number)) seconds"
         }
         return offset < 0 ? "\(amount) before" : "\(amount) after"
     }
@@ -780,6 +989,111 @@ private struct EventDuplicateFlowView: View {
     }
 }
 
+enum EventAlarmPreset: CaseIterable, Hashable, Identifiable {
+    case atStart
+    case fiveMinutesBefore
+    case tenMinutesBefore
+    case fifteenMinutesBefore
+    case thirtyMinutesBefore
+    case oneHourBefore
+    case oneDayBefore
+
+    init?(offset: TimeInterval) {
+        guard let preset = Self.allCases.first(where: { $0.offset == offset }) else {
+            return nil
+        }
+        self = preset
+    }
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .atStart: "At start"
+        case .fiveMinutesBefore: "5 minutes before"
+        case .tenMinutesBefore: "10 minutes before"
+        case .fifteenMinutesBefore: "15 minutes before"
+        case .thirtyMinutesBefore: "30 minutes before"
+        case .oneHourBefore: "1 hour before"
+        case .oneDayBefore: "1 day before"
+        }
+    }
+
+    var offset: TimeInterval {
+        switch self {
+        case .atStart: 0
+        case .fiveMinutesBefore: -300
+        case .tenMinutesBefore: -600
+        case .fifteenMinutesBefore: -900
+        case .thirtyMinutesBefore: -1_800
+        case .oneHourBefore: -3_600
+        case .oneDayBefore: -86_400
+        }
+    }
+}
+
+enum EventAlarmUnit: CaseIterable, Hashable, Identifiable {
+    case seconds
+    case minutes
+    case hours
+    case days
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .seconds: "Seconds"
+        case .minutes: "Minutes"
+        case .hours: "Hours"
+        case .days: "Days"
+        }
+    }
+
+    fileprivate var seconds: TimeInterval {
+        switch self {
+        case .seconds: 1
+        case .minutes: 60
+        case .hours: 3_600
+        case .days: 86_400
+        }
+    }
+}
+
+enum EventAlarmTiming: CaseIterable, Hashable, Identifiable {
+    case before
+    case after
+
+    var id: Self { self }
+    var title: String { self == .before ? "Before" : "After" }
+}
+
+struct EventAlarmCustomValue: Equatable {
+    var amount: Double
+    var unit: EventAlarmUnit
+    var timing: EventAlarmTiming
+
+    init(offset: TimeInterval) {
+        let magnitude = abs(offset)
+        unit = [.days, .hours, .minutes].first(where: { candidate in
+            guard magnitude >= candidate.seconds else { return false }
+            let hundredths = magnitude / candidate.seconds * 100
+            return abs(hundredths - hundredths.rounded()) < 0.000_000_001
+        }) ?? .seconds
+        amount = magnitude / unit.seconds
+        timing = offset < 0 ? .before : .after
+    }
+
+    var offset: TimeInterval {
+        let magnitude = abs(amount) * unit.seconds
+        return timing == .before ? -magnitude : magnitude
+    }
+}
+
+private enum EventAlarmOffsetChoice: Hashable {
+    case preset(EventAlarmPreset)
+    case custom
+}
+
 private enum EventAlarmChoice: Hashable {
     case preserve, clear, replace
     init(_ intent: EventAlarmMutationIntent) {
@@ -805,6 +1119,10 @@ private extension EventEditorPhase {
         case .idle, .confirming, .writing, .failed, .unavailable: false
         }
     }
+}
+
+private extension EventEditorSavePreflightIssue {
+    var concernsMoreOptions: Bool { self != .titleRequired }
 }
 
 private extension RecurrenceFrequency {

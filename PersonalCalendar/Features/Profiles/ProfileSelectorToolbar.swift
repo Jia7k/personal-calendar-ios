@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfileSelectorToolbar: View {
     let selection: ProfileSelectionController
     var showsName = true
+    var usesTextOnlyLabel = false
 
     var body: some View {
         Menu {
@@ -23,8 +24,20 @@ struct ProfileSelectorToolbar: View {
             }
         } label: {
             if showsName {
-                Label(currentName, systemImage: currentSymbolName)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    if usesTextOnlyLabel {
+                        Text(currentName)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+                    } else {
+                        Label(currentName, systemImage: currentSymbolName)
+                            .lineLimit(1)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(usesTextOnlyLabel ? .system(size: 12, weight: .bold) : .caption2.weight(.bold))
+                        .accessibilityHidden(true)
+                }
+                .fixedSize(horizontal: false, vertical: usesTextOnlyLabel)
             } else {
                 Image(systemName: currentSymbolName)
             }
@@ -33,7 +46,7 @@ struct ProfileSelectorToolbar: View {
             minWidth: CalendarTheme.minimumTapSize,
             minHeight: CalendarTheme.minimumTapSize
         )
-        .accessibilityLabel("Profile")
+        .accessibilityLabel(showsName ? "\(currentName) profile" : "Profile")
         .accessibilityValue(currentName)
         .accessibilityIdentifier("profile-selector")
     }

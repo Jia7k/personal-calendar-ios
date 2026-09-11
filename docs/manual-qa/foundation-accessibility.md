@@ -53,6 +53,15 @@ Record the device or simulator, iOS version, locale, time zone, system appearanc
 - [ ] Choose a conflicting interval. Confirm the conflict names are visible and the first confirmation changes to **Save Anyway**; canceling or a failed write must leave the Reminder and Calendar unchanged.
 - [ ] In Calendar, use **Jump to Date** for a date outside the visible month. Confirm Month and Week select and scroll to that exact local day. Check search and deep links still respect the active profile.
 
+## Usability pass: drafts, forms, and event actions
+
+- [ ] Open +, type a task, use the keyboard Continue, correct its title and remove its date, then Save Draft. Force-close/reopen and resume; confirm the exact corrected review returns without creating anything. Discard it and confirm it stays gone. Repeat in another profile and confirm drafts never cross profiles.
+- [ ] With a draft waiting, run a Shortcut capture and save it. Choose Add Another; confirm the old draft is still offered and requires Resume or Discard before new input. Check Recent cannot overwrite a pending draft.
+- [ ] Expand More options in an undated task, add repeat, then collapse. Confirm the disabled Save has an actionable explanation; repair repeat or add a due date and confirm Save becomes available. Check event start changes against a custom repeat end date too.
+- [ ] Inspect one-hour school classes in the smallest phone's Week columns: course code and class kind must remain legible. Full titles must appear in event details and VoiceOver; the Week must still scroll only vertically.
+- [ ] From a weekly event preview, copy its location and paste it into a local note. Test Directions for a physical address and Join Call for a recognized meeting URL, including return-to-app and failure feedback. Online-only invitation text must not offer Directions. Do not treat Simulator's opening acceptance as proof of Apple Maps or a meeting service's final response.
+- [ ] Choose each Open app to setting and relaunch; verify explicit links/notification taps take priority and changing the setting does not move the current screen.
+
 ## VoiceOver
 
 - [ ] On today's Calendar cell, confirm the announcement includes a localized full date, “Today,” “Selected,” and the item count. Check Week task completion, Jump to Date, search, and the profile selector for clear names, values, and state.

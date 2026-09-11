@@ -20,6 +20,7 @@ struct TaskEditorView: View {
     @State private var duplicatePresentation: TaskDuplicatePresentation?
     @State private var pendingDuplicateCommit: TaskEditorCommit?
     @State private var duplicateErrorMessage: String?
+    @State private var showsMoreOptions = false
 
     init(
         model: TaskEditorViewModel,
@@ -66,12 +67,17 @@ struct TaskEditorView: View {
                     }
                 }
                 detailsSection
-                planningSection
                 scheduleSection
-                destinationSection
-                categorySection
-                alarmSection
-                recurrenceSection
+                planningSection
+                moreOptionsSection
+                preflightSection
+                if showsMoreOptions {
+                    optionalDetailsSection
+                    destinationSection
+                    categorySection
+                    alarmSection
+                    recurrenceSection
+                }
                 recurringInformationSection
                 mutationSection
                 failureSection
@@ -144,6 +150,7 @@ struct TaskEditorView: View {
                 )
             }
             .onChange(of: model.phase) { _, phase in
+                if shouldRevealMoreOptions(for: phase) { showsMoreOptions = true }
                 if phase.isCommitted { onDismiss() }
             }
         }
@@ -155,6 +162,11 @@ struct TaskEditorView: View {
                 .disabled(isUnavailable)
                 .accessibilityIdentifier("task-editor-title")
                 .accessibilityLabel("Task title")
+        }
+    }
+
+    private var optionalDetailsSection: some View {
+        Section("Additional Details") {
             TextField("Notes", text: optionalStringBinding(\.notes), axis: .vertical)
                 .lineLimit(3...8)
                 .disabled(isUnavailable)
@@ -169,6 +181,54 @@ struct TaskEditorView: View {
             }
             .disabled(isUnavailable)
             .accessibilityIdentifier("task-editor-priority")
+        }
+    }
+
+    private var moreOptionsSection: some View {
+        Section {
+            Button {
+                showsMoreOptions.toggle()
+            } label: {
+                HStack(spacing: 12) {
+                    Text("More options")
+                    Spacer()
+                    Image(systemName: showsMoreOptions ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: CalendarTheme.minimumTapSize)
+            .accessibilityLabel("More options")
+            .accessibilityValue(showsMoreOptions ? "Expanded" : "Collapsed")
+            .accessibilityHint(showsMoreOptions ? "Hides optional task fields" : "Shows optional task fields")
+            .accessibilityIdentifier("task-editor-more-options")
+
+            Text(optionsSummary)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("task-editor-options-summary")
+        }
+    }
+
+    @ViewBuilder private var preflightSection: some View {
+        if let issue = model.savePreflightIssue {
+            Section("Needs attention") {
+                Label(preflightMessage(issue), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("task-editor-preflight-message")
+                if issue.concernsMoreOptions, !showsMoreOptions {
+                    Button("Show affected options") {
+                        showsMoreOptions = true
+                    }
+                    .frame(minHeight: CalendarTheme.minimumTapSize)
+                    .accessibilityIdentifier("task-editor-show-invalid-options")
+                }
+            }
         }
     }
 
@@ -550,6 +610,37 @@ struct TaskEditorView: View {
     private var recurrenceInterval: Int { recurrenceRule.interval }
     private var recurrenceEndDate: Date? { recurrenceRule.endDate }
 
+    private var optionsSummary: String {
+        EditorOptionsSummary.task(
+            alarmIntent: model.form.alarm,
+            alarmSnapshot: model.providerAlarmSnapshot,
+            recurrenceIntent: model.form.recurrence,
+            recurrenceSnapshot: model.providerRecurrenceSnapshot,
+            destinationTitle: selectedDestinationTitle,
+            categoryTitle: selectedCategoryTitle,
+            priority: model.form.priority,
+            notes: model.form.notes
+        )
+    }
+
+    private var selectedDestinationTitle: String {
+        if let id = model.form.listID,
+           let list = lists.first(where: { $0.id == id }) {
+            return list.title
+        }
+        switch model.destination {
+        case .systemDefault:
+            return nilDestinationLabel
+        case let .preserveCurrent(_, title), let .explicit(_, title):
+            return title
+        }
+    }
+
+    private var selectedCategoryTitle: String? {
+        guard let id = model.categoryID else { return nil }
+        return model.availableCategories.first(where: { $0.id == id })?.name
+    }
+
     private var scheduleChoiceBinding: Binding<TaskScheduleChoice> {
         Binding(get: { scheduleChoice }, set: { choice in
             switch choice {
@@ -672,6 +763,28 @@ struct TaskEditorView: View {
         if model.confirmDiscard() == .dismiss { onDismiss() }
     }
 
+    private func shouldRevealMoreOptions(for phase: TaskEditorPhase) -> Bool {
+        guard case let .failed(action, error) = phase, action == .save else { return false }
+        return error == .invalidDestination || error == .validation
+    }
+
+    private func preflightMessage(_ issue: TaskEditorSavePreflightIssue) -> String {
+        switch issue {
+        case .titleRequired:
+            "Enter a task title."
+        case .dueDatePriorityOrAlertInvalid:
+            "Check the due date, priority, and alert settings under More options."
+        case .repeatRequiresDueDate:
+            "A repeating task needs a due date. Set Due above or review Repeat under More options."
+        case .repeatInvalid:
+            "The repeat rule is invalid. Review Repeat under More options."
+        case .destinationRequired:
+            "Choose an available reminder list under More options."
+        case .detailsInvalid:
+            "Check the task details and the fields under More options."
+        }
+    }
+
     private var deleteConfirmationBinding: Binding<Bool> {
         let generation = model.deleteConfirmationGeneration
         return Binding(
@@ -780,4 +893,8 @@ private extension TaskEditorPhase {
         case .idle, .confirming, .writing, .failed, .unavailable: false
         }
     }
+}
+
+private extension TaskEditorSavePreflightIssue {
+    var concernsMoreOptions: Bool { self != .titleRequired }
 }

@@ -128,6 +128,7 @@ enum QuickEntrySourceAction: Equatable, Sendable {
 enum QuickEntryCaptureSource: Equatable, Sendable {
     case inApp
     case shortcut
+    case link
 }
 
 @MainActor
@@ -140,13 +141,15 @@ final class QuickEntryViewModel {
     private(set) var categories: [CategorySnapshot]
     private(set) var transformationNotice: String?
     private(set) var recentEntries: [QuickEntryHistoryItem]
-    let captureSource: QuickEntryCaptureSource
+    private(set) var captureSource: QuickEntryCaptureSource
+    private(set) var availableDraft: QuickEntryDraftSnapshot?
 
     @ObservationIgnored private let parser: any QuickEntryParsing
     @ObservationIgnored private let saver: any QuickEntrySaving
     @ObservationIgnored private let context: QuickEntryParseContext
-    @ObservationIgnored private let creationProfile: CreationProfileContext?
+    @ObservationIgnored private var creationProfile: CreationProfileContext?
     @ObservationIgnored private let historyStore: QuickEntryHistoryStore?
+    @ObservationIgnored private let draftStore: QuickEntryDraftStore?
     @ObservationIgnored private let historyNow: @MainActor () -> Date
     @ObservationIgnored private let onCommitted: @MainActor (QuickEntrySaveOutcome) -> Void
     @ObservationIgnored private var didCommit = false
@@ -155,6 +158,8 @@ final class QuickEntryViewModel {
     @ObservationIgnored private var taskDestinationID: String?
     @ObservationIgnored private var eventDestinationWasExplicitlySelected = false
     @ObservationIgnored private var taskDestinationWasExplicitlySelected = false
+    @ObservationIgnored private var lastSuccessfullyParsedText: String?
+    @ObservationIgnored private var ownsStoredDraft = false
 
     init(
         parser: any QuickEntryParsing,
@@ -164,6 +169,7 @@ final class QuickEntryViewModel {
         categories: [CategorySnapshot] = [],
         creationProfile: CreationProfileContext? = nil,
         historyStore: QuickEntryHistoryStore? = nil,
+        draftStore: QuickEntryDraftStore? = nil,
         historyNow: @escaping @MainActor () -> Date = Date.init,
         captureSource: QuickEntryCaptureSource = .inApp,
         onCommitted: @escaping @MainActor (QuickEntrySaveOutcome) -> Void = { _ in }
@@ -175,6 +181,7 @@ final class QuickEntryViewModel {
         self.categories = categories.sorted { $0.sortOrder < $1.sortOrder }
         self.creationProfile = creationProfile
         self.historyStore = historyStore
+        self.draftStore = draftStore
         self.historyNow = historyNow
         if let creationProfile, let historyStore {
             recentEntries = historyStore.items(for: .saved(creationProfile.profileID))
@@ -182,6 +189,11 @@ final class QuickEntryViewModel {
             recentEntries = []
         }
         self.captureSource = captureSource
+        if captureSource == .inApp, let creationProfile, let draftStore {
+            availableDraft = draftStore.draft(for: creationProfile.profileID)
+        } else {
+            availableDraft = nil
+        }
         self.onCommitted = onCommitted
         eventDestinationID = destinations.defaultCalendarID
         taskDestinationID = destinations.defaultReminderListID
@@ -190,6 +202,19 @@ final class QuickEntryViewModel {
     var canSave: Bool {
         guard case .confirmation = phase, let preview else { return false }
         return localFailure(for: preview) == nil
+    }
+
+    var canReview: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var canResumeDraft: Bool {
+        guard captureSource == .inApp,
+              availableDraft != nil,
+              case .entry = phase,
+              text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              preview == nil else { return false }
+        return true
     }
 
     var errorMessage: String? {
@@ -287,6 +312,12 @@ final class QuickEntryViewModel {
 
     func parse() {
         guard case .entry = phase else { return }
+        if text == lastSuccessfullyParsedText, preview != nil {
+            discardWasConfirmed = false
+            phase = .confirmation(.ready)
+            updateDestinationOptions(destinations)
+            return
+        }
         do {
             var parsed = try parser.parse(text, context: context)
             let parserSuppliedDestination = parsed.destinationID != nil
@@ -316,6 +347,7 @@ final class QuickEntryViewModel {
                 parsed.destinationID = nil
             }
             preview = parsed
+            lastSuccessfullyParsedText = text
             transformationNotice = nil
             discardWasConfirmed = false
             phase = .confirmation(.ready)
@@ -336,10 +368,12 @@ final class QuickEntryViewModel {
     }
 
     func selectRecent(id: UUID) {
-        guard case .entry = phase,
+        guard availableDraft == nil,
+              case .entry = phase,
               let item = recentEntries.first(where: { $0.id == id }) else { return }
         text = item.text
         preview = nil
+        lastSuccessfullyParsedText = nil
         transformationNotice = nil
         discardWasConfirmed = false
         phase = .entry(parseError: nil)
@@ -484,6 +518,7 @@ final class QuickEntryViewModel {
             phase = .committed(outcome)
             guard !didCommit else { return }
             didCommit = true
+            removeStoredDraftForCurrentCapture()
             rememberSuccessfulCommit(preview)
             onCommitted(outcome)
         } catch {
@@ -520,9 +555,146 @@ final class QuickEntryViewModel {
         return .dismiss
     }
 
-    func confirmDiscard() { discardWasConfirmed = true }
+    func confirmDiscard() {
+        discardDraft()
+        discardWasConfirmed = true
+    }
+
+    @discardableResult
+    func checkpointDraft() -> Bool {
+        guard captureSource == .inApp,
+              let creationProfile,
+              let draftStore,
+              !discardWasConfirmed,
+              availableDraft == nil
+        else { return false }
+
+        guard !text.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        ).isEmpty else {
+            if ownsStoredDraft {
+                draftStore.removeDraft(for: creationProfile.profileID)
+                ownsStoredDraft = false
+            }
+            return false
+        }
+        guard text.count <= QuickEntryDraftStore.maximumTextCharacters else {
+            return false
+        }
+
+        let intendedPhase: QuickEntryDraftPhase
+        switch phase {
+        case .entry:
+            intendedPhase = .entry
+        case .confirmation:
+            intendedPhase = .confirmation
+        case .saving, .committed:
+            return false
+        }
+        let snapshot = QuickEntryDraftSnapshot(
+            profileID: creationProfile.profileID,
+            text: text,
+            preview: preview,
+            parseTextMarker: preview == nil ? nil : lastSuccessfullyParsedText,
+            eventDestinationID: eventDestinationID,
+            taskDestinationID: taskDestinationID,
+            eventDestinationWasExplicitlySelected:
+                eventDestinationWasExplicitlySelected,
+            taskDestinationWasExplicitlySelected:
+                taskDestinationWasExplicitlySelected,
+            intendedPhase: intendedPhase,
+            checkpointedAt: historyNow()
+        )
+        guard draftStore.save(snapshot) else { return false }
+        availableDraft = nil
+        ownsStoredDraft = true
+        return true
+    }
+
+    func resumeDraft() {
+        guard canResumeDraft, let draft = availableDraft else { return }
+        text = draft.text
+        preview = revalidatedPreview(draft.preview)
+        lastSuccessfullyParsedText = preview == nil
+            ? nil
+            : draft.parseTextMarker
+        eventDestinationID = draft.eventDestinationID
+        taskDestinationID = draft.taskDestinationID
+        eventDestinationWasExplicitlySelected =
+            draft.eventDestinationWasExplicitlySelected
+        taskDestinationWasExplicitlySelected =
+            draft.taskDestinationWasExplicitlySelected
+        transformationNotice = nil
+        discardWasConfirmed = false
+        availableDraft = nil
+        ownsStoredDraft = true
+        if draft.intendedPhase == .confirmation, preview != nil {
+            phase = .confirmation(.ready)
+            updateDestinationOptions(destinations)
+        } else {
+            phase = .entry(parseError: nil)
+        }
+    }
+
+    func discardDraft() {
+        guard captureSource == .inApp, let creationProfile else { return }
+        draftStore?.removeDraft(for: creationProfile.profileID)
+        availableDraft = nil
+        ownsStoredDraft = false
+    }
+
+    func startAnotherEntry(
+        creationProfile refreshedCreationProfile: CreationProfileContext? = nil,
+        destinations refreshedDestinations: QuickEntryDestinationOptions? = nil
+    ) {
+        guard case .committed = phase else { return }
+        if let refreshedCreationProfile {
+            creationProfile = refreshedCreationProfile
+        }
+        if let refreshedDestinations {
+            destinations = refreshedDestinations
+        }
+        text = ""
+        preview = nil
+        phase = .entry(parseError: nil)
+        transformationNotice = nil
+        didCommit = false
+        discardWasConfirmed = false
+        eventDestinationID = destinations.defaultCalendarID
+        taskDestinationID = destinations.defaultReminderListID
+        eventDestinationWasExplicitlySelected = false
+        taskDestinationWasExplicitlySelected = false
+        lastSuccessfullyParsedText = nil
+        captureSource = .inApp
+        if let creationProfile {
+            availableDraft = draftStore?.draft(
+                for: creationProfile.profileID
+            )
+        } else {
+            availableDraft = nil
+        }
+        ownsStoredDraft = false
+    }
 
     private var isTerminal: Bool { if case .committed = phase { return true }; return false }
+
+    private func removeStoredDraftForCurrentCapture() {
+        guard captureSource == .inApp, let creationProfile else { return }
+        draftStore?.removeDraft(for: creationProfile.profileID)
+        availableDraft = nil
+        ownsStoredDraft = false
+    }
+
+    private func revalidatedPreview(
+        _ storedPreview: QuickEntryPreview?
+    ) -> QuickEntryPreview? {
+        guard var storedPreview else { return nil }
+        if let categoryID = storedPreview.categoryID,
+           !categories.contains(where: { $0.id == categoryID }) {
+            storedPreview.categoryID = nil
+        }
+        return storedPreview
+    }
 
     @discardableResult
     private func applyRememberedChoices(

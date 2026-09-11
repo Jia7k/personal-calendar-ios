@@ -4,11 +4,42 @@ import XCTest
 /// lose between a system confirmation dialog and an in-place recurrence edit.
 @MainActor
 final class EditorReviewUITests: XCTestCase {
+    func testQuickEntryBackThenReviewPreservesCorrectedTitleWhenInputIsUnchanged() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-quick-entry-fixed-context"]
+        app.launch()
+
+        let add = app.buttons["universal-add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 3))
+        add.tap()
+        let input = app.textFields["quick-entry-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 3))
+        input.tap()
+        input.typeText("Dentist today at 3pm")
+        dismissKeyboard(in: app)
+        app.buttons["quick-entry-parse"].tap()
+
+        let title = app.textFields["quick-entry-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        replaceText(title, with: "Dentist follow-up")
+        dismissKeyboard(in: app)
+        app.buttons["quick-entry-back"].tap()
+        XCTAssertTrue(input.waitForExistence(timeout: 3))
+        XCTAssertEqual(input.value as? String, "Dentist today at 3pm")
+
+        app.buttons["quick-entry-parse"].tap()
+
+        XCTAssertTrue(title.waitForExistence(timeout: 3))
+        XCTAssertEqual(title.value as? String, "Dentist follow-up")
+    }
+
     func testCancellingEventConfirmationLeavesEditorReadyForAnotherDeleteRequest() {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing"]
         app.launch()
 
+        expandDay(in: app)
         app.buttons["agenda-open-event-demo-event"].tap()
         let delete = app.buttons["event-editor-delete"]
         scrollToHittable(delete, in: app)
@@ -27,6 +58,7 @@ final class EditorReviewUITests: XCTestCase {
         app.launchArguments = ["-ui-testing"]
         app.launch()
 
+        expandDay(in: app)
         let open = app.buttons["agenda-open-event-demo-event"]
         open.tap()
         let delete = app.buttons["event-editor-delete"]
@@ -41,9 +73,10 @@ final class EditorReviewUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-demo-editor-recurring"]
         app.launch()
-        app.buttons["Expand day"].tap()
+        expandDay(in: app)
 
         app.buttons["agenda-open-event-demo-event-recurring"].tap()
+        app.revealEditorOptions("event")
         let repeatChoice = app.descendants(matching: .any)["event-editor-recurrence-intent"]
         scrollToHittable(repeatChoice, in: app)
         repeatChoice.tap()
@@ -63,9 +96,10 @@ final class EditorReviewUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-demo-editor-recurring"]
         app.launch()
-        app.buttons["Expand day"].tap()
+        expandDay(in: app)
 
         app.buttons["agenda-open-event-demo-event-recurring"].tap()
+        app.revealEditorOptions("event")
         let repeatChoice = app.descendants(matching: .any)["event-editor-recurrence-intent"]
         scrollToHittable(repeatChoice, in: app)
         repeatChoice.tap()
@@ -82,6 +116,7 @@ final class EditorReviewUITests: XCTestCase {
         XCTAssertTrue(recurringEvent.waitForExistence(timeout: 3))
 
         recurringEvent.tap()
+        app.revealEditorOptions("event")
         let reopenedRepeatChoice = app.descendants(matching: .any)["event-editor-recurrence-intent"]
         scrollToHittable(reopenedRepeatChoice, in: app)
         reopenedRepeatChoice.tap()
@@ -97,6 +132,7 @@ final class EditorReviewUITests: XCTestCase {
         app.launch()
         app.buttons["Expand day"].tap()
         app.buttons["agenda-open-task-demo-task-recurring"].tap()
+        app.revealEditorOptions("task")
 
         let repeatChoice = app.descendants(matching: .any)["task-editor-recurrence-intent"]
         scrollToHittable(repeatChoice, in: app)
@@ -117,6 +153,13 @@ final class EditorReviewUITests: XCTestCase {
 
     private func tapSwitch(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+    }
+
+    private func expandDay(in app: XCUIApplication) {
+        let expand = app.buttons["Expand day"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 3))
+        scrollToHittable(expand, in: app)
+        expand.tap()
     }
 
     private func waitForSwitch(_ element: XCUIElement, isOn: Bool, timeout: TimeInterval = 3) {

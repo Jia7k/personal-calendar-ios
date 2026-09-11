@@ -13,6 +13,15 @@ enum TaskEditorDestination: Equatable, Sendable {
     case explicit(id: String, title: String)
 }
 
+enum TaskEditorSavePreflightIssue: Equatable, Sendable {
+    case titleRequired
+    case dueDatePriorityOrAlertInvalid
+    case repeatRequiresDueDate
+    case repeatInvalid
+    case destinationRequired
+    case detailsInvalid
+}
+
 enum TaskEditorPhase: Equatable, Sendable {
     case idle
     case confirming(TaskEditorAction)
@@ -74,10 +83,27 @@ final class TaskEditorViewModel {
     /// still reacquires the provider item and destination immediately before it
     /// mutates either one.
     var canSave: Bool {
-        acceptsNewAction
-            && hasRequiredCreationDestination
-            && hasLocallyAllowedCreationDestination
-            && formValidationError() == nil
+        acceptsNewAction && savePreflightIssue == nil
+    }
+
+    /// Describes only local, side-effect-free save eligibility. Provider
+    /// authority remains exclusively owned by the mutation path.
+    var savePreflightIssue: TaskEditorSavePreflightIssue? {
+        guard acceptsNewAction else { return nil }
+        guard hasRequiredCreationDestination,
+              hasLocallyAllowedCreationDestination else {
+            return .destinationRequired
+        }
+        guard let error = formValidationError() else { return nil }
+        return switch error as? DraftValidationError {
+        case .some(.emptyTitle): .titleRequired
+        case .some(.invalidDateRange): .dueDatePriorityOrAlertInvalid
+        case .some(.recurringReminderRequiresDueDate): .repeatRequiresDueDate
+        case .some(.invalidRecurrence): .repeatInvalid
+        case .none, .some(.readOnlyDestination), .some(.itemNotFound),
+             .some(.invalidDestination), .some(.invalidRecurrenceScope):
+            .detailsInvalid
+        }
     }
     var requiresDiscardConfirmation: Bool {
         guard !discardWasConfirmed else { return false }

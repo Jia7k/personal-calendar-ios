@@ -241,6 +241,246 @@ final class QuickEntryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.preview?.destinationID, "parser-calendar")
     }
 
+    func testReviewingUnchangedInputPreservesExactEditedPreview() {
+        let parser = LockedSequenceParser([
+            .success(eventPreview()),
+            .failure(.ambiguousExpression)
+        ])
+        let subject = QuickEntryViewModel(
+            parser: parser,
+            saver: RecordingQuickEntrySaver(),
+            context: context(),
+            destinations: options(defaultCalendarID: "work")
+        )
+        let categoryID = UUID(uuidString: "01234567-89AB-4CDE-8F01-23456789ABCD")!
+        let edited = QuickEntryPreview(
+            kind: .event,
+            title: "Edited dentist appointment",
+            startDate: date(2026, 8, 26, 14),
+            endDate: date(2026, 8, 26, 15, 30),
+            reminderDate: date(2026, 8, 26, 13, 45),
+            destinationID: "home",
+            categoryID: categoryID
+        )
+        subject.text = "Dentist Friday at 3pm"
+        subject.parse()
+        subject.preview = edited
+        subject.returnToEntry()
+
+        subject.parse()
+
+        XCTAssertEqual(subject.phase, .confirmation(.ready))
+        XCTAssertEqual(subject.preview, edited)
+    }
+
+    func testReviewingUnchangedInputPreservesSelectedKindAndDestinationNamespaces() {
+        let parser = LockedSequenceParser([
+            .success(eventPreview()),
+            .failure(.ambiguousExpression)
+        ])
+        let subject = QuickEntryViewModel(
+            parser: parser,
+            saver: RecordingQuickEntrySaver(),
+            context: context(),
+            destinations: options(defaultCalendarID: "work", defaultListID: "tasks")
+        )
+        subject.text = "Plan tomorrow"
+        subject.parse()
+        subject.selectDestination("home")
+        subject.selectKind(.task)
+        subject.selectDestination("personal-tasks")
+        let editedTask = subject.preview
+        subject.returnToEntry()
+
+        subject.parse()
+
+        XCTAssertEqual(subject.preview, editedTask)
+        XCTAssertEqual(subject.preview?.kind, .task)
+        XCTAssertEqual(subject.preview?.destinationID, "personal-tasks")
+
+        subject.selectKind(.event)
+        XCTAssertEqual(subject.preview?.destinationID, "home")
+    }
+
+    func testReviewingUnchangedEventPreservesExplicitSystemDefaultSelectionAcrossRefresh() {
+        let parser = LockedSequenceParser([
+            .success(eventPreview()),
+            .success(eventPreview())
+        ])
+        let subject = QuickEntryViewModel(
+            parser: parser,
+            saver: RecordingQuickEntrySaver(),
+            context: context(),
+            destinations: options(calendarAccess: .denied, calendars: [])
+        )
+        subject.text = "Dentist"
+        subject.parse()
+        subject.selectDestination(nil)
+        subject.returnToEntry()
+        subject.parse()
+
+        subject.updateDestinationOptions(
+            options(
+                calendarAccess: .granted,
+                calendars: [calendarDescriptor("work", "Work")],
+                defaultCalendarID: "work"
+            )
+        )
+
+        XCTAssertNil(subject.preview?.destinationID)
+    }
+
+    func testReviewingUnchangedTaskPreservesExplicitSystemDefaultSelectionAcrossRefresh() {
+        let parser = LockedSequenceParser([
+            .success(taskPreview()),
+            .success(taskPreview())
+        ])
+        let subject = QuickEntryViewModel(
+            parser: parser,
+            saver: RecordingQuickEntrySaver(),
+            context: context(),
+            destinations: options(remindersAccess: .notDetermined, reminderLists: [])
+        )
+        subject.text = "Submit"
+        subject.parse()
+        subject.selectDestination(nil)
+        subject.returnToEntry()
+        subject.parse()
+
+        subject.updateDestinationOptions(
+            options(
+                remindersAccess: .granted,
+                reminderLists: [listDescriptor("tasks", "Tasks")],
+                defaultListID: "tasks"
+            )
+        )
+
+        XCTAssertNil(subject.preview?.destinationID)
+    }
+
+    func testUnchangedEventReviewReconcilesUntouchedDestinationRefreshedWhileBackInEntry() {
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            options: options(calendarAccess: .denied, calendars: [])
+        )
+        subject.text = "Dentist"
+        subject.parse()
+        subject.preview?.title = "Corrected dentist"
+        subject.returnToEntry()
+
+        subject.updateDestinationOptions(
+            options(
+                calendarAccess: .granted,
+                calendars: [calendarDescriptor("work", "Work")],
+                defaultCalendarID: "work"
+            )
+        )
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.title, "Corrected dentist")
+        XCTAssertEqual(subject.preview?.destinationID, "work")
+        XCTAssertTrue(subject.canSave)
+    }
+
+    func testUnchangedTaskReviewReconcilesUntouchedDestinationRefreshedWhileBackInEntry() {
+        let subject = makeSubject(
+            result: .success(taskPreview()),
+            options: options(remindersAccess: .notDetermined, reminderLists: [])
+        )
+        subject.text = "Submit"
+        subject.parse()
+        subject.preview?.title = "Corrected submission"
+        subject.returnToEntry()
+
+        subject.updateDestinationOptions(
+            options(
+                remindersAccess: .granted,
+                reminderLists: [listDescriptor("tasks", "Tasks")],
+                defaultListID: "tasks"
+            )
+        )
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.title, "Corrected submission")
+        XCTAssertEqual(subject.preview?.destinationID, "tasks")
+        XCTAssertTrue(subject.canSave)
+    }
+
+    func testUnchangedEventReviewKeepsExplicitSystemDefaultWhenRefreshedWhileBackInEntry() {
+        let subject = makeSubject(
+            result: .success(eventPreview()),
+            options: options(calendarAccess: .denied, calendars: [])
+        )
+        subject.text = "Dentist"
+        subject.parse()
+        subject.preview?.title = "Corrected dentist"
+        subject.selectDestination(nil)
+        subject.returnToEntry()
+
+        subject.updateDestinationOptions(
+            options(
+                calendarAccess: .granted,
+                calendars: [calendarDescriptor("work", "Work")],
+                defaultCalendarID: "work"
+            )
+        )
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.title, "Corrected dentist")
+        XCTAssertNil(subject.preview?.destinationID)
+        XCTAssertTrue(subject.canSave)
+    }
+
+    func testUnchangedTaskReviewKeepsExplicitSystemDefaultWhenRefreshedWhileBackInEntry() {
+        let subject = makeSubject(
+            result: .success(taskPreview()),
+            options: options(remindersAccess: .notDetermined, reminderLists: [])
+        )
+        subject.text = "Submit"
+        subject.parse()
+        subject.preview?.title = "Corrected submission"
+        subject.selectDestination(nil)
+        subject.returnToEntry()
+
+        subject.updateDestinationOptions(
+            options(
+                remindersAccess: .granted,
+                reminderLists: [listDescriptor("tasks", "Tasks")],
+                defaultListID: "tasks"
+            )
+        )
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.title, "Corrected submission")
+        XCTAssertNil(subject.preview?.destinationID)
+        XCTAssertTrue(subject.canSave)
+    }
+
+    func testReviewingTextWithAnyChangeParsesAFresh() {
+        let parser = LockedSequenceParser([
+            .success(eventPreview()),
+            .success(taskPreview(due: nil, dueHasTime: false))
+        ])
+        let subject = QuickEntryViewModel(
+            parser: parser,
+            saver: RecordingQuickEntrySaver(),
+            context: context(),
+            destinations: options(defaultListID: "tasks")
+        )
+        subject.text = "Plan"
+        subject.parse()
+        subject.preview?.title = "Edited stale title"
+        subject.returnToEntry()
+        subject.text = "Plan "
+
+        subject.parse()
+
+        XCTAssertEqual(subject.phase, .confirmation(.ready))
+        XCTAssertEqual(subject.preview?.kind, .task)
+        XCTAssertEqual(subject.preview?.title, "Submit report")
+        XCTAssertEqual(subject.preview?.destinationID, "tasks")
+    }
+
     func testEveryTypedParseFailureRetainsInputClearsStalePreviewAndStaysEntry() {
         let errors: [QuickEntryParseError] = [.emptyInput, .noUsableTitle, .invalidClock, .invalidDate, .nonexistentLocalTime, .ambiguousExpression]
         for error in errors {
@@ -888,6 +1128,42 @@ final class QuickEntryViewModelTests: XCTestCase {
         XCTAssertEqual(subject.phase, .entry(parseError: nil))
         XCTAssertNil(subject.preview)
         XCTAssertTrue(saver.received.isEmpty)
+    }
+
+    func testSelectingRecentItemForUnchangedTextForcesAFreshParse() {
+        let profileID = UUID()
+        let history = AppSettingsStore(defaults: .ephemeral).quickEntryHistory
+        history.record(
+            text: "Study session tomorrow at 3pm",
+            profileIdentity: .saved(profileID),
+            at: date(2026, 8, 23, 12)
+        )
+        let parser = LockedSequenceParser([
+            .success(eventPreview()),
+            .success(taskPreview(due: nil, dueHasTime: false))
+        ])
+        let subject = QuickEntryViewModel(
+            parser: parser,
+            saver: RecordingQuickEntrySaver(),
+            context: context(),
+            destinations: options(defaultListID: "tasks"),
+            creationProfile: creationProfile(id: profileID),
+            historyStore: history
+        )
+        subject.text = "Study session tomorrow at 3pm"
+        subject.parse()
+        subject.preview?.title = "Edited stale title"
+        subject.returnToEntry()
+        guard let recentID = subject.recentEntries.first?.id else {
+            return XCTFail("Expected a recent entry")
+        }
+
+        subject.selectRecent(id: recentID)
+        subject.parse()
+
+        XCTAssertEqual(subject.preview?.kind, .task)
+        XCTAssertEqual(subject.preview?.title, "Submit report")
+        XCTAssertEqual(subject.preview?.destinationID, "tasks")
     }
 
     func testSuccessfulCommitRecordsHistoryAndEditedPreferenceExactlyOnce() {
