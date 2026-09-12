@@ -2,6 +2,39 @@
 
 Personal Calendar is a local-first iPhone planner that brings Apple Calendar events, Apple Reminders tasks, and local routines into profile-specific views. It requires iOS 17 or later.
 
+## Screenshots
+
+Current development preview from [build `186619b`](https://github.com/Jia7k/personal-calendar-ios/tree/186619b02bba772275d74d5e0a27728deb306634), captured on an iPhone 17 Pro simulator. All events, tasks, and locations shown are synthetic demo data. Tap a screenshot to view it at full resolution.
+
+<table>
+  <tr>
+    <th>Month at a glance</th>
+    <th>Your week, laid out</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/calendar-month.png"><img src="docs/screenshots/calendar-month.png" width="300" alt="September month calendar with activity dots and a selected-day summary of an event, task, and routine"></a></td>
+    <td align="center"><a href="docs/screenshots/calendar-week.png"><img src="docs/screenshots/calendar-week.png" width="300" alt="Weekly calendar showing sample appointments arranged across Monday to Friday"></a></td>
+  </tr>
+  <tr>
+    <th>What needs attention today</th>
+    <th>Tasks, clearly grouped</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/today.png"><img src="docs/screenshots/today.png" width="300" alt="Today screen with an overdue task, a happening-now event, the nearest deadline, and the daily schedule"></a></td>
+    <td align="center"><a href="docs/screenshots/tasks.png"><img src="docs/screenshots/tasks.png" width="300" alt="Tasks organized into Overdue, Needs Scheduling, and Today, with completion and action controls"></a></td>
+  </tr>
+  <tr>
+    <th>Review before saving</th>
+    <th>Event details in reach</th>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/quick-entry.png"><img src="docs/screenshots/quick-entry.png" width="300" alt="Quick Entry review for a sample design workshop, with event type, title, dates, calendar, and repeat settings"></a></td>
+    <td align="center"><a href="docs/screenshots/event-details.png"><img src="docs/screenshots/event-details.png" width="300" alt="Expanded event sheet showing the workshop time, fictional location, notes, directions, copy location, and Open Event actions"></a></td>
+  </tr>
+</table>
+
+## Build and test
+
 Generate the Xcode project with:
 
 ```bash
