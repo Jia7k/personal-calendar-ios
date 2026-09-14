@@ -314,6 +314,16 @@ final class CalendarViewModel {
         await load()
     }
 
+    func eventCount(for profileIdentity: ProfileIdentity) -> Int? {
+        guard !isLoading, errorMessage == nil,
+              calendarService.accessState == .granted,
+              let cachedScope,
+              cachedScope.identity == profileIdentity,
+              let scope = try? currentScope(), scope.identity == profileIdentity,
+              scope.calendarIDs == cachedScope.calendarIDs else { return nil }
+        return visibleAgendas[selectedDay]?.eventCount
+    }
+
     func select(_ day: LocalDay) async {
         selectedDay = day
         if let scope = cachedScope {

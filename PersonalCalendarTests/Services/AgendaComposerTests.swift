@@ -3,6 +3,46 @@ import XCTest
 
 @MainActor
 final class AgendaComposerTests: XCTestCase {
+    func testEventCountIncludesAllDayAndEveryTimedEventButNotTasksOrRoutines() {
+        let result = compose(
+            events: [
+                event(id: "all-day", title: "Birthday", startHour: 0, endHour: 24, isAllDay: true),
+                event(id: "morning", title: "Breakfast", startHour: 8, endHour: 9),
+                event(id: "evening", title: "Dinner", startHour: 18, endHour: 19)
+            ],
+            reminders: [
+                reminder(id: "timed-task", title: "Call", dueHour: 10, priority: 1),
+                reminder(id: "date-only-task", title: "Pay rent", dueHour: nil, priority: 5, dueDate: date(hour: 0))
+            ],
+            routines: [
+                routine(id: "00000000-0000-0000-0000-000000000001", title: "Plan", window: .morning),
+                routine(id: "00000000-0000-0000-0000-000000000002", title: "Read", window: .anytime)
+            ]
+        )
+
+        XCTAssertEqual(result.eventCount, 3)
+        // The total must not shrink to just the next event after the morning event ends.
+        XCTAssertEqual(DayTrayView.nextEvent(in: result, referenceDate: date(hour: 12))?.title, "Dinner")
+        XCTAssertEqual(result.eventCount, 3)
+    }
+
+    func testEventCountIsZeroForEmptyAndTaskOnlyDays() {
+        XCTAssertEqual(compose().eventCount, 0)
+        let tasksOnly = compose(reminders: [reminder(id: "task", title: "Call", dueHour: 10, priority: 1)])
+        XCTAssertEqual(tasksOnly.eventCount, 0)
+    }
+
+    func testEventCountUsesSelectedLocalDayBoundaries() {
+        let result = compose(events: [
+            event(id: "overnight", title: "Flight", startHour: 23, endHour: 2, startDayOffset: -1),
+            event(id: "ended", title: "Yesterday", startHour: 23, endHour: 0, startDayOffset: -1),
+            event(id: "tomorrow", title: "Tomorrow", startHour: 0, endHour: 1, startDayOffset: 1)
+        ])
+
+        XCTAssertEqual(result.eventCount, 1)
+        XCTAssertEqual(result.scheduled.first?.title, "Flight")
+    }
+
     func testResolvesEventCategoryUsingOpaqueProviderIdentifier() throws {
         let category = CategorySnapshot(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,

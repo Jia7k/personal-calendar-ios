@@ -1,8 +1,11 @@
 import SwiftUI
 
 struct DayTrayView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let day: LocalDay
     let agenda: DayAgenda
+    let eventCount: Int?
     let state: TrayState
     let isLoading: Bool
     let errorMessage: String?
@@ -16,13 +19,7 @@ struct DayTrayView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(day.startDate(in: calendar).formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                    .font(.title3.weight(.semibold))
-                Spacer()
-                Button(state == .resting ? "Expand day" : "Collapse day") { onSetState(state == .resting ? .expanded : .resting) }
-                    .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
-            }
+            header
             if isLoading { ProgressView("Loading your day") }
             if let errorMessage { Label(errorMessage, systemImage: "exclamationmark.triangle"); Button("Retry", action: onRetry).frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize) }
             ForEach(sourceAccessNotices) { notice in
@@ -45,6 +42,46 @@ struct DayTrayView: View {
                 .stroke(CalendarTheme.accent.opacity(0.10), lineWidth: 1)
         }
         .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private var header: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                daySummary
+                expansionButton
+            }
+        } else {
+            HStack(alignment: .top, spacing: 12) {
+                daySummary
+                Spacer(minLength: 0)
+                expansionButton
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+    }
+
+    private var daySummary: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(day.startDate(in: calendar).formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("day-tray-date")
+            if let eventCount {
+                Text(eventCount == 1 ? "1 event" : "\(eventCount) events")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(CalendarTheme.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("day-tray-event-count")
+            }
+        }
+    }
+
+    private var expansionButton: some View {
+        Button(state == .resting ? "Expand day" : "Collapse day") {
+            onSetState(state == .resting ? .expanded : .resting)
+        }
+        .frame(minWidth: CalendarTheme.minimumTapSize, minHeight: CalendarTheme.minimumTapSize)
     }
 
     private var restingContent: some View {

@@ -8,6 +8,111 @@ final class UsabilityCalendarUITests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
+    func testDayTrayShowsSelectedDayEventTotalBelowDate() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-profiles"]
+        app.launch()
+
+        let count = app.staticTexts["day-tray-event-count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 5), "The day card needs an event total even when its preview is collapsed.")
+        revealDayElement(count, in: app)
+        XCTAssertEqual(count.label, "1 event")
+        let title = app.staticTexts["day-tray-date"]
+        XCTAssertTrue(title.exists)
+        XCTAssertGreaterThanOrEqual(count.frame.minY, title.frame.maxY)
+        XCTAssertEqual(count.frame.minX, title.frame.minX, accuracy: 1)
+        attachScreenshot("Day card with total event count", app: app)
+    }
+
+    func testDayTrayTotalIncludesAllDayEventsAndUpdatesWithDateAndProfile() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-demo-profiles", "-demo-week-overlaps"]
+        app.launch()
+
+        let count = app.staticTexts["day-tray-event-count"]
+        expectEventTotal("1 event", count: count)
+        chooseSchoolProfile(in: app)
+        expectEventTotal("9 events", count: count) // Five timed events and four all-day events.
+
+        let expand = app.buttons["Expand day"]
+        revealDayElement(expand, in: app)
+        expand.tap()
+        expectEventTotal("9 events", count: count)
+        let collapse = app.buttons["Collapse day"]
+        revealDayElement(collapse, in: app)
+        collapse.tap()
+
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now)!
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: tomorrow)
+        let nextDay = app.buttons["calendar-day-\(parts.year!)-\(parts.month!)-\(parts.day!)"]
+        revealDayElement(nextDay, in: app)
+        nextDay.tap()
+        expectEventTotal("0 events", count: count)
+
+        app.buttons["calendar-period-today"].tap()
+        expectEventTotal("9 events", count: count)
+        app.buttons["profile-selector"].tap()
+        app.buttons["profile-option-C0A10000-0000-4000-8000-000000000001"].tap()
+        expectEventTotal("1 event", count: count)
+    }
+
+    func testDayTrayCountAndActionsFitAtAccessibilityXXXL() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-ui-testing", "-demo-profiles",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ]
+        app.launch()
+        let count = app.staticTexts["day-tray-event-count"]
+        expectEventTotal("1 event", count: count)
+        let scroller = app.scrollViews.firstMatch
+        revealDayElement(count, in: app)
+        XCTAssertTrue(scroller.frame.contains(count.frame))
+        XCTAssertGreaterThanOrEqual(count.frame.minY, app.staticTexts["day-tray-date"].frame.maxY)
+        attachScreenshot("Day event total at maximum text size", app: app)
+
+        let expand = app.buttons["Expand day"]
+        revealDayElement(expand, in: app)
+        XCTAssertTrue(expand.isHittable)
+        XCTAssertGreaterThanOrEqual(expand.frame.height, 44)
+        expand.tap()
+        expectEventTotal("1 event", count: count)
+        XCTAssertTrue(app.buttons["Collapse day"].exists)
+    }
+
+    func testDayTrayDoesNotClaimZeroEventsWhenCalendarAccessIsDenied() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-denied"]
+        app.launch()
+        XCTAssertTrue(app.buttons["calendar-permission-settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["day-tray-date"].exists)
+        XCTAssertFalse(app.staticTexts["day-tray-event-count"].exists)
+    }
+
+    private func expectEventTotal(_ label: String, count: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let matches = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label == %@", label), object: count)
+        XCTAssertEqual(XCTWaiter.wait(for: [matches], timeout: 5), .completed, file: file, line: line)
+    }
+
+    private func revealDayElement(_ element: XCUIElement, in app: XCUIApplication) {
+        XCTAssertTrue(element.waitForExistence(timeout: 5))
+        for _ in 0..<30 {
+            let scroller = app.scrollViews.firstMatch
+            XCTAssertTrue(scroller.exists)
+            let frame = scroller.frame
+            let bottom = min(frame.maxY, app.tabBars.firstMatch.frame.minY)
+            let visible = CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: bottom - frame.minY)
+            if visible.contains(element.frame) { return }
+            let delta = element.frame.midY - visible.midY
+            let distance = min(max(abs(delta), 20), visible.height * 0.3)
+            // A full swipe can begin on the floating tab bar on a short iPhone.
+            let start = app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: visible.midX, dy: visible.midY))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: delta > 0 ? -distance : distance)), withVelocity: 150, thenHoldForDuration: 0.1)
+        }
+        XCTFail("Could not reveal day-card element: \(element.identifier)")
+    }
+
     func testCalendarHeaderMakesProfileAndDateActionsClearAtAccessibilityXXXL() {
         let app = XCUIApplication()
         app.launchArguments = [

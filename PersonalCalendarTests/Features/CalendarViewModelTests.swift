@@ -3,6 +3,40 @@ import XCTest
 
 @MainActor
 final class CalendarViewModelTests: XCTestCase {
+    func testDayEventCountIsUnavailableUntilLoadedAndNeverLeaksToAnotherProfile() async {
+        let model = makeModel()
+        XCTAssertNil(model.eventCount(for: .everything))
+        await model.load()
+        XCTAssertEqual(model.eventCount(for: .everything), 0)
+        XCTAssertNil(model.eventCount(for: .saved(UUID())))
+    }
+
+    func testDayEventCountIsUnavailableWhenCalendarAccessIsDenied() async {
+        let model = makeModel(calendarService: FakeCalendarService(access: .denied))
+        await model.load()
+        XCTAssertNil(model.eventCount(for: .everything))
+    }
+
+    func testDayEventCountKeepsValidTotalWhenOnlyDefaultDestinationChanges() async {
+        let start = today.startDate(in: calendar)
+        let event = CalendarEventSnapshot(id: "event", title: "Meeting", start: start, end: start.addingTimeInterval(3_600), isAllDay: false, calendarID: "one", calendarTitle: "One", allowsModification: true, hasRecurrence: false)
+        var scope = ProfileScope(identity: .everything, calendarIDs: ["one", "two"], reminderListIDs: [], routineIDs: [], defaultCalendarID: "one", defaultReminderListID: nil)
+        let model = CalendarViewModel(
+            today: today, calendarService: FakeCalendarService(access: .granted, events: [event]),
+            remindersService: FakeRemindersService(access: .granted), routines: FakeRoutineRepository(),
+            composer: AgendaComposer(), settings: AppSettingsStore(defaults: .ephemeral),
+            currentScope: { scope }, systemCalendar: calendar
+        )
+        await model.load()
+        XCTAssertEqual(model.eventCount(for: .everything), 1)
+
+        scope = ProfileScope(identity: .everything, calendarIDs: ["one", "two"], reminderListIDs: [], routineIDs: [], defaultCalendarID: "two", defaultReminderListID: nil)
+        XCTAssertEqual(model.eventCount(for: .everything), 1)
+
+        scope = ProfileScope(identity: .everything, calendarIDs: ["two"], reminderListIDs: [], routineIDs: [], defaultCalendarID: "two", defaultReminderListID: nil)
+        XCTAssertNil(model.eventCount(for: .everything), "A source-selection change must hide the old total before refresh starts.")
+    }
+
     private var calendar: Calendar {
         var value = Calendar(identifier: .gregorian)
         value.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -233,12 +267,14 @@ final class CalendarViewModelTests: XCTestCase {
         let service = FakeCalendarService(access: .granted, events: [event])
         let model = makeModel(calendarService: service)
         await model.load()
+        XCTAssertEqual(model.eventCount(for: .everything), 1)
         service.fetchError = TestError.failed
 
         await model.load()
 
         XCTAssertEqual(model.agenda.scheduled.map(\.title), ["Confirmed"])
         XCTAssertNotNil(model.errorMessage)
+        XCTAssertNil(model.eventCount(for: .everything))
     }
 
     func testOlderSuspendedLoadCannotRestoreDeselectedReminder() async {

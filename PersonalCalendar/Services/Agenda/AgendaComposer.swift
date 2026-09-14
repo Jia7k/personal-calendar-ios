@@ -4,6 +4,11 @@ struct DayAgenda: Equatable, Sendable {
     var allDay: [AgendaItem]
     var scheduled: [AgendaItem]
     var priority: [AgendaItem]
+
+    var eventCount: Int {
+        allDay.lazy.filter { $0.source == .event }.count
+            + scheduled.lazy.filter { $0.source == .event }.count
+    }
 }
 
 @MainActor
