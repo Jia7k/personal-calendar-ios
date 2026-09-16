@@ -1,106 +1,84 @@
 import SwiftUI
 
 struct TimetableSettingsView: View {
-    let snapshotCoordinator: TimetableSnapshotCoordinator
+    let dailySnapshots: DailyActivitySnapshotCoordinator
+    let profileSelection: ProfileSelectionController
     let activityCoordinator: TimetableLiveActivityCoordinator
     let settings: AppSettingsStore
     let refresh: @MainActor () async -> Void
 
     @State private var selectedIdentity: ProfileIdentity?
+    @State private var preview: DailyActivitySnapshot?
+    @State private var previewError: String?
+    @State private var isLoading = false
+    @State private var previewGeneration = 0
 
     init(
-        snapshotCoordinator: TimetableSnapshotCoordinator,
+        dailySnapshots: DailyActivitySnapshotCoordinator,
+        profileSelection: ProfileSelectionController,
         activityCoordinator: TimetableLiveActivityCoordinator,
         settings: AppSettingsStore,
         initialProfileIdentity: ProfileIdentity? = nil,
         refresh: @escaping @MainActor () async -> Void
     ) {
-        self.snapshotCoordinator = snapshotCoordinator
+        self.dailySnapshots = dailySnapshots
+        self.profileSelection = profileSelection
         self.activityCoordinator = activityCoordinator
         self.settings = settings
         self.refresh = refresh
-        _selectedIdentity = State(
-            initialValue: settings.preferredLiveActivityProfile
-                ?? initialProfileIdentity
-        )
+        _selectedIdentity = State(initialValue: settings.preferredLiveActivityProfile ?? initialProfileIdentity)
     }
 
     var body: some View {
         List {
-            Section("Timetable profile") {
-                if profiles.isEmpty {
-                    Text("Refresh to load your profiles.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Picker("Profile", selection: $selectedIdentity) {
-                        Text("Choose a profile").tag(ProfileIdentity?.none)
-                        ForEach(profiles) { profile in
-                            Label(profile.name, systemImage: profile.symbolName)
-                                .tag(Optional(profile.id))
-                        }
+            Section("Daily Live Activity") {
+                Picker("Profile", selection: $selectedIdentity) {
+                    Text("Choose a profile").tag(ProfileIdentity?.none)
+                    ForEach(profiles, id: \.id) { profile in
+                        Label(profile.name, systemImage: profile.symbolName)
+                            .tag(Optional(profile.id))
                     }
-                    .accessibilityIdentifier("timetable-profile")
-                    .onChange(of: selectedIdentity) { _, identity in
-                        let wasAutomaticallyEnabled = settings
-                            .automaticallyStartsLiveActivityOnForeground
-                        savePreferredProfile(identity)
-                        let preferredProfileIdentity = settings
-                            .preferredLiveActivityProfile
-                        let catalog = snapshotCoordinator.errorMessage == nil
-                            ? snapshotCoordinator.latestCatalog
-                            : nil
-                        Task {
-                            await activityCoordinator
-                                .applyPreferenceSelectionChange(
-                                    wasAutomaticallyEnabled:
-                                        wasAutomaticallyEnabled,
-                                    preferredProfileIdentity:
-                                        preferredProfileIdentity,
-                                    catalog: catalog
-                                )
-                        }
+                }
+                .accessibilityIdentifier("timetable-profile")
+                .onChange(of: selectedIdentity) { _, identity in
+                    let wasAutomaticallyEnabled = settings.automaticallyStartsLiveActivityOnForeground
+                    savePreferredProfile(identity)
+                    let preferred = settings.preferredLiveActivityProfile
+                    Task {
+                        await activityCoordinator.applyPreferenceSelectionChange(
+                            wasAutomaticallyEnabled: wasAutomaticallyEnabled,
+                            preferredProfileIdentity: preferred
+                        )
                     }
                 }
 
-                Text(selectionSummary)
-                    .foregroundStyle(.secondary)
+                Text(selectionSummary).foregroundStyle(.secondary)
 
-                Toggle(
-                    "Start when Personal Calendar opens",
-                    isOn: Binding(
-                        get: {
-                            settings
-                                .automaticallyStartsLiveActivityOnForeground
-                        },
-                        set: { enabled in
-                            updateAutomaticStart(enabled)
-                        }
-                    )
-                )
-                .disabled(
-                    selectedProfile == nil
-                        && !settings
-                            .automaticallyStartsLiveActivityOnForeground
-                )
+                Toggle("Start when Personal Calendar opens", isOn: Binding(
+                    get: { settings.automaticallyStartsLiveActivityOnForeground },
+                    set: updateAutomaticStart
+                ))
+                .disabled(selectedIdentity == nil && !settings.automaticallyStartsLiveActivityOnForeground)
                 .accessibilityIdentifier("timetable-auto-start")
 
-                Text("This is foreground-only: iOS does not let the app guarantee a background start or transition.")
+                Text("Starts when you open the app. Background starts and automatic renewal are not guaranteed.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
-                Button("Refresh timetable") {
+                Button("Refresh daily schedule") {
                     Task {
                         await refresh()
                         validateSelection()
+                        await loadPreview()
                     }
                 }
                 .accessibilityIdentifier("timetable-refresh")
 
                 if let actionTitle {
                     Button(actionTitle) {
-                        guard let selectedProfile else { return }
-                        savePreferredProfile(selectedProfile.id)
-                        Task { await activityCoordinator.start(profile: selectedProfile) }
+                        guard let selectedIdentity else { return }
+                        savePreferredProfile(selectedIdentity)
+                        Task { await activityCoordinator.start(profileIdentity: selectedIdentity) }
                     }
                     .disabled(!canStart)
                     .accessibilityIdentifier("timetable-start")
@@ -116,165 +94,119 @@ struct TimetableSettingsView: View {
 
             if let activityStatus {
                 Section("Live Activity") {
-                    Text(activityStatus)
-                        .foregroundStyle(.secondary)
+                    Text(activityStatus).foregroundStyle(.secondary)
                 }
             }
 
             Section("About updates") {
-                Text("Widgets stay available all week. The live timetable refreshes while Personal Calendar is running. iOS limits one Live Activity to eight active hours, and guaranteed background starts or transitions require a future push service.")
-                    .foregroundStyle(.secondary)
+                Text("Shows today's remaining events and incomplete tasks due today. Tasks from Reminders appear once; their alert is not a separate item. Weekly Home Screen widgets stay unchanged.")
+                Text("This is a glanceable view of the last app refresh, not an always-current all-day service. Open Personal Calendar to update completed tasks or changed events.")
+                Text("iOS allows up to eight active hours. After that, the activity leaves the Dynamic Island and may remain on the Lock Screen for up to four more hours. It cannot renew itself while the app is suspended.")
             }
+            .foregroundStyle(.secondary)
         }
         .scrollContentBackground(.hidden)
         .background(CalendarTheme.background)
         .navigationTitle("Timetable")
-        .task {
+        .task(id: selectedIdentity) {
             await refresh()
-            if let preferred = settings.preferredLiveActivityProfile {
-                selectedIdentity = preferred
-            } else if selectedIdentity == nil,
-                      let active = activityCoordinator.activeProfileIdentity {
-                selectedIdentity = active
+            guard !Task.isCancelled else { return }
+            validateSelection()
+            await loadPreview()
+        }
+        .onChange(of: profileSelection.profiles) {
+            validateSelection()
+            Task { await loadPreview() }
+        }
+        .onChange(of: dailySnapshots.revision) {
+            Task { await loadPreview() }
+        }
+    }
+
+    private var profiles: [DailyActivityProfile] {
+        [DailyActivityProfile(id: .everything, name: "Everything", symbolName: "rectangle.stack.fill")]
+            + profileSelection.profiles.map {
+                DailyActivityProfile(id: .saved($0.id), name: $0.name, symbolName: $0.symbolName)
             }
-            validateSelection()
-        }
-        .onChange(of: snapshotCoordinator.latestCatalog?.generatedAt) {
-            validateSelection()
-        }
-    }
-
-    private var profiles: [TimetableWidgetProfile] {
-        snapshotCoordinator.latestCatalog?.profiles ?? []
-    }
-
-    private var selectedProfile: TimetableWidgetProfile? {
-        guard let selectedIdentity else { return nil }
-        return snapshotCoordinator.latestCatalog?.profile(for: selectedIdentity)
     }
 
     private var actionTitle: String? {
-        guard let selectedIdentity else { return "Start Live Activity" }
-        guard let active = activityCoordinator.activeProfileIdentity else {
-            return "Start Live Activity"
-        }
+        guard let selectedIdentity,
+              let active = activityCoordinator.activeProfileIdentity else { return "Start Live Activity" }
         return active == selectedIdentity ? nil : "Switch Live Activity"
     }
 
     private var canStart: Bool {
-        guard let profile = selectedProfile,
-              profile.snapshot.availability == .ready else { return false }
-        let calendar = calendar(for: profile.snapshot)
-        return profile.snapshot.entries.contains { calendar.isDate($0.start, inSameDayAs: .now) }
+        guard !isLoading, previewError == nil, let preview,
+              preview.profile.id == selectedIdentity else { return false }
+        let presentation = DailyActivityPresentation.make(snapshot: preview, now: .now, rowLimit: 3)
+        return presentation.remainingCount > 0 && !presentation.requiresRefresh
     }
 
     private var selectionSummary: String {
-        if let error = snapshotCoordinator.errorMessage {
-            return "The timetable could not sync: \(error)"
-        }
-        guard let selectedIdentity else {
-            return "Choose which profile the Lock Screen should show."
-        }
-        guard let profile = snapshotCoordinator.latestCatalog?.profile(for: selectedIdentity) else {
-            return "This profile is no longer available. Choose another profile."
-        }
-        switch profile.snapshot.availability {
-        case .calendarAccessRequired:
-            return "Calendar access is required for \(profile.name)."
-        case .emptyProfile:
-            return "\(profile.name) has no calendars."
-        case .noClasses:
-            return "No events were found this week for \(profile.name)."
-        case .ready:
-            let count = profile.snapshot.entries.count
-            if count == 0 { return "No events were found this week for \(profile.name)." }
-            let weekSummary = "\(count) \(count == 1 ? "event" : "events") this week"
-            let entries = profile.snapshot.entries.sorted { $0.start < $1.start }
-            let now = Date.now
-            if let current = entries.first(where: { $0.start <= now && now < $0.end }) {
-                return "Now: \(current.title), until \(timeText(current.end, snapshot: profile.snapshot)). \(weekSummary)."
-            }
-            if let next = entries.first(where: { $0.start > now }) {
-                return "Next: \(next.title) at \(timeText(next.start, snapshot: profile.snapshot)). \(weekSummary)."
-            }
-            return "\(weekSummary) for \(profile.name)."
-        }
+        guard selectedIdentity != nil else { return "Choose which profile the Lock Screen should show." }
+        if isLoading { return "Loading today's schedule…" }
+        if let previewError { return previewError }
+        guard let preview, preview.profile.id == selectedIdentity else { return "Refresh to load today's schedule." }
+        let presentation = DailyActivityPresentation.make(snapshot: preview, now: .now, rowLimit: 3)
+        let count = presentation.remainingCount
+        let summary = count == 0
+            ? "No remaining events or tasks today for \(preview.profile.name)."
+            : "\(count) \(count == 1 ? "item" : "items") remaining today for \(preview.profile.name)."
+        let unavailable = [
+            preview.calendarUnavailable ? "Some calendars unavailable." : nil,
+            preview.tasksUnavailable ? "Some tasks unavailable." : nil
+        ].compactMap { $0 }.joined(separator: " ")
+        if count == 0, !unavailable.isEmpty { return "\(unavailable) Check access and refresh." }
+        return unavailable.isEmpty ? summary : "\(summary) \(unavailable)"
     }
 
     private var activityStatus: String? {
         switch activityCoordinator.status {
-        case .idle:
-            nil
-        case .running:
-            if let name = activityCoordinator.activeProfileName {
-                "\(name) is active on the Lock Screen."
-            } else {
-                "A timetable is active on the Lock Screen."
-            }
-        case let .unavailable(message), let .failed(message):
-            message
+        case .idle: nil
+        case .running: "\(activityCoordinator.activeProfileName ?? "Your day") is active on the Lock Screen."
+        case let .unavailable(message), let .failed(message): message
         }
     }
 
     private func validateSelection() {
         guard let selectedIdentity,
-              let catalog = snapshotCoordinator.latestCatalog else { return }
-        if catalog.profile(for: selectedIdentity) == nil {
-            self.selectedIdentity = nil
-            savePreferredProfile(nil)
-            Task { await activityCoordinator.stop() }
-        }
-    }
-
-    private var validSavedProfileIDs: Set<UUID> {
-        Set(profiles.compactMap { profile in
-            guard case let .saved(id) = profile.id else { return nil }
-            return id
-        })
+              !profiles.contains(where: { $0.id == selectedIdentity }) else { return }
+        self.selectedIdentity = nil
+        savePreferredProfile(nil)
+        Task { await activityCoordinator.reconcileActive() }
     }
 
     private func savePreferredProfile(_ identity: ProfileIdentity?) {
-        settings.setPreferredLiveActivityProfile(
-            identity,
-            validProfileIDs: validSavedProfileIDs
-        )
+        settings.setPreferredLiveActivityProfile(identity, validProfileIDs: Set(profileSelection.profiles.map(\.id)))
     }
 
     private func updateAutomaticStart(_ enabled: Bool) {
-        if enabled {
-            savePreferredProfile(selectedIdentity)
-        }
+        if enabled { savePreferredProfile(selectedIdentity) }
         settings.setAutomaticallyStartsLiveActivityOnForeground(enabled)
         Task {
-            if enabled {
-                await refresh()
-                validateSelection()
-            }
-            let catalog = snapshotCoordinator.errorMessage == nil
-                ? snapshotCoordinator.latestCatalog
-                : nil
             await activityCoordinator.applyAutomaticStartSettingChange(
-                isEnabled:
-                    settings.automaticallyStartsLiveActivityOnForeground,
-                preferredProfileIdentity:
-                    settings.preferredLiveActivityProfile,
-                catalog: catalog
+                isEnabled: settings.automaticallyStartsLiveActivityOnForeground,
+                preferredProfileIdentity: settings.preferredLiveActivityProfile
             )
         }
     }
 
-    private func timeText(_ date: Date, snapshot: TimetableSnapshotV1) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .current
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-
-    private func calendar(for snapshot: TimetableSnapshotV1) -> Calendar {
-        var value = Calendar(identifier: .gregorian)
-        value.timeZone = TimeZone(identifier: snapshot.timeZoneIdentifier) ?? .current
-        return value
+    private func loadPreview() async {
+        previewGeneration += 1
+        let generation = previewGeneration
+        preview = nil
+        previewError = nil
+        guard let identity = selectedIdentity else { isLoading = false; return }
+        isLoading = true
+        defer { if generation == previewGeneration { isLoading = false } }
+        do {
+            let snapshot = try await dailySnapshots.snapshot(for: identity, now: .now)
+            guard !Task.isCancelled, generation == previewGeneration, selectedIdentity == identity else { return }
+            preview = snapshot
+        } catch {
+            guard !Task.isCancelled, generation == previewGeneration, selectedIdentity == identity else { return }
+            previewError = "Today's schedule could not refresh. Please try again."
+        }
     }
 }

@@ -14,13 +14,14 @@ struct ProfilesSettingsView: View {
     init(environment: AppEnvironment) {
         let selection = environment.profileSelection
         let timetable = environment.timetableSnapshotCoordinator
+        let dailySnapshots = environment.dailyActivitySnapshotCoordinator
         let liveActivity = environment.timetableLiveActivityCoordinator
         let notificationCoordinator = environment.notificationCoordinator
         let rescheduleNotifications = environment.rescheduleNotifications
         let rebuildTimetable: @MainActor (Bool) -> Void = { failClosed in
-            guard (try? timetable.refresh(failClosed: failClosed)) != nil,
-                  let catalog = timetable.latestCatalog else { return }
-            Task { await liveActivity.reconcile(catalog: catalog) }
+            _ = try? timetable.refresh(failClosed: failClosed)
+            dailySnapshots.invalidate()
+            Task { await liveActivity.reconcileActive() }
         }
         _model = State(initialValue: ProfilesSettingsModel(
             repository: environment.profiles,

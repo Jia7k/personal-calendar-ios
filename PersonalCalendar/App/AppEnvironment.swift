@@ -27,6 +27,7 @@ struct AppEnvironment {
     let refreshCoordinator: AppRefreshCoordinator
     let agendaRefreshRegistry: AgendaRefreshRegistry
     let timetableSnapshotCoordinator: TimetableSnapshotCoordinator
+    let dailyActivitySnapshotCoordinator: DailyActivitySnapshotCoordinator
     let timetableLiveActivityCoordinator: TimetableLiveActivityCoordinator
     private let refreshRuntime: EventStoreRefreshRuntime
     let reduceMotionOverride: Bool
@@ -78,19 +79,21 @@ struct AppEnvironment {
         } catch {
             timetableWriter = UnavailableTimetableCatalogWriter()
         }
+        let dailyActivitySnapshotCoordinator = DailyActivitySnapshotCoordinator(
+            profiles: profiles, calendar: calendar, reminders: reminders,
+            localCalendar: localCalendar, calendarProvider: { .autoupdatingCurrent }
+        )
         let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
             driver: SystemTimetableActivityDriver(),
-            calendar: localCalendar
+            calendar: localCalendar,
+            dailySnapshots: dailyActivitySnapshotCoordinator
         )
         let timetableSnapshotCoordinator = TimetableSnapshotCoordinator(
             calendar: calendar,
             profiles: profiles,
             builder: TimetableSnapshotBuilder(calendar: localCalendar),
             writer: timetableWriter,
-            reloader: SystemTimetableWidgetReloader(),
-            onFailClosed: {
-                Task { await timetableLiveActivityCoordinator.stop() }
-            }
+            reloader: SystemTimetableWidgetReloader()
         )
         let backup = BackupService(
             context: container.mainContext,
@@ -100,20 +103,15 @@ struct AppEnvironment {
                 let restoredIdentity = settings.activeProfileIdentity
                 try? profileSelection.reloadProfiles()
                 try? profileSelection.select(restoredIdentity)
-                if (try? timetableSnapshotCoordinator.refresh(failClosed: true)) != nil,
-                   let catalog = timetableSnapshotCoordinator.latestCatalog {
-                    Task {
-                        if settings.automaticallyStartsLiveActivityOnForeground {
-                            await timetableLiveActivityCoordinator
-                                .applyForegroundPreference(
-                                    isEnabled: true,
-                                    preferredProfileIdentity:
-                                        settings.preferredLiveActivityProfile,
-                                    catalog: catalog
-                                )
-                        } else {
-                            await timetableLiveActivityCoordinator.stop()
-                        }
+                _ = try? timetableSnapshotCoordinator.refresh(failClosed: true)
+                dailyActivitySnapshotCoordinator.invalidate()
+                Task {
+                    await timetableLiveActivityCoordinator.stop()
+                    if settings.automaticallyStartsLiveActivityOnForeground {
+                        await timetableLiveActivityCoordinator.applyForegroundPreference(
+                            isEnabled: true,
+                            preferredProfileIdentity: settings.preferredLiveActivityProfile
+                        )
                     }
                 }
             }
@@ -164,9 +162,9 @@ struct AppEnvironment {
             // EventKit currently exposes no authoritative all-item inventory. Never prune links from visible-range snapshots.
             cleanCategoryLinks: {},
             refreshTimetable: {
-                guard (try? timetableSnapshotCoordinator.refresh()) != nil,
-                      let catalog = timetableSnapshotCoordinator.latestCatalog else { return }
-                await timetableLiveActivityCoordinator.reconcile(catalog: catalog)
+                _ = try? timetableSnapshotCoordinator.refresh()
+                dailyActivitySnapshotCoordinator.invalidate()
+                await timetableLiveActivityCoordinator.reconcileActive()
             },
             rescheduleNotifications: rescheduleNotifications
         ))
@@ -194,6 +192,7 @@ struct AppEnvironment {
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
             timetableSnapshotCoordinator: timetableSnapshotCoordinator,
+            dailyActivitySnapshotCoordinator: dailyActivitySnapshotCoordinator,
             timetableLiveActivityCoordinator: timetableLiveActivityCoordinator,
             refreshRuntime: EventStoreRefreshRuntime(coordinator: refreshCoordinator, monitor: EventStoreChangeMonitor(store: store)),
             reduceMotionOverride: false,
@@ -305,7 +304,7 @@ struct AppEnvironment {
         }
         var localCalendar = Calendar.current
         localCalendar.timeZone = .current
-        let notificationScheduler = SystemNotificationScheduler()
+        let notificationScheduler = InMemoryNotificationScheduler()
         let notificationCoordinator = NotificationCoordinator(scheduler: notificationScheduler)
         let permissions = PermissionCoordinator(
             calendar: calendar,
@@ -313,9 +312,13 @@ struct AppEnvironment {
             notifications: notifications
         )
         let agendaRefreshRegistry = AgendaRefreshRegistry()
+        let dailyActivitySnapshotCoordinator = DailyActivitySnapshotCoordinator(
+            profiles: profiles, calendar: calendar, reminders: reminders, localCalendar: localCalendar
+        )
         let timetableLiveActivityCoordinator = TimetableLiveActivityCoordinator(
             driver: NoopTimetableActivityDriver(),
-            calendar: localCalendar
+            calendar: localCalendar,
+            dailySnapshots: dailyActivitySnapshotCoordinator
         )
         let timetableSnapshotCoordinator = TimetableSnapshotCoordinator(
             calendar: calendar,
@@ -325,10 +328,7 @@ struct AppEnvironment {
                 fileURL: FileManager.default.temporaryDirectory
                     .appendingPathComponent("demo-timetable-catalog-\(UUID().uuidString).json")
             ),
-            reloader: NoopTimetableWidgetReloader(),
-            onFailClosed: {
-                Task { await timetableLiveActivityCoordinator.stop() }
-            }
+            reloader: NoopTimetableWidgetReloader()
         )
         let backup = BackupService(
             context: container.mainContext,
@@ -338,20 +338,15 @@ struct AppEnvironment {
                 let restoredIdentity = settings.activeProfileIdentity
                 try? profileSelection.reloadProfiles()
                 try? profileSelection.select(restoredIdentity)
-                if (try? timetableSnapshotCoordinator.refresh(failClosed: true)) != nil,
-                   let catalog = timetableSnapshotCoordinator.latestCatalog {
-                    Task {
-                        if settings.automaticallyStartsLiveActivityOnForeground {
-                            await timetableLiveActivityCoordinator
-                                .applyForegroundPreference(
-                                    isEnabled: true,
-                                    preferredProfileIdentity:
-                                        settings.preferredLiveActivityProfile,
-                                    catalog: catalog
-                                )
-                        } else {
-                            await timetableLiveActivityCoordinator.stop()
-                        }
+                _ = try? timetableSnapshotCoordinator.refresh(failClosed: true)
+                dailyActivitySnapshotCoordinator.invalidate()
+                Task {
+                    await timetableLiveActivityCoordinator.stop()
+                    if settings.automaticallyStartsLiveActivityOnForeground {
+                        await timetableLiveActivityCoordinator.applyForegroundPreference(
+                            isEnabled: true,
+                            preferredProfileIdentity: settings.preferredLiveActivityProfile
+                        )
                     }
                 }
             }
@@ -401,9 +396,9 @@ struct AppEnvironment {
             refreshAgenda: { await agendaRefreshRegistry.refreshAll() },
             cleanCategoryLinks: {},
             refreshTimetable: {
-                guard (try? timetableSnapshotCoordinator.refresh()) != nil,
-                      let catalog = timetableSnapshotCoordinator.latestCatalog else { return }
-                await timetableLiveActivityCoordinator.reconcile(catalog: catalog)
+                _ = try? timetableSnapshotCoordinator.refresh()
+                dailyActivitySnapshotCoordinator.invalidate()
+                await timetableLiveActivityCoordinator.reconcileActive()
             },
             rescheduleNotifications: rescheduleNotifications
         ))
@@ -431,6 +426,7 @@ struct AppEnvironment {
             refreshCoordinator: refreshCoordinator,
             agendaRefreshRegistry: agendaRefreshRegistry,
             timetableSnapshotCoordinator: timetableSnapshotCoordinator,
+            dailyActivitySnapshotCoordinator: dailyActivitySnapshotCoordinator,
             timetableLiveActivityCoordinator: timetableLiveActivityCoordinator,
             refreshRuntime: EventStoreRefreshRuntime(coordinator: refreshCoordinator, monitor: nil),
             reduceMotionOverride: arguments.contains("-reduce-motion"),

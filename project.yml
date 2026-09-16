@@ -95,6 +95,8 @@ schemes:
         PersonalCalendarTests: [test]
         PersonalCalendarUITests: [test]
     test:
+      commandLineArguments:
+        "-ui-testing": true
       targets:
         - PersonalCalendarTests
         - PersonalCalendarUITests

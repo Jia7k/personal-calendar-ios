@@ -49,18 +49,11 @@ struct RootTabView: View {
             guard settings.automaticallyStartsLiveActivityOnForeground else {
                 return
             }
-            let snapshots = environment.timetableSnapshotCoordinator
-            guard snapshots.errorMessage == nil,
-                  let catalog = snapshots.latestCatalog else {
-                await environment.timetableLiveActivityCoordinator.stop()
-                return
-            }
             await environment.timetableLiveActivityCoordinator
                 .applyForegroundPreference(
                     isEnabled: true,
                     preferredProfileIdentity:
-                        settings.preferredLiveActivityProfile,
-                    catalog: catalog
+                        settings.preferredLiveActivityProfile
                 )
         }))
     }

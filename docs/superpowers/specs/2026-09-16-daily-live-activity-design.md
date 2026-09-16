@@ -2,7 +2,7 @@
 
 Date: 2026-09-16
 
-Status: B visual direction approved; written behavior and architecture awaiting review. No application changes are included in this document.
+Status: Design and implementation approved on 2026-09-16. User constraint: test only on iPhone 16 Pro. No application changes are included in this document.
 
 ## Goal
 
@@ -103,8 +103,8 @@ Apple's guidance favors compact, glanceable content, direct navigation to relate
 - Lifecycle: start/update/switch/stop, opt-in behavior, no automatic duplicate activity, system expiration/dismissal, source-specific permission loss, empty-membership fetch short-circuiting, profile membership/reminder-list removal, deletion, backup restore, fetch failure, and rejecting stale asynchronous results.
 - Routing: correct profile and represented day; malformed or removed profiles fail closed; no raw private data in links.
 - Regression: existing weekly widget snapshot, catalog, selection, timeline, and route tests remain passing. The weekly widget retains its current appearance and filters.
-- Visual checks: small iPhone widths, long titles/profile names, normal and accessibility text sizes, active event plus mixed rows, task-only state, all-day state, empty/stale state, both Dynamic Island sizes, redaction, and overflow/footer hit area. Verify the final Live Activity on a supported physical iPhone before claiming device behavior is confirmed.
+- User-directed device scope: run app tests and visual checks only on the iPhone 16 Pro. Do not run the earlier small-phone/other-model matrix. On that device, check long titles/profile names, normal and accessibility text sizes, active event plus mixed rows, task-only state, all-day state, empty/stale state, compact/expanded/minimal Dynamic Island, redaction, and overflow/footer hit area. Verify the final Live Activity on the physical iPhone 16 Pro before claiming device behavior is confirmed.
 
 ## Delivery boundary
 
-After review, implement and test inline in this repository. This spec does not authorize a GitHub push or phone installation; those remain separate user-requested steps. Do not add routines, direct task completion, a notification backend, unrelated calendar redesigns, or changes to weekly Home Screen widgets.
+Implement and test inline in this repository. The user's approval permits test deployment to the iPhone 16 Pro; it does not authorize a GitHub push or unrelated installation. Protect real provider data during automated testing. Do not add routines, direct task completion, a notification backend, unrelated calendar redesigns, or changes to weekly Home Screen widgets.

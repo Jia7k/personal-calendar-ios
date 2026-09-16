@@ -30,7 +30,9 @@ final class SystemTimetableActivityDriver: TimetableActivityDriving {
     }
 
     func activityDescriptors() -> [TimetableActivityDescriptor] {
-        Activity<TimetableActivityAttributes>.activities.map {
+        Activity<TimetableActivityAttributes>.activities.filter {
+            $0.activityState == .active || $0.activityState == .stale
+        }.map {
             TimetableActivityDescriptor(id: $0.id, attributes: $0.attributes)
         }
     }

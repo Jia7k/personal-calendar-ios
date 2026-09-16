@@ -2,7 +2,7 @@ import ActivityKit
 import Foundation
 
 struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
-    private static let currentSchemaVersion = 2
+    private static let currentSchemaVersion = 3
     private static let legacyProfileID = UUID(
         uuidString: "00000000-0000-0000-0000-000000000000"
     )!
@@ -84,6 +84,31 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
         let entries: [Entry]
         let omittedEntryCount: Int
         let sourceOmittedEntryCount: Int
+        let daily: DailyActivityPayload?
+
+        init(generatedAt: Date, entries: [Entry], omittedEntryCount: Int,
+             sourceOmittedEntryCount: Int, daily: DailyActivityPayload? = nil) {
+            self.generatedAt = generatedAt
+            self.entries = entries
+            self.omittedEntryCount = omittedEntryCount
+            self.sourceOmittedEntryCount = sourceOmittedEntryCount
+            self.daily = daily
+        }
+
+        init(daily: DailyActivityPayload) {
+            self.init(generatedAt: daily.snapshot.generatedAt, entries: [], omittedEntryCount: 0,
+                      sourceOmittedEntryCount: 0, daily: daily)
+        }
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            daily = try container.decodeIfPresent(DailyActivityPayload.self, forKey: .daily)
+            generatedAt = try container.decodeIfPresent(Date.self, forKey: .generatedAt)
+                ?? daily?.snapshot.generatedAt ?? .distantPast
+            entries = try container.decodeIfPresent([Entry].self, forKey: .entries) ?? []
+            omittedEntryCount = try container.decodeIfPresent(Int.self, forKey: .omittedEntryCount) ?? 0
+            sourceOmittedEntryCount = try container.decodeIfPresent(Int.self, forKey: .sourceOmittedEntryCount) ?? 0
+        }
 
         static func projecting(
             snapshot: TimetableSnapshotV1,
@@ -128,6 +153,13 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
         }
 
         func nextBoundary(after now: Date) -> Date? {
+            if let daily {
+                return (daily.snapshot.items.flatMap { [$0.start] + ($0.end.map { [$0] } ?? []) }
+                    + daily.omissions.map(\.expiresAt)
+                    + [daily.snapshot.dayEnd, daily.heroVerifiedUntil,
+                       generatedAt.addingTimeInterval(TimetableFreshness.defaultThreshold)])
+                    .filter { $0 > now }.min()
+            }
             let freshnessBoundary = generatedAt.addingTimeInterval(
                 TimetableFreshness.defaultThreshold
             )
@@ -154,6 +186,7 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
             case entries = "e"
             case omittedEntryCount = "o"
             case sourceOmittedEntryCount = "u"
+            case daily = "d"
         }
     }
 
@@ -162,6 +195,17 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
     let profileName: String
     let weekStart: Date
     let timeZoneIdentifier: String
+    let dayStart: Date?
+    let dayEnd: Date?
+    let profileSymbolName: String?
+    let activityStartedAt: Date?
+
+    /// ActivityKit's maximum active lifetime, independent of content refreshes or local midnight.
+    var activityEndsAt: Date? {
+        guard let activityStartedAt, activityStartedAt.timeIntervalSinceReferenceDate.isFinite else { return nil }
+        let end = activityStartedAt.addingTimeInterval(8 * 60 * 60)
+        return end.timeIntervalSinceReferenceDate.isFinite ? end : nil
+    }
 
     var isLegacy: Bool { schemaVersion < Self.currentSchemaVersion }
 
@@ -176,6 +220,22 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
         self.profileName = profileName
         self.weekStart = weekStart
         self.timeZoneIdentifier = timeZoneIdentifier
+        dayStart = nil
+        dayEnd = nil
+        profileSymbolName = nil
+        activityStartedAt = nil
+    }
+
+    init(snapshot: DailyActivitySnapshot, startedAt: Date? = nil) {
+        schemaVersion = Self.currentSchemaVersion
+        profileIdentity = snapshot.profile.id
+        profileName = DailyActivityPayload.bounded(snapshot.profile.name, bytes: 96)
+        profileSymbolName = DailyActivityPayload.bounded(snapshot.profile.symbolName, bytes: 64)
+        weekStart = snapshot.dayStart
+        dayStart = snapshot.dayStart
+        dayEnd = snapshot.dayEnd
+        timeZoneIdentifier = snapshot.timeZoneIdentifier
+        activityStartedAt = startedAt ?? snapshot.generatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -184,6 +244,10 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
         case profileName
         case weekStart
         case timeZoneIdentifier
+        case dayStart
+        case dayEnd
+        case profileSymbolName
+        case activityStartedAt = "a"
     }
 
     init(from decoder: any Decoder) throws {
@@ -196,6 +260,10 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
         profileName = try container.decodeIfPresent(String.self, forKey: .profileName) ?? "Timetable"
         weekStart = try container.decode(Date.self, forKey: .weekStart)
         timeZoneIdentifier = try container.decode(String.self, forKey: .timeZoneIdentifier)
+        dayStart = try container.decodeIfPresent(Date.self, forKey: .dayStart)
+        dayEnd = try container.decodeIfPresent(Date.self, forKey: .dayEnd)
+        profileSymbolName = try container.decodeIfPresent(String.self, forKey: .profileSymbolName)
+        activityStartedAt = try container.decodeIfPresent(Date.self, forKey: .activityStartedAt)
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -205,5 +273,9 @@ struct TimetableActivityAttributes: ActivityAttributes, Equatable, Sendable {
         try container.encode(profileName, forKey: .profileName)
         try container.encode(weekStart, forKey: .weekStart)
         try container.encode(timeZoneIdentifier, forKey: .timeZoneIdentifier)
+        try container.encodeIfPresent(dayStart, forKey: .dayStart)
+        try container.encodeIfPresent(dayEnd, forKey: .dayEnd)
+        try container.encodeIfPresent(profileSymbolName, forKey: .profileSymbolName)
+        try container.encodeIfPresent(activityStartedAt, forKey: .activityStartedAt)
     }
 }

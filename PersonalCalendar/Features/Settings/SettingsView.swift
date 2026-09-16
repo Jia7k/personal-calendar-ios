@@ -73,7 +73,8 @@ struct SettingsView: View {
             Section("Lock Screen") {
                 NavigationLink("Timetable") {
                     TimetableSettingsView(
-                        snapshotCoordinator: environment.timetableSnapshotCoordinator,
+                        dailySnapshots: environment.dailyActivitySnapshotCoordinator,
+                        profileSelection: environment.profileSelection,
                         activityCoordinator: environment.timetableLiveActivityCoordinator,
                         settings: environment.settings,
                         initialProfileIdentity: environment.profileSelection.activeIdentity,

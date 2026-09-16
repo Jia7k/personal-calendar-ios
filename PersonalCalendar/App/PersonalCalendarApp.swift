@@ -31,7 +31,7 @@ struct PersonalCalendarApp: App {
                 routeController.submit(decoded)
             }
         }
-        let handoffStore = try? AppRouteHandoffStore.appGroup()
+        let handoffStore = try? AppLaunchStorage.handoffStore(isTesting: isUITesting)
         quickEntryHandoffStore = handoffStore
         if isUITesting, let handoffStore {
             while (try? handoffStore.consume()) != nil {}
@@ -58,11 +58,13 @@ struct PersonalCalendarApp: App {
         Self.registerNotificationRenewalForLaunch(
             environment.notificationRenewalScheduler
         )
-        notificationDelegate.configure(
-            routeController: routeController,
-            actionHandler: environment.notificationActionHandler
-        )
-        PersonalCalendarShortcuts.updateAppShortcutParameters()
+        if !isUITesting {
+            notificationDelegate.configure(
+                routeController: routeController,
+                actionHandler: environment.notificationActionHandler
+            )
+            PersonalCalendarShortcuts.updateAppShortcutParameters()
+        }
         environment.startRefreshMonitoring()
     }
 
